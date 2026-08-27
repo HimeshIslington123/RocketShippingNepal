@@ -1,21 +1,8 @@
 "use client"
 import Image from "next/image";
 import {motion} from "framer-motion"
-/**
- * "Why Choose Us" section for Movetrans logistics site.
- *
- * Usage (Next.js App Router):
- *   import WhyChooseUs from "@/components/WhyChooseUs";
- *   export default function Page() {
- *     return <WhyChooseUs />;
- *   }
- *
- * Notes:
- * - Replace the `src` values below with your real image paths
- *   (place files in the /public folder, e.g. /public/delivery.jpg
- *   and /public/devendra.jpg), or pass them in as props.
- * - Tailwind CSS is required (this uses utility classes only).
- */
+
+
 
 type WhyChooseUsProps = {
   heroImage?: string;
@@ -35,7 +22,7 @@ const stats = [
 export default function WhyChooseUs({
   heroImage = "/van.png",
   heroImageAlt = "Delivery courier carrying a package outside a house",
-  personPhoto = "/devendra.jpg",
+  personPhoto = "/owner.png",
   personName = "DEVENDRA JUNG",
   personRole = "Head of Rocket Shipping",
   quote = "Efficient ground transportation for regional and cross-country delivery. Movetrans ensures safe handling.",

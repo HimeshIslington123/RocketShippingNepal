@@ -3,23 +3,6 @@
 import Image from "next/image";
 import { useEffect, useState } from "react";
 
-/**
- * "What Our Clients Say" testimonial carousel for Movetrans.
- *
- * Usage (Next.js App Router):
- *   import Testimonials from "@/components/Testimonials";
- *   export default function Page() {
- *     return <Testimonials />;
- *   }
- *
- * Relies on the theme tokens already defined in globals.css:
- *   --background, --foreground, --surface, --accent, --accent-dark,
- *   --muted, --line  (exposed via @theme inline as bg-background,
- *   text-foreground, bg-surface, text-accent, text-muted, border-line, etc.)
- *
- * Swap `avatar` values for real photos once you have them
- * (drop files in /public and point to "/your-file.jpg").
- */
 
 type Testimonial = {
   quote: string;

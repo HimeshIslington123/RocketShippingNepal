@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
-import { Big_Shoulders, Inter } from "next/font/google";
+import { Big_Shoulders, Inter,Google_Sans_Flex } from "next/font/google";
 import "./globals.css";
 
-const bigShoulders = Big_Shoulders({
-  variable: "--font-display",
-  subsets: ["latin"],
-  weight: ["500", "600", "700", "800"],
-});
 
+
+const bigShoulders = Google_Sans_Flex({
+  subsets: ["latin"],
+  weight: ["500", "600", "700"],
+  variable: "--font-display",
+});
 const inter = Inter({
   variable: "--font-body",
   subsets: ["latin"],
@@ -17,7 +18,7 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "Rocket Shipping",
   description:
-    "rocket",
+    "",
      icons: {
     icon: "/icon.png",
   },
