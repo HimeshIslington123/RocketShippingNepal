@@ -13,8 +13,8 @@ const RIDER_NAV: NavLink[] = [
     icon: LayoutDashboard,
   },
   {
-    href: "/rider/history",
-    label: "Delivery History",
+    href: "/rider/pickuprequest",
+    label: "Pickup ",
     icon: Package,
   },
   {

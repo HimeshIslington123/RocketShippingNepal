@@ -12,6 +12,7 @@ import {
   Settings,
   Plus,
   Menu,
+  LogOutIcon,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -142,13 +143,21 @@ export default function DashboardShell({
             <Settings className="h-[18px] w-[18px]" />
             Settings
           </Link>
+
+           <Link
+            href="/logout"
+            className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-white/45 hover:text-white"
+          >
+            <LogOutIcon className="h-[18px] w-[18px]" />
+            Logout
+          </Link>
         </div>
       </aside>
 
       {/* Right Side */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* Header */}
-        <header className="flex shrink-0 items-center gap-2 border-b border-black/5 bg-white px-4 py-3 sm:gap-4 sm:px-6 sm:py-4">
+        <header className="flex shrink-0 items-center gap-2 border-b border-black/5 bg-black px-4 py-3 sm:gap-4 sm:px-6 sm:py-4">
           <button
             className="rounded-lg p-2 hover:bg-black/5 md:hidden"
             onClick={() => setMobileOpen(true)}

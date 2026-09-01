@@ -15,6 +15,7 @@ import {
   LocateFixed,
   MapPin,
   MessageCircle,
+  Navigation,
   Package,
   Phone,
   RefreshCw,
@@ -24,7 +25,6 @@ import {
   Wallet,
   X,
   AlertCircle,
-  Navigation,
 } from "lucide-react";
 
 const API_URL = `${process.env.NEXT_PUBLIC_API_URL}/api/shipment`;
@@ -40,7 +40,8 @@ type ShipmentStatus =
   | "OUT_FOR_DELIVERY"
   | "DELIVERED"
   | "CANCELLED"
-  | "RETURNED";
+  | "RETURNED"
+  | "ASSIGNED_TO_RIDER";
 
 type Tracking = {
   id: string;
@@ -78,6 +79,8 @@ type Shipment = {
   trackings?: Tracking[];
 };
 
+type FilterType = "ALL" | "ACTIVE" | "DELIVERED";
+
 const statusConfig: Record<
   ShipmentStatus,
   {
@@ -93,65 +96,82 @@ const statusConfig: Record<
     text: "text-amber-700",
     dot: "bg-amber-500",
   },
+
   RECEIVED: {
     label: "Received",
     bg: "bg-blue-50",
     text: "text-blue-700",
     dot: "bg-blue-500",
   },
+
   PROCESSING: {
     label: "Processing",
     bg: "bg-violet-50",
     text: "text-violet-700",
     dot: "bg-violet-500",
   },
+
   IN_WAREHOUSE: {
     label: "In Warehouse",
     bg: "bg-slate-100",
     text: "text-slate-700",
     dot: "bg-slate-500",
   },
+
   DISPATCHED: {
     label: "Dispatched",
     bg: "bg-indigo-50",
     text: "text-indigo-700",
     dot: "bg-indigo-500",
   },
+
   IN_TRANSIT: {
     label: "In Transit",
     bg: "bg-cyan-50",
     text: "text-cyan-700",
     dot: "bg-cyan-500",
   },
+
   ARRIVED: {
     label: "Arrived",
     bg: "bg-teal-50",
     text: "text-teal-700",
     dot: "bg-teal-500",
   },
+
   OUT_FOR_DELIVERY: {
     label: "Out for Delivery",
     bg: "bg-orange-50",
     text: "text-orange-700",
     dot: "bg-orange-500",
   },
+
   DELIVERED: {
     label: "Delivered",
     bg: "bg-emerald-50",
     text: "text-emerald-700",
     dot: "bg-emerald-500",
   },
+
   CANCELLED: {
     label: "Cancelled",
     bg: "bg-red-50",
     text: "text-red-700",
     dot: "bg-red-500",
   },
+
   RETURNED: {
     label: "Returned",
     bg: "bg-rose-50",
     text: "text-rose-700",
     dot: "bg-rose-500",
+  },
+
+  ASSIGNED_TO_RIDER: {
+    label: "Assigned to Rider",
+    bg: "bg-purple-50",
+    text: "text-purple-700",
+    dot: "bg-purple-500",
   },
 };
 
@@ -206,17 +226,27 @@ function StatusBadge({
   status: ShipmentStatus;
   small?: boolean;
 }) {
-  const config = statusConfig[status];
+  const config = statusConfig[status] ?? {
+    label: formatStatus(status),
+    bg: "bg-slate-100",
+    text: "text-slate-700",
+    dot: "bg-slate-500",
+  };
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full ${config.bg} ${config.text} ${
-        small ? "px-2.5 py-1 text-[11px]" : "px-3 py-1.5 text-xs"
+      className={`inline-flex items-center gap-1.5 rounded-full ${
+        config.bg
+      } ${config.text} ${
+        small
+          ? "px-2.5 py-1 text-[11px]"
+          : "px-3 py-1.5 text-xs"
       } font-semibold`}
     >
       <span
         className={`h-1.5 w-1.5 rounded-full ${config.dot}`}
       />
+
       {config.label}
     </span>
   );
@@ -236,16 +266,20 @@ function StatCard({
   iconClass: string;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="rounded-2xl border border-slate-200 p-5 shadow-sm">
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-sm font-medium text-slate-500">{title}</p>
+          <p className="text-sm font-medium text-slate-500">
+            {title}
+          </p>
 
           <p className="mt-2 text-3xl font-bold tracking-tight text-slate-950">
             {value}
           </p>
 
-          <p className="mt-1 text-xs text-slate-400">{subtitle}</p>
+          <p className="mt-1 text-xs text-slate-400">
+            {subtitle}
+          </p>
         </div>
 
         <div
@@ -260,6 +294,7 @@ function StatCard({
 
 export default function RiderDeliveryTable() {
   const [shipments, setShipments] = useState<Shipment[]>([]);
+
   const [selectedShipment, setSelectedShipment] =
     useState<Shipment | null>(null);
 
@@ -267,15 +302,46 @@ export default function RiderDeliveryTable() {
   const [refreshing, setRefreshing] = useState(false);
 
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<
-    "ALL" | "ACTIVE" | "DELIVERED"
-  >("ACTIVE");
+
+  const [filter, setFilter] =
+    useState<FilterType>("ACTIVE");
 
   const [message, setMessage] = useState("");
-  const [sendingMessage, setSendingMessage] = useState(false);
-  const [updatingStatus, setUpdatingStatus] = useState(false);
+
+  const [sendingMessage, setSendingMessage] =
+    useState(false);
+
+  const [updatingStatus, setUpdatingStatus] =
+    useState(false);
 
   const [error, setError] = useState("");
+
+  // =========================================================
+  // GET TOKEN
+  // =========================================================
+
+  function getToken() {
+    return localStorage.getItem("token");
+  }
+
+  // =========================================================
+  // AUTH HEADERS
+  // =========================================================
+
+  function getAuthHeaders(): HeadersInit {
+    const token = getToken();
+
+    if (!token) {
+      throw new Error(
+        "Authentication token not found. Please login again."
+      );
+    }
+
+    return {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    };
+  }
 
   // =========================================================
   // LOAD SHIPMENTS
@@ -295,55 +361,55 @@ export default function RiderDeliveryTable() {
 
       setError("");
 
-      const response = await fetch(API_URL, {
-        cache: "no-store",
-      });
+      const headers = getAuthHeaders();
+
+      const response = await fetch(
+        `${API_URL}/my-shipments`,
+        {
+          method: "GET",
+          headers,
+          cache: "no-store",
+        }
+      );
+
+      const data = await response.json();
 
       if (!response.ok) {
-        throw new Error("Failed to load shipments");
+        throw new Error(
+          data.message ||
+            "Failed to load your shipments."
+        );
       }
 
-      const data: Shipment[] = await response.json();
-
-      /*
-       * IMPORTANT:
-       *
-       * This uses your current backend.
-       *
-       * Your backend currently returns all shipments.
-       *
-       * For now we display:
-       * OUT_FOR_DELIVERY
-       * DELIVERED
-       *
-       * Later, replace this with riderId filtering on backend.
-       */
-
-      const riderShipments = data.filter(
-        (shipment) =>
-          shipment.status === "OUT_FOR_DELIVERY" ||
-          shipment.status === "DELIVERED"
-      );
+      const riderShipments: Shipment[] =
+        Array.isArray(data.shipments)
+          ? data.shipments
+          : [];
 
       setShipments(riderShipments);
 
-      /*
-       * If currently selected shipment exists,
-       * refresh its data too.
-       */
-      if (selectedShipment) {
+      setSelectedShipment((current) => {
+        if (!current) {
+          return null;
+        }
+
         const updated = riderShipments.find(
-          (item) => item.id === selectedShipment.id
+          (item) => item.id === current.id
         );
 
-        if (updated) {
-          setSelectedShipment(updated);
-        }
-      }
+        return updated ?? null;
+      });
     } catch (err) {
-      console.error("FETCH SHIPMENTS ERROR:", err);
+      console.error(
+        "FETCH RIDER SHIPMENTS ERROR:",
+        err
+      );
 
-      setError("Unable to load deliveries.");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to load deliveries."
+      );
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -360,7 +426,10 @@ export default function RiderDeliveryTable() {
     if (filter === "ACTIVE") {
       result = result.filter(
         (shipment) =>
-          shipment.status === "OUT_FOR_DELIVERY"
+          shipment.status ===
+            "OUT_FOR_DELIVERY" ||
+          shipment.status ===
+            "ASSIGNED_TO_RIDER"
       );
     }
 
@@ -400,7 +469,9 @@ export default function RiderDeliveryTable() {
   // =========================================================
 
   const activeCount = shipments.filter(
-    (item) => item.status === "OUT_FOR_DELIVERY"
+    (item) =>
+      item.status === "OUT_FOR_DELIVERY" ||
+      item.status === "ASSIGNED_TO_RIDER"
   ).length;
 
   const deliveredCount = shipments.filter(
@@ -409,7 +480,7 @@ export default function RiderDeliveryTable() {
 
   const codCount = shipments.filter(
     (item) =>
-      item.status === "OUT_FOR_DELIVERY" &&
+      item.status !== "DELIVERED" &&
       item.paymentType === "COD"
   ).length;
 
@@ -425,6 +496,10 @@ export default function RiderDeliveryTable() {
     document.body.style.overflow = "hidden";
   }
 
+  // =========================================================
+  // CLOSE SHIPMENT
+  // =========================================================
+
   function closeShipment() {
     setSelectedShipment(null);
     setMessage("");
@@ -435,11 +510,18 @@ export default function RiderDeliveryTable() {
   // COPY TRACKING NUMBER
   // =========================================================
 
-  async function copyTracking(trackingNumber: string) {
+  async function copyTracking(
+    trackingNumber: string
+  ) {
     try {
-      await navigator.clipboard.writeText(trackingNumber);
-    } catch {
-      console.error("Unable to copy tracking number");
+      await navigator.clipboard.writeText(
+        trackingNumber
+      );
+    } catch (err) {
+      console.error(
+        "Unable to copy tracking number:",
+        err
+      );
     }
   }
 
@@ -458,13 +540,13 @@ export default function RiderDeliveryTable() {
       setSendingMessage(true);
       setError("");
 
+      const headers = getAuthHeaders();
+
       const response = await fetch(
         `${API_URL}/${selectedShipment.id}/message`,
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers,
           body: JSON.stringify({
             message: trimmedMessage,
             location: "Rider Location",
@@ -476,33 +558,19 @@ export default function RiderDeliveryTable() {
 
       if (!response.ok) {
         throw new Error(
-          data.message || "Failed to add message"
+          data.message ||
+            "Failed to add delivery update."
         );
       }
 
       setMessage("");
 
-      /*
-       * Refresh everything so the new tracking
-       * message appears immediately.
-       */
       await fetchShipments(true);
-
-      /*
-       * The backend's GET /shipment response already
-       * contains trackings according to your controller.
-       *
-       * Refresh selected shipment from local list.
-       */
-      setSelectedShipment((current) => {
-        if (!current) return null;
-
-        return shipments.find(
-          (item) => item.id === current.id
-        ) ?? current;
-      });
     } catch (err) {
-      console.error("ADD MESSAGE ERROR:", err);
+      console.error(
+        "ADD MESSAGE ERROR:",
+        err
+      );
 
       setError(
         err instanceof Error
@@ -528,13 +596,13 @@ export default function RiderDeliveryTable() {
       setUpdatingStatus(true);
       setError("");
 
+      const headers = getAuthHeaders();
+
       const response = await fetch(
         `${API_URL}/${selectedShipment.id}/status`,
         {
           method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers,
           body: JSON.stringify({
             status,
             location: "Rider Location",
@@ -547,25 +615,17 @@ export default function RiderDeliveryTable() {
 
       if (!response.ok) {
         throw new Error(
-          data.message || "Failed to update status"
+          data.message ||
+            "Failed to update shipment status."
         );
       }
 
       await fetchShipments(true);
-
-      /*
-       * Update selected shipment locally immediately.
-       */
-      setSelectedShipment((current) =>
-        current
-          ? {
-              ...current,
-              status,
-            }
-          : null
-      );
     } catch (err) {
-      console.error("UPDATE STATUS ERROR:", err);
+      console.error(
+        "UPDATE STATUS ERROR:",
+        err
+      );
 
       setError(
         err instanceof Error
@@ -604,25 +664,24 @@ export default function RiderDeliveryTable() {
     );
   }
 
-  // =========================================================
-  // MAIN UI
-  // =========================================================
-
   return (
     <>
-      <div className="min-h-screen bg-[#f7f8fa]">
-        <div className="mx-auto max-w-[1500px] space-y-6 p-4 sm:p-6 lg:p-8">
+      <div className="min-h-screen ">
+        <div className="mx-auto max-w-[1500px] space-y-6 ">
 
-          {/* =================================================
+          {/* =====================================================
               PAGE HEADER
-          ================================================= */}
+          ===================================================== */}
 
           <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
             <div>
               <div className="flex items-center gap-2 text-sm text-slate-500">
                 <Truck size={16} />
+
                 <span>Rider Dashboard</span>
+
                 <ChevronRight size={14} />
+
                 <span className="text-slate-900">
                   Deliveries
                 </span>
@@ -646,17 +705,21 @@ export default function RiderDeliveryTable() {
               <RefreshCw
                 size={17}
                 className={
-                  refreshing ? "animate-spin" : ""
+                  refreshing
+                    ? "animate-spin"
+                    : ""
                 }
               />
 
-              {refreshing ? "Refreshing..." : "Refresh"}
+              {refreshing
+                ? "Refreshing..."
+                : "Refresh"}
             </button>
           </div>
 
-          {/* =================================================
+          {/* =====================================================
               ERROR
-          ================================================= */}
+          ===================================================== */}
 
           {error && (
             <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-700">
@@ -684,15 +747,15 @@ export default function RiderDeliveryTable() {
             </div>
           )}
 
-          {/* =================================================
+          {/* =====================================================
               STATS
-          ================================================= */}
+          ===================================================== */}
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard
               title="Active deliveries"
               value={activeCount}
-              subtitle="Currently out for delivery"
+              subtitle="Currently assigned"
               icon={Truck}
               iconClass="bg-orange-50 text-orange-600"
             />
@@ -716,19 +779,17 @@ export default function RiderDeliveryTable() {
             <StatCard
               title="Total assigned"
               value={shipments.length}
-              subtitle="Your current deliveries"
+              subtitle="Your deliveries"
               icon={Package}
               iconClass="bg-blue-50 text-blue-600"
             />
           </div>
 
-          {/* =================================================
+          {/* =====================================================
               DELIVERY LIST
-          ================================================= */}
+          ===================================================== */}
 
           <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-
-            {/* LIST HEADER */}
 
             <div className="border-b border-slate-200 p-5 sm:p-6">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -739,14 +800,11 @@ export default function RiderDeliveryTable() {
                   </h2>
 
                   <p className="mt-1 text-sm text-slate-500">
-                    {filteredShipments.length} deliveries
-                    shown
+                    {filteredShipments.length} deliveries shown
                   </p>
                 </div>
 
                 <div className="flex flex-col gap-3 sm:flex-row">
-
-                  {/* SEARCH */}
 
                   <div className="relative">
                     <Search
@@ -764,44 +822,41 @@ export default function RiderDeliveryTable() {
                     />
                   </div>
 
-                  {/* FILTER */}
-
                   <div className="flex rounded-xl border border-slate-200 bg-slate-50 p-1">
                     {[
                       ["ACTIVE", "Active"],
                       ["DELIVERED", "Delivered"],
                       ["ALL", "All"],
-                    ].map(([value, label]) => (
-                      <button
-                        key={value}
-                        onClick={() =>
-                          setFilter(
-                            value as
-                              | "ALL"
-                              | "ACTIVE"
-                              | "DELIVERED"
-                          )
-                        }
-                        className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
-                          filter === value
-                            ? "bg-white text-slate-950 shadow-sm"
-                            : "text-slate-500 hover:text-slate-800"
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    ))}
+                    ].map(
+                      ([value, label]) => (
+                        <button
+                          key={value}
+                          onClick={() =>
+                            setFilter(
+                              value as FilterType
+                            )
+                          }
+                          className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
+                            filter === value
+                              ? "bg-white text-slate-950 shadow-sm"
+                              : "text-slate-500 hover:text-slate-800"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      )
+                    )}
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* =================================================
-                DESKTOP TABLE
-            ================================================= */}
-
             {filteredShipments.length > 0 ? (
               <>
+                {/* =================================================
+                    DESKTOP
+                ================================================= */}
+
                 <div className="hidden overflow-x-auto lg:block">
                   <table className="w-full">
                     <thead>
@@ -841,8 +896,6 @@ export default function RiderDeliveryTable() {
                             key={shipment.id}
                             className="group transition hover:bg-slate-50/70"
                           >
-                            {/* DELIVERY */}
-
                             <td className="px-6 py-5">
                               <div className="flex items-start gap-3">
                                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
@@ -865,8 +918,6 @@ export default function RiderDeliveryTable() {
                               </div>
                             </td>
 
-                            {/* CUSTOMER */}
-
                             <td className="px-6 py-5">
                               <p className="font-semibold text-slate-900">
                                 {
@@ -879,14 +930,11 @@ export default function RiderDeliveryTable() {
                                 className="mt-1 flex items-center gap-1.5 text-sm text-slate-500 transition hover:text-slate-900"
                               >
                                 <Phone size={13} />
-
                                 {
                                   shipment.receiverPhone
                                 }
                               </a>
                             </td>
-
-                            {/* DESTINATION */}
 
                             <td className="max-w-[280px] px-6 py-5">
                               <div className="flex items-start gap-2">
@@ -903,11 +951,11 @@ export default function RiderDeliveryTable() {
                               </div>
                             </td>
 
-                            {/* PACKAGE */}
-
                             <td className="px-6 py-5">
                               <p className="text-sm font-semibold text-slate-900">
-                                {shipment.packageType}
+                                {
+                                  shipment.packageType
+                                }
                               </p>
 
                               <p className="mt-1 text-xs text-slate-400">
@@ -915,16 +963,13 @@ export default function RiderDeliveryTable() {
                               </p>
                             </td>
 
-                            {/* PAYMENT */}
-
                             <td className="px-6 py-5">
                               {shipment.paymentType ===
                               "COD" ? (
                                 <>
                                   <div className="flex items-center gap-1.5 text-sm font-bold text-slate-900">
-                                    <Wallet
-                                      size={14}
-                                    />
+                                    <Wallet size={14} />
+
                                     Rs.{" "}
                                     {shipment.codAmount.toLocaleString()}
                                   </div>
@@ -936,9 +981,7 @@ export default function RiderDeliveryTable() {
                               ) : (
                                 <>
                                   <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-900">
-                                    <Check
-                                      size={14}
-                                    />
+                                    <Check size={14} />
                                     Prepaid
                                   </div>
 
@@ -949,8 +992,6 @@ export default function RiderDeliveryTable() {
                               )}
                             </td>
 
-                            {/* STATUS */}
-
                             <td className="px-6 py-5">
                               <StatusBadge
                                 status={
@@ -958,8 +999,6 @@ export default function RiderDeliveryTable() {
                                 }
                               />
                             </td>
-
-                            {/* ACTION */}
 
                             <td className="px-6 py-5 text-right">
                               <button
@@ -971,6 +1010,7 @@ export default function RiderDeliveryTable() {
                                 className="inline-flex items-center gap-1.5 rounded-xl bg-slate-950 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-slate-800"
                               >
                                 View
+
                                 <ArrowRight
                                   size={14}
                                 />
@@ -984,7 +1024,7 @@ export default function RiderDeliveryTable() {
                 </div>
 
                 {/* =================================================
-                    MOBILE CARDS
+                    MOBILE
                 ================================================= */}
 
                 <div className="divide-y divide-slate-100 lg:hidden">
@@ -1002,9 +1042,7 @@ export default function RiderDeliveryTable() {
                         <div className="flex items-start justify-between gap-4">
                           <div className="flex items-start gap-3">
                             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-100">
-                              <Package
-                                size={18}
-                              />
+                              <Package size={18} />
                             </div>
 
                             <div>
@@ -1051,8 +1089,14 @@ export default function RiderDeliveryTable() {
 
                         <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4">
                           <span className="text-xs text-slate-400">
-                            {shipment.packageType} ·{" "}
-                            {shipment.weight} kg
+                            {
+                              shipment.packageType
+                            }{" "}
+                            ·{" "}
+                            {
+                              shipment.weight
+                            }{" "}
+                            kg
                           </span>
 
                           <span className="text-xs font-bold text-slate-700">
@@ -1068,10 +1112,6 @@ export default function RiderDeliveryTable() {
                 </div>
               </>
             ) : (
-              /* =================================================
-                 EMPTY
-              ================================================= */
-
               <div className="flex min-h-[350px] flex-col items-center justify-center p-10 text-center">
                 <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100">
                   <Package
@@ -1107,9 +1147,9 @@ export default function RiderDeliveryTable() {
         </div>
       </div>
 
-      {/* =======================================================
+      {/* =========================================================
           DETAIL DRAWER
-      ======================================================= */}
+      ========================================================= */}
 
       {selectedShipment && (
         <div className="fixed inset-0 z-50">
@@ -1126,9 +1166,9 @@ export default function RiderDeliveryTable() {
 
           <aside className="absolute right-0 top-0 flex h-full w-full max-w-2xl flex-col bg-[#f8f9fb] shadow-2xl">
 
-            {/* =================================================
+            {/* ===================================================
                 DRAWER HEADER
-            ================================================= */}
+            =================================================== */}
 
             <div className="shrink-0 border-b border-slate-200 bg-white px-5 py-5 sm:px-7">
               <div className="flex items-start justify-between gap-4">
@@ -1138,9 +1178,7 @@ export default function RiderDeliveryTable() {
                     onClick={closeShipment}
                     className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50"
                   >
-                    <ArrowLeft
-                      size={17}
-                    />
+                    <ArrowLeft size={17} />
                   </button>
 
                   <div>
@@ -1189,9 +1227,9 @@ export default function RiderDeliveryTable() {
               </div>
             </div>
 
-            {/* =================================================
+            {/* ===================================================
                 DRAWER BODY
-            ================================================= */}
+            =================================================== */}
 
             <div className="flex-1 overflow-y-auto">
               <div className="space-y-5 p-5 sm:p-7">
@@ -1209,9 +1247,7 @@ export default function RiderDeliveryTable() {
 
                       <div className="mt-3 flex items-start gap-3">
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10">
-                          <Navigation
-                            size={18}
-                          />
+                          <Navigation size={18} />
                         </div>
 
                         <div>
@@ -1276,8 +1312,6 @@ export default function RiderDeliveryTable() {
 
                 <div className="grid gap-4 sm:grid-cols-2">
 
-                  {/* CUSTOMER */}
-
                   <div className="rounded-2xl border border-slate-200 bg-white p-5">
                     <div className="flex items-center gap-2">
                       <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
@@ -1307,6 +1341,7 @@ export default function RiderDeliveryTable() {
                         className="mt-2 inline-flex items-center gap-2 text-sm text-blue-600 hover:underline"
                       >
                         <Phone size={14} />
+
                         {
                           selectedShipment.receiverPhone
                         }
@@ -1314,14 +1349,10 @@ export default function RiderDeliveryTable() {
                     </div>
                   </div>
 
-                  {/* PAYMENT */}
-
                   <div className="rounded-2xl border border-slate-200 bg-white p-5">
                     <div className="flex items-center gap-2">
                       <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
-                        <CreditCard
-                          size={17}
-                        />
+                        <CreditCard size={17} />
                       </div>
 
                       <div>
@@ -1459,27 +1490,74 @@ export default function RiderDeliveryTable() {
                 </div>
 
                 {/* =================================================
-                    DELIVERY ACTION
+                    DELIVERY STATUS ACTION
                 ================================================= */}
 
-                {selectedShipment.status !==
-                  "DELIVERED" && (
+                {selectedShipment.status ===
+                  "ASSIGNED_TO_RIDER" && (
+                  <div className="rounded-2xl border border-orange-200 bg-orange-50 p-5">
+                    <div className="flex items-start gap-4">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-100 text-orange-600">
+                        <Truck size={20} />
+                      </div>
+
+                      <div className="flex-1">
+                        <p className="font-bold text-orange-950">
+                          Ready to start delivery?
+                        </p>
+
+                        <p className="mt-1 text-sm leading-5 text-orange-800/70">
+                          Start the delivery when you have
+                          picked up the shipment and are
+                          heading to the customer.
+                        </p>
+
+                        <button
+                          disabled={updatingStatus}
+                          onClick={() =>
+                            updateStatus(
+                              "OUT_FOR_DELIVERY",
+                              "Shipment is now out for delivery."
+                            )
+                          }
+                          className="mt-4 inline-flex items-center gap-2 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <Truck size={17} />
+
+                          {updatingStatus
+                            ? "Starting..."
+                            : "Start Delivery"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* =================================================
+                    MARK AS DELIVERED
+
+                    IMPORTANT:
+                    Only visible when status is
+                    OUT_FOR_DELIVERY.
+                ================================================= */}
+
+                {selectedShipment.status ===
+                  "OUT_FOR_DELIVERY" && (
                   <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
                     <div className="flex items-start gap-4">
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600">
-                        <CheckCircle2
-                          size={20}
-                        />
+                        <CheckCircle2 size={20} />
                       </div>
 
                       <div className="flex-1">
                         <p className="font-bold text-emerald-950">
-                          Ready to complete?
+                          Delivery in progress
                         </p>
 
                         <p className="mt-1 text-sm leading-5 text-emerald-800/70">
-                          Mark this shipment as delivered
-                          after handing it to the customer.
+                          Confirm delivery only after the
+                          package has been handed to the
+                          customer.
                         </p>
 
                         <button
@@ -1504,15 +1582,39 @@ export default function RiderDeliveryTable() {
                 )}
 
                 {/* =================================================
+                    DELIVERED SUCCESS
+                ================================================= */}
+
+                {selectedShipment.status ===
+                  "DELIVERED" && (
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+                    <div className="flex items-center gap-4">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+                        <CheckCircle2 size={21} />
+                      </div>
+
+                      <div>
+                        <p className="font-bold text-emerald-950">
+                          Delivery completed
+                        </p>
+
+                        <p className="mt-1 text-sm text-emerald-800/70">
+                          This shipment has been successfully
+                          delivered to the customer.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* =================================================
                     QUICK MESSAGE
                 ================================================= */}
 
                 <div className="rounded-2xl border border-slate-200 bg-white p-5">
                   <div className="flex items-center gap-2">
                     <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-50 text-orange-600">
-                      <MessageCircle
-                        size={17}
-                      />
+                      <MessageCircle size={17} />
                     </div>
 
                     <div>
@@ -1537,8 +1639,7 @@ export default function RiderDeliveryTable() {
                             )
                           }
                           className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
-                            message ===
-                            item.message
+                            message === item.message
                               ? "border-slate-950 bg-slate-950 text-white"
                               : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
                           }`}
@@ -1552,9 +1653,7 @@ export default function RiderDeliveryTable() {
                   <textarea
                     value={message}
                     onChange={(e) =>
-                      setMessage(
-                        e.target.value
-                      )
+                      setMessage(e.target.value)
                     }
                     rows={3}
                     placeholder="Write a delivery update..."
@@ -1570,9 +1669,7 @@ export default function RiderDeliveryTable() {
                       }
                       className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
                     >
-                      <MessageCircle
-                        size={15}
-                      />
+                      <MessageCircle size={15} />
 
                       {sendingMessage
                         ? "Saving..."
@@ -1606,15 +1703,15 @@ export default function RiderDeliveryTable() {
                     <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-500">
                       {
                         selectedShipment
-                          .trackings?.length
+                          .trackings?.length ?? 0
                       }
                     </span>
                   </div>
 
                   <div className="mt-6">
                     {!selectedShipment.trackings ||
-                    selectedShipment.trackings
-                      .length === 0 ? (
+                    selectedShipment.trackings.length ===
+                      0 ? (
                       <div className="rounded-xl bg-slate-50 p-7 text-center">
                         <Clock3
                           size={22}
@@ -1642,7 +1739,15 @@ export default function RiderDeliveryTable() {
                             const config =
                               statusConfig[
                                 tracking.status
-                              ];
+                              ] ?? {
+                                bg: "bg-slate-100",
+                                text: "text-slate-700",
+                                dot: "bg-slate-500",
+                                label:
+                                  formatStatus(
+                                    tracking.status
+                                  ),
+                              };
 
                             return (
                               <div
@@ -1651,22 +1756,16 @@ export default function RiderDeliveryTable() {
                                 }
                                 className="relative flex gap-4 pb-7 last:pb-0"
                               >
-                                {/* LINE */}
-
                                 {!isLast && (
                                   <div className="absolute left-[17px] top-9 h-[calc(100%-20px)] w-px bg-slate-200" />
                                 )}
-
-                                {/* ICON */}
 
                                 <div
                                   className={`relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-4 border-white ${config.bg} ${config.text}`}
                                 >
                                   {tracking.status ===
                                   "DELIVERED" ? (
-                                    <Check
-                                      size={14}
-                                    />
+                                    <Check size={14} />
                                   ) : (
                                     <span
                                       className={`h-2.5 w-2.5 rounded-full ${config.dot}`}
@@ -1674,14 +1773,12 @@ export default function RiderDeliveryTable() {
                                   )}
                                 </div>
 
-                                {/* CONTENT */}
-
                                 <div className="min-w-0 flex-1 pt-0.5">
                                   <div className="flex flex-wrap items-center gap-2">
                                     <span className="text-sm font-bold text-slate-900">
-                                      {formatStatus(
-                                        tracking.status
-                                      )}
+                                      {
+                                        config.label
+                                      }
                                     </span>
 
                                     <span className="text-xs text-slate-400">
@@ -1701,9 +1798,7 @@ export default function RiderDeliveryTable() {
 
                                   {tracking.location && (
                                     <div className="mt-2 inline-flex items-center gap-1.5 text-xs text-slate-400">
-                                      <MapPin
-                                        size={12}
-                                      />
+                                      <MapPin size={12} />
 
                                       {
                                         tracking.location
@@ -1721,7 +1816,7 @@ export default function RiderDeliveryTable() {
                 </div>
 
                 {/* =================================================
-                    LOCATION BUTTON
+                    LOCATION
                 ================================================= */}
 
                 <button
@@ -1737,9 +1832,7 @@ export default function RiderDeliveryTable() {
                 >
                   <div className="flex items-center gap-3">
                     <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-                      <LocateFixed
-                        size={18}
-                      />
+                      <LocateFixed size={18} />
                     </div>
 
                     <div>

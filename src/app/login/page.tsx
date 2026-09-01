@@ -66,7 +66,7 @@ export default function LoginPage() {
         return;
       }
 
-      console.log("Login response:", data);
+
 
       // Save JWT token
       localStorage.setItem("token", data.token);
@@ -74,7 +74,7 @@ export default function LoginPage() {
       // Get role from backend response
       const role = data.role;
 
-      console.log("Logged in role:", role);
+   
 
       // Redirect based on role
       if (role === "VENDOR") {
@@ -101,7 +101,7 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#0b0e14] px-4 py-8 sm:py-12 lg:flex lg:items-center lg:justify-center">
+    <main className="min-h-screen bg-[#0b0e14] text-black px-4 py-8 sm:py-12 lg:flex lg:items-center lg:justify-center">
       <div className="mx-auto w-full max-w-5xl overflow-hidden rounded-2xl shadow-2xl shadow-black/40 lg:flex lg:min-h-[640px]">
 
         {/* Left / Brand panel */}

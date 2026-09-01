@@ -34,7 +34,7 @@ export default function RiderTracker() {
 
         try {
           const response = await fetch(
-  `${process.env.NEXT_PUBLIC_API_URL}/api/rider/location`,
+            `${process.env.NEXT_PUBLIC_API_URL}/api/rider/location`,
             {
               method: "POST",
               headers: {
@@ -44,26 +44,18 @@ export default function RiderTracker() {
                 latitude,
                 longitude,
               }),
-            }
+            },
           );
 
           if (!response.ok) {
-            throw new Error(
-              "Failed to update rider location"
-            );
+            throw new Error("Failed to update rider location");
           }
 
           const data = await response.json();
 
-          console.log(
-            "LOCATION SENT TO BACKEND:",
-            data
-          );
+          console.log("LOCATION SENT TO BACKEND:", data);
         } catch (error) {
-          console.error(
-            "LOCATION SEND ERROR:",
-            error
-          );
+          console.error("LOCATION SEND ERROR:", error);
 
           setStatus("Failed to send location");
         }
@@ -76,7 +68,7 @@ export default function RiderTracker() {
         enableHighAccuracy: true,
         maximumAge: 5000,
         timeout: 10000,
-      }
+      },
     );
 
     return () => {
@@ -85,17 +77,9 @@ export default function RiderTracker() {
   }, []);
 
   return (
-    <div className="mt-4 rounded-lg bg-gray-100 p-4">
-      <p className="font-semibold">
-        Rider GPS: {status}
-      </p>
-
-      {location && (
-        <div className="mt-2 text-sm">
-          <p>Latitude: {location.latitude}</p>
-          <p>Longitude: {location.longitude}</p>
-        </div>
-      )}
+    <div className="mt-4 rounded-lg bg-gray-100 text-black p-4">
+      
+       
     </div>
   );
 }

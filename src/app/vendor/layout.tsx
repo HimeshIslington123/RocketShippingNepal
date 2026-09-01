@@ -1,13 +1,14 @@
 "use client";
 
-import { LayoutDashboard, Truck, Receipt, UserRound } from "lucide-react";
+import { LayoutDashboard, Truck, Receipt, UserRound,PlusCircle } from "lucide-react";
 import DashboardShell, { type NavLink } from "@/components/DashboardShell";
 
 const VENDOR_NAV: NavLink[] = [
   { href: "/vendor", label: "Overview", icon: LayoutDashboard },
   { href: "/vendor/pickup", label: "Pickup", icon: Truck },
-  { href: "/vendor/invoices", label: "Invoices", icon: Receipt },
-  { href: "/vendor/profile", label: "Profile", icon: UserRound },
+  { href: "/vendor/View", label: "View shipping", icon: Receipt },
+  { href: "/vendor/order", label: "New Shipment", icon: PlusCircle },
+    { href: "/vendor/profile", label: "Profile", icon: UserRound },
 ];
 
 export default function VendorLayout({ children }: { children: React.ReactNode }) {
@@ -17,7 +18,7 @@ export default function VendorLayout({ children }: { children: React.ReactNode }
       roleName="Enterprise Logistics"
       roleTag="GOLD VENDOR"
       userName="Everest Tradings"
-      primaryAction={{ label: "New Shipment", href: "/vendor/shipments/new" }}
+      primaryAction={{ label: "New Shipment", href: "/vendor/order" }}
     >
       {children}
     </DashboardShell>

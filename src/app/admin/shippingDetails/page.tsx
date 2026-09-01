@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import QRCode from "react-qr-code";
 
 // ============================================================
@@ -118,38 +118,22 @@ type Shipment = {
 };
 
 // ============================================================
-// STATUS OPTIONS
+// COMPANY NAME
 // ============================================================
 
-const STATUS_OPTIONS = [
-  {
-    value: "CREATED",
-    label: "Created",
-  },
-  {
-    value: "IN_WAREHOUSE",
-    label: "In Warehouse",
-  },
-  {
-  value: "ASSIGNED_TO_RIDER",
-  label: "Rider Assigned",
-},
-  {
-    value: "OUT_FOR_DELIVERY",
-    label: "Out for Delivery",
-  },
-  {
-    value: "DELIVERED",
-    label: "Delivered",
-  },
-  {
-    value: "RETURNED",
-    label: "Returned",
-  },
-  {
-    value: "CANCELLED",
-    label: "Cancelled",
-  },
+const CARGO_COMPANY_NAME =
+  "Rocket Shipping Cargo";
+
+// ============================================================
+// NORMAL DELIVERY FLOW
+// ============================================================
+
+const STATUS_FLOW = [
+  "CREATED",
+  "IN_WAREHOUSE",
+  "ASSIGNED_TO_RIDER",
+  "OUT_FOR_DELIVERY",
+  "DELIVERED",
 ];
 
 // ============================================================
@@ -163,7 +147,7 @@ const STATUS_STYLES: Record<string, string> = {
   IN_WAREHOUSE:
     "bg-amber-50 text-amber-700 ring-amber-600/20",
 
-  RIDER_ASSIGNED:
+  ASSIGNED_TO_RIDER:
     "bg-blue-50 text-blue-700 ring-blue-600/20",
 
   OUT_FOR_DELIVERY:
@@ -180,7 +164,7 @@ const STATUS_STYLES: Record<string, string> = {
 };
 
 // ============================================================
-// MAIN DELIVERY TIMELINE
+// TIMELINE
 // ============================================================
 
 const STEPS = [
@@ -190,6 +174,7 @@ const STEPS = [
   "OUT_FOR_DELIVERY",
   "DELIVERED",
 ];
+
 // ============================================================
 // HELPERS
 // ============================================================
@@ -222,6 +207,42 @@ function getStatusStyle(status?: string) {
   return (
     STATUS_STYLES[status || ""] ||
     "bg-gray-50 text-gray-700 ring-gray-600/20"
+  );
+}
+
+// ============================================================
+// GET NEXT STATUS
+// ============================================================
+
+function getNextStatus(status?: string) {
+  if (!status) return null;
+
+  const currentIndex =
+    STATUS_FLOW.indexOf(status);
+
+  if (currentIndex === -1) {
+    return null;
+  }
+
+  if (
+    currentIndex >=
+    STATUS_FLOW.length - 1
+  ) {
+    return null;
+  }
+
+  return STATUS_FLOW[currentIndex + 1];
+}
+
+// ============================================================
+// TERMINAL STATUS
+// ============================================================
+
+function isTerminalStatus(status?: string) {
+  return (
+    status === "DELIVERED" ||
+    status === "RETURNED" ||
+    status === "CANCELLED"
   );
 }
 
@@ -289,7 +310,7 @@ export default function VendorShipmentsPage() {
     useState("");
 
   // ============================================================
-  // RECEIPT
+  // PRINT RECEIPT
   // ============================================================
 
   const [receiptShipment, setReceiptShipment] =
@@ -306,7 +327,6 @@ export default function VendorShipmentsPage() {
   async function loadShipments() {
     try {
       setLoading(true);
-
       setError("");
 
       const token =
@@ -402,7 +422,6 @@ export default function VendorShipmentsPage() {
 
       const data = await res.json();
 
-      // supports either a raw array or { riders: [...] }
       setRiders(
         Array.isArray(data)
           ? data
@@ -430,18 +449,21 @@ export default function VendorShipmentsPage() {
     setDetailsLoading(true);
 
     setStatusMessage("");
-
     setStatusError("");
 
     setAssignMessage("");
-
     setAssignError("");
 
     setSelectedRiderId("");
 
     setDetailsShipment(shipment);
 
-    await loadRiders();
+    if (
+      shipment.status ===
+      "IN_WAREHOUSE"
+    ) {
+      await loadRiders();
+    }
 
     setDetailsLoading(false);
   }
@@ -451,34 +473,81 @@ export default function VendorShipmentsPage() {
   // ============================================================
 
   function closeDetails() {
-    if (updatingStatus || assigningRider) return;
+    if (
+      updatingStatus ||
+      assigningRider
+    ) {
+      return;
+    }
 
     setDetailsShipment(null);
 
     setStatusMessage("");
-
     setStatusError("");
 
     setAssignMessage("");
-
     setAssignError("");
 
     setSelectedRiderId("");
   }
 
   // ============================================================
-  // UPDATE STATUS
+  // NEXT STATUS
+  // ============================================================
+
+  const nextStatus = useMemo(() => {
+    return getNextStatus(
+      detailsShipment?.status
+    );
+  }, [detailsShipment?.status]);
+
+  // ============================================================
+  // CAN ASSIGN RIDER
+  // ============================================================
+
+  const canAssignRider =
+    detailsShipment?.status ===
+    "IN_WAREHOUSE";
+
+  // ============================================================
+  // AVAILABLE RIDERS
+  // ============================================================
+
+  const availableRiders =
+    riders.filter(
+      (rider) =>
+        rider.isAvailable !== false
+    );
+
+  // ============================================================
+  // UPDATE SHIPMENT STATUS
   // ============================================================
 
   async function updateShipmentStatus(
     newStatus: string
   ) {
-    if (!detailsShipment) return;
+    if (!detailsShipment) {
+      return;
+    }
+
+    const currentStatus =
+      detailsShipment.status;
+
+    const expectedNextStatus =
+      getNextStatus(currentStatus);
 
     if (
-      newStatus ===
-      detailsShipment.status
+      newStatus !==
+      expectedNextStatus
     ) {
+      setStatusError(
+        `Invalid status transition. Shipment must move from ${formatStatus(
+          currentStatus
+        )} to ${formatStatus(
+          expectedNextStatus || ""
+        )}.`
+      );
+
       return;
     }
 
@@ -486,7 +555,6 @@ export default function VendorShipmentsPage() {
       setUpdatingStatus(true);
 
       setStatusMessage("");
-
       setStatusError("");
 
       const token =
@@ -512,11 +580,14 @@ export default function VendorShipmentsPage() {
             status: newStatus,
 
             location:
-              detailsShipment.locationRate
+              detailsShipment
+                .locationRate
                 ?.location?.name ||
               "Main Office",
 
-            message: `Shipment status changed to ${formatStatus(
+            message: `Shipment moved from ${formatStatus(
+              currentStatus
+            )} to ${formatStatus(
               newStatus
             )}`,
           }),
@@ -549,10 +620,34 @@ export default function VendorShipmentsPage() {
               : item
           )
         );
+      } else {
+        setDetailsShipment(
+          (previous) =>
+            previous
+              ? {
+                  ...previous,
+                  status: newStatus,
+                }
+              : previous
+        );
+
+        setShipments((current) =>
+          current.map((item) =>
+            item.id ===
+            detailsShipment.id
+              ? {
+                  ...item,
+                  status: newStatus,
+                }
+              : item
+          )
+        );
       }
 
       setStatusMessage(
-        "Shipment status updated successfully."
+        `Shipment moved to ${formatStatus(
+          newStatus
+        )} successfully.`
       );
 
       await loadShipments();
@@ -577,13 +672,33 @@ export default function VendorShipmentsPage() {
   // ============================================================
 
   async function assignRiderToShipment() {
-    if (!detailsShipment || !selectedRiderId) return;
+    if (!detailsShipment) {
+      return;
+    }
+
+    if (
+      detailsShipment.status !==
+      "IN_WAREHOUSE"
+    ) {
+      setAssignError(
+        "A rider can only be assigned when the shipment is in warehouse."
+      );
+
+      return;
+    }
+
+    if (!selectedRiderId) {
+      setAssignError(
+        "Please select a rider."
+      );
+
+      return;
+    }
 
     try {
       setAssigningRider(true);
 
       setAssignError("");
-
       setAssignMessage("");
 
       const token =
@@ -606,7 +721,8 @@ export default function VendorShipmentsPage() {
           },
 
           body: JSON.stringify({
-            riderId: Number(selectedRiderId),
+            riderId:
+              Number(selectedRiderId),
           }),
         }
       );
@@ -624,43 +740,65 @@ export default function VendorShipmentsPage() {
       const updatedShipment =
         data?.shipment;
 
-      if (updatedShipment) {
-        setDetailsShipment((prev) =>
-          prev
-            ? {
-                ...prev,
-                rider: updatedShipment.rider,
-                riderId: updatedShipment.riderId,
-                status:
-                  updatedShipment.status ??
-                  prev.status,
-              }
-            : prev
+      const selectedRider =
+        riders.find(
+          (rider) =>
+            rider.id ===
+            Number(selectedRiderId)
         );
 
-        setShipments((current) =>
-          current.map((item) =>
-            item.id === detailsShipment.id
-              ? {
-                  ...item,
-                  rider: updatedShipment.rider,
-                  riderId: updatedShipment.riderId,
-                  status:
-                    updatedShipment.status ??
-                    item.status,
-                }
-              : item
-          )
-        );
-      }
+      setDetailsShipment((previous) =>
+        previous
+          ? {
+              ...previous,
+
+              rider:
+                updatedShipment?.rider ||
+                selectedRider ||
+                previous.rider,
+
+              riderId:
+                updatedShipment?.riderId ||
+                Number(selectedRiderId),
+
+              status:
+                updatedShipment?.status ||
+                "ASSIGNED_TO_RIDER",
+            }
+          : previous
+      );
+
+      setShipments((current) =>
+        current.map((item) =>
+          item.id === detailsShipment.id
+            ? {
+                ...item,
+
+                rider:
+                  updatedShipment?.rider ||
+                  selectedRider ||
+                  item.rider,
+
+                riderId:
+                  updatedShipment?.riderId ||
+                  Number(selectedRiderId),
+
+                status:
+                  updatedShipment?.status ||
+                  "ASSIGNED_TO_RIDER",
+              }
+            : item
+        )
+      );
 
       setAssignMessage(
-        "Rider assigned successfully."
+        "Rider assigned successfully. Shipment moved to Rider Assigned."
       );
 
       setSelectedRiderId("");
 
-      // refresh rider list so a now-unavailable rider drops out
+      await loadShipments();
+
       await loadRiders();
     } catch (err) {
       console.error(
@@ -679,7 +817,7 @@ export default function VendorShipmentsPage() {
   }
 
   // ============================================================
-  // PRINT RECEIPT
+  // PRINT BILL
   // ============================================================
 
   function printReceipt(
@@ -692,25 +830,17 @@ export default function VendorShipmentsPage() {
 
     setTimeout(() => {
       window.print();
-    }, 200);
+    }, 150);
   }
 
   // ============================================================
-  // COMPLETED STEPS
+  // COMPLETED TRACKING STEPS
   // ============================================================
 
   const completedSteps =
     detailsShipment?.trackings?.map(
       (tracking) => tracking.status
     ) || [];
-
-  // ============================================================
-  // AVAILABLE RIDERS (for dropdown)
-  // ============================================================
-
-  const availableRiders = riders.filter(
-    (r) => r.isAvailable !== false
-  );
 
   // ============================================================
   // RENDER
@@ -724,64 +854,112 @@ export default function VendorShipmentsPage() {
       ======================================================= */}
 
       <style jsx global>{`
+
         @media print {
+
+          /*
+           * 80mm thermal / compact receipt
+           */
+
           @page {
-            size: A5 portrait;
+            size: 80mm auto;
             margin: 0;
           }
 
           html,
           body {
-            width: 148mm;
-            min-height: 210mm;
-            margin: 0;
-            padding: 0;
+            width: 80mm !important;
+            margin: 0 !important;
+            padding: 0 !important;
             background: white !important;
           }
+
+          body {
+            overflow: visible !important;
+          }
+
+          /*
+           * Hide everything
+           */
 
           body * {
             visibility: hidden !important;
           }
 
-          #a5-receipt,
-          #a5-receipt * {
+          /*
+           * Show only bill
+           */
+
+          #print-bill,
+          #print-bill * {
             visibility: visible !important;
           }
 
-          #a5-receipt {
+          #print-bill {
+            display: block !important;
+
             position: absolute !important;
+
             left: 0 !important;
+
             top: 0 !important;
-            width: 148mm !important;
-            min-height: 210mm !important;
+
+            width: 80mm !important;
+
+            min-height: auto !important;
+
             margin: 0 !important;
-            padding: 12mm !important;
-            background: white !important;
+
+            padding: 5mm !important;
+
             box-sizing: border-box !important;
+
+            background: white !important;
+
+            color: black !important;
+
             border: none !important;
-            border-radius: 0 !important;
+
             box-shadow: none !important;
           }
+        }
+
+        /*
+         * Hide printable bill normally.
+         */
+
+        @media screen {
+
+          #print-bill {
+            display: none;
+          }
+
         }
       `}</style>
 
       {/* ======================================================
-          HEADER
+          NORMAL PAGE
       ======================================================= */}
 
       <div className="no-print">
 
+        {/* ====================================================
+            HEADER
+        ===================================================== */}
+
         <div className="flex items-start justify-between">
 
           <div>
+
             <h1 className="text-2xl font-bold">
               Shipments
             </h1>
 
             <p className="mt-1 text-sm text-gray-500">
-              Manage and update shipment
-              statuses manually.
+              Manage shipments through the
+              delivery workflow.
             </p>
+
           </div>
 
           <button
@@ -796,274 +974,297 @@ export default function VendorShipmentsPage() {
 
         </div>
 
-      </div>
+        {/* ====================================================
+            ERROR
+        ===================================================== */}
 
-      {/* ======================================================
-          ERROR
-      ======================================================= */}
+        {!loading && error && (
+          <div className="mt-6 rounded-2xl border border-red-100 bg-red-50 p-5">
 
-      {!loading && error && (
-        <div className="no-print mt-6 rounded-2xl border border-red-100 bg-red-50 p-5">
+            <p className="text-sm font-medium text-red-700">
+              {error}
+            </p>
 
-          <p className="text-sm font-medium text-red-700">
-            {error}
-          </p>
+          </div>
+        )}
 
-        </div>
-      )}
+        {/* ====================================================
+            LOADING
+        ===================================================== */}
 
-      {/* ======================================================
-          LOADING
-      ======================================================= */}
+        {loading && (
+          <div className="mt-6 rounded-2xl bg-white p-10 text-center shadow-sm ring-1 ring-black/5">
 
-      {loading && (
-        <div className="no-print mt-6 rounded-2xl bg-white p-10 text-center shadow-sm ring-1 ring-black/5">
+            <p className="text-sm text-gray-500">
+              Loading shipments...
+            </p>
 
-          <p className="text-sm text-gray-500">
-            Loading shipments...
-          </p>
+          </div>
+        )}
 
-        </div>
-      )}
+        {/* ====================================================
+            TABLE
+        ===================================================== */}
 
-      {/* ======================================================
-          TABLE
-      ======================================================= */}
+        {!loading && !error && (
+          <div className="mt-6 overflow-x-auto rounded-2xl bg-white shadow-sm ring-1 ring-black/5">
 
-      {!loading && !error && (
-        <div className="no-print mt-6 overflow-x-auto rounded-2xl bg-white shadow-sm ring-1 ring-black/5">
+            <table className="min-w-full divide-y divide-gray-200 text-sm">
 
-          <table className="min-w-full divide-y divide-gray-200 text-sm">
+              <thead className="bg-gray-50">
 
-            <thead className="bg-gray-50">
-
-              <tr>
-
-                <th className="px-4 py-3 text-left font-semibold">
-                  Tracking #
-                </th>
-
-                <th className="px-4 py-3 text-left font-semibold">
-                  Receiver
-                </th>
-
-                <th className="px-4 py-3 text-left font-semibold">
-                  Destination
-                </th>
-
-                <th className="px-4 py-3 text-left font-semibold">
-                  Package
-                </th>
-
-                <th className="px-4 py-3 text-left font-semibold">
-                  Payment
-                </th>
-
-                <th className="px-4 py-3 text-left font-semibold">
-                  Charge
-                </th>
-
-                <th className="px-4 py-3 text-left font-semibold">
-                  Rider
-                </th>
-
-                <th className="px-4 py-3 text-left font-semibold">
-                  Status
-                </th>
-
-                <th className="px-4 py-3 text-right font-semibold">
-                  Receipt
-                </th>
-
-              </tr>
-
-            </thead>
-
-            <tbody className="divide-y divide-gray-100">
-
-              {shipments.length === 0 && (
                 <tr>
 
-                  <td
-                    colSpan={9}
-                    className="px-4 py-10 text-center text-gray-400"
-                  >
-                    No shipments found.
-                  </td>
+                  <th className="px-4 py-3 text-left font-semibold">
+                    Tracking #
+                  </th>
+
+                  <th className="px-4 py-3 text-left font-semibold">
+                    Receiver
+                  </th>
+
+                  <th className="px-4 py-3 text-left font-semibold">
+                    Destination
+                  </th>
+
+                  <th className="px-4 py-3 text-left font-semibold">
+                    Package
+                  </th>
+
+                  <th className="px-4 py-3 text-left font-semibold">
+                    Payment
+                  </th>
+
+                  <th className="px-4 py-3 text-left font-semibold">
+                    Charge
+                  </th>
+
+                  <th className="px-4 py-3 text-left font-semibold">
+                    Rider
+                  </th>
+
+                  <th className="px-4 py-3 text-left font-semibold">
+                    Status
+                  </th>
+
+                  <th className="px-4 py-3 text-right font-semibold">
+                    Receipt
+                  </th>
 
                 </tr>
-              )}
 
-              {shipments.map(
-                (shipment) => (
-                  <tr
-                    key={shipment.id}
-                    onClick={() =>
-                      openShipment(
-                        shipment
-                      )
-                    }
-                    className="cursor-pointer hover:bg-gray-50"
-                  >
+              </thead>
 
-                    <td className="px-4 py-4">
+              <tbody className="divide-y divide-gray-100">
 
-                      <p className="font-semibold">
-                        {
-                          shipment.trackingNumber
-                        }
-                      </p>
+                {shipments.length === 0 && (
+                  <tr>
 
-                      <p className="mt-1 text-xs text-gray-400">
-                        {formatDate(
-                          shipment.createdAt
-                        )}
-                      </p>
-
-                    </td>
-
-                    <td className="px-4 py-4">
-
-                      <p className="font-medium">
-                        {
-                          shipment.receiverName
-                        }
-                      </p>
-
-                      <p className="mt-1 text-xs text-gray-400">
-                        {
-                          shipment.receiverPhone
-                        }
-                      </p>
-
-                    </td>
-
-                    <td className="px-4 py-4">
-
-                      <p className="font-medium">
-                        {
-                          shipment.locationRate
-                            ?.location?.name ||
-                          "—"
-                        }
-                      </p>
-
-                      {shipment.locationRate
-                        ?.deliveryType && (
-                        <p className="mt-1 text-xs text-gray-400">
-                          {
-                            shipment
-                              .locationRate
-                              .deliveryType
-                              .name
-                          }
-                        </p>
-                      )}
-
-                    </td>
-
-                    <td className="px-4 py-4">
-
-                      <p className="font-medium">
-                        {
-                          shipment.packageType
-                        }
-                      </p>
-
-                      <p className="mt-1 text-xs text-gray-400">
-                        {shipment.weight} kg
-                      </p>
-
-                    </td>
-
-                    <td className="px-4 py-4">
-
-                      <p className="font-medium">
-                        {
-                          shipment.paymentType
-                        }
-                      </p>
-
-                      {shipment.paymentType ===
-                        "COD" && (
-                        <p className="mt-1 text-xs text-gray-400">
-                          COD{" "}
-                          {formatCurrency(
-                            shipment.codAmount
-                          )}
-                        </p>
-                      )}
-
-                    </td>
-
-                    <td className="px-4 py-4 font-medium">
-                      {formatCurrency(
-                        shipment.shippingCharge
-                      )}
-                    </td>
-
-                    <td className="px-4 py-4">
-                      {shipment.rider ? (
-                        <>
-                          <p className="font-medium">
-                            {
-                              shipment.rider.user
-                                ?.name
-                            }
-                          </p>
-                          <p className="mt-1 text-xs text-gray-400">
-                            {
-                              shipment.rider.phone
-                            }
-                          </p>
-                        </>
-                      ) : (
-                        <span className="text-xs text-gray-400">
-                          Unassigned
-                        </span>
-                      )}
-                    </td>
-
-                    <td className="px-4 py-4">
-
-                      <span
-                        className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset ${getStatusStyle(
-                          shipment.status
-                        )}`}
-                      >
-                        {formatStatus(
-                          shipment.status
-                        )}
-                      </span>
-
-                    </td>
-
-                    <td className="px-4 py-4 text-right">
-
-                      <button
-                        onClick={(e) =>
-                          printReceipt(
-                            shipment,
-                            e
-                          )
-                        }
-                        className="rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-white hover:bg-accent-dark"
-                      >
-                        Print Bill
-                      </button>
-
+                    <td
+                      colSpan={9}
+                      className="px-4 py-10 text-center text-gray-400"
+                    >
+                      No shipments found.
                     </td>
 
                   </tr>
-                )
-              )}
+                )}
 
-            </tbody>
+                {shipments.map(
+                  (shipment) => (
+                    <tr
+                      key={shipment.id}
+                      onClick={() =>
+                        openShipment(
+                          shipment
+                        )
+                      }
+                      className="cursor-pointer hover:bg-gray-50"
+                    >
 
-          </table>
+                      {/* TRACKING */}
 
-        </div>
-      )}
+                      <td className="px-4 py-4">
+
+                        <p className="font-semibold">
+                          {
+                            shipment.trackingNumber
+                          }
+                        </p>
+
+                        <p className="mt-1 text-xs text-gray-400">
+                          {formatDate(
+                            shipment.createdAt
+                          )}
+                        </p>
+
+                      </td>
+
+                      {/* RECEIVER */}
+
+                      <td className="px-4 py-4">
+
+                        <p className="font-medium">
+                          {
+                            shipment.receiverName
+                          }
+                        </p>
+
+                        <p className="mt-1 text-xs text-gray-400">
+                          {
+                            shipment.receiverPhone
+                          }
+                        </p>
+
+                      </td>
+
+                      {/* DESTINATION */}
+
+                      <td className="px-4 py-4">
+
+                        <p className="font-medium">
+                          {
+                            shipment
+                              .locationRate
+                              ?.location?.name ||
+                            "—"
+                          }
+                        </p>
+
+                        {shipment.locationRate
+                          ?.deliveryType && (
+                          <p className="mt-1 text-xs text-gray-400">
+                            {
+                              shipment
+                                .locationRate
+                                .deliveryType
+                                .name
+                            }
+                          </p>
+                        )}
+
+                      </td>
+
+                      {/* PACKAGE */}
+
+                      <td className="px-4 py-4">
+
+                        <p className="font-medium">
+                          {
+                            shipment.packageType
+                          }
+                        </p>
+
+                        <p className="mt-1 text-xs text-gray-400">
+                          {shipment.weight} kg
+                        </p>
+
+                      </td>
+
+                      {/* PAYMENT */}
+
+                      <td className="px-4 py-4">
+
+                        <p className="font-medium">
+                          {
+                            shipment.paymentType
+                          }
+                        </p>
+
+                        {shipment.paymentType ===
+                          "COD" && (
+                          <p className="mt-1 text-xs text-gray-400">
+                            COD{" "}
+                            {formatCurrency(
+                              shipment.codAmount
+                            )}
+                          </p>
+                        )}
+
+                      </td>
+
+                      {/* CHARGE */}
+
+                      <td className="px-4 py-4 font-medium">
+                        {formatCurrency(
+                          shipment.shippingCharge
+                        )}
+                      </td>
+
+                      {/* RIDER */}
+
+                      <td className="px-4 py-4">
+
+                        {shipment.rider ? (
+                          <>
+                            <p className="font-medium">
+                              {
+                                shipment.rider
+                                  .user
+                                  ?.name
+                              }
+                            </p>
+
+                            <p className="mt-1 text-xs text-gray-400">
+                              {
+                                shipment.rider.phone
+                              }
+                            </p>
+                          </>
+                        ) : (
+                          <span className="text-xs text-gray-400">
+                            Unassigned
+                          </span>
+                        )}
+
+                      </td>
+
+                      {/* STATUS */}
+
+                      <td className="px-4 py-4">
+
+                        <span
+                          className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset ${getStatusStyle(
+                            shipment.status
+                          )}`}
+                        >
+                          {formatStatus(
+                            shipment.status
+                          )}
+                        </span>
+
+                      </td>
+
+                      {/* PRINT BILL */}
+
+                      <td className="px-4 py-4 text-right">
+
+                        <button
+                          onClick={(e) =>
+                            printReceipt(
+                              shipment,
+                              e
+                            )
+                          }
+                          className="rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-white hover:bg-accent-dark"
+                        >
+                          Print Bill
+                        </button>
+
+                      </td>
+
+                    </tr>
+                  )
+                )}
+
+              </tbody>
+
+            </table>
+
+          </div>
+        )}
+
+      </div>
 
       {/* ======================================================
           DETAILS MODAL
@@ -1083,6 +1284,10 @@ export default function VendorShipmentsPage() {
             }
           >
 
+            {/* ==================================================
+                LOADING
+            =================================================== */}
+
             {detailsLoading && (
               <div className="p-10 text-center">
 
@@ -1093,11 +1298,17 @@ export default function VendorShipmentsPage() {
               </div>
             )}
 
+            {/* ==================================================
+                DETAILS
+            =================================================== */}
+
             {!detailsLoading &&
               detailsShipment && (
                 <>
 
-                  {/* HEADER */}
+                  {/* ==================================================
+                      HEADER
+                  =================================================== */}
 
                   <div className="flex items-start justify-between border-b px-6 py-5">
 
@@ -1142,11 +1353,15 @@ export default function VendorShipmentsPage() {
 
                   </div>
 
-                  {/* CONTENT */}
+                  {/* ==================================================
+                      CONTENT
+                  =================================================== */}
 
                   <div className="grid gap-6 p-6 md:grid-cols-3">
 
-                    {/* LEFT */}
+                    {/* ==================================================
+                        LEFT
+                    =================================================== */}
 
                     <div className="md:col-span-2">
 
@@ -1319,6 +1534,10 @@ export default function VendorShipmentsPage() {
                                     step
                                 );
 
+                              const current =
+                                detailsShipment.status ===
+                                step;
+
                               return (
                                 <div
                                   key={
@@ -1327,19 +1546,21 @@ export default function VendorShipmentsPage() {
                                   className="flex gap-4"
                                 >
 
-                                  {/* ICON + LINE */}
-
                                   <div className="flex flex-col items-center">
 
                                     <div
                                       className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold ${
                                         done
                                           ? "bg-green-100 text-green-700"
+                                          : current
+                                          ? "bg-accent/10 text-accent"
                                           : "bg-gray-100 text-gray-400"
                                       }`}
                                     >
                                       {done
                                         ? "✓"
+                                        : current
+                                        ? "•"
                                         : "○"}
                                     </div>
 
@@ -1357,14 +1578,14 @@ export default function VendorShipmentsPage() {
 
                                   </div>
 
-                                  {/* CONTENT */}
-
                                   <div className="pb-3">
 
                                     <p
                                       className={`text-sm font-semibold ${
                                         done
                                           ? "text-gray-900"
+                                          : current
+                                          ? "text-accent"
                                           : "text-gray-400"
                                       }`}
                                     >
@@ -1375,7 +1596,6 @@ export default function VendorShipmentsPage() {
 
                                     {record && (
                                       <>
-
                                         <p className="mt-1 text-xs text-gray-400">
                                           {formatDate(
                                             record.createdAt
@@ -1393,7 +1613,6 @@ export default function VendorShipmentsPage() {
                                             }
                                           </p>
                                         )}
-
                                       </>
                                     )}
 
@@ -1408,7 +1627,9 @@ export default function VendorShipmentsPage() {
 
                       </div>
 
-                      {/* TRACKING HISTORY */}
+                      {/* ==================================================
+                          TRACKING HISTORY
+                      =================================================== */}
 
                       {detailsShipment.trackings &&
                         detailsShipment
@@ -1477,11 +1698,13 @@ export default function VendorShipmentsPage() {
 
                     </div>
 
-                    {/* RIGHT */}
+                    {/* ==================================================
+                        RIGHT
+                    =================================================== */}
 
                     <div>
 
-                      {/* MANUAL STATUS */}
+                      {/* STATUS */}
 
                       <div className="rounded-xl border p-4">
 
@@ -1495,37 +1718,82 @@ export default function VendorShipmentsPage() {
                           process.
                         </p>
 
-                        <select
-                          value={
-                            detailsShipment.status
-                          }
-                          onChange={(e) =>
-                            updateShipmentStatus(
-                              e.target.value
-                            )
-                          }
-                          disabled={
-                            updatingStatus
-                          }
-                          className="mt-4 w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 disabled:cursor-not-allowed disabled:bg-gray-100"
-                        >
+                        <div className="mt-4">
 
-                          {STATUS_OPTIONS.map(
-                            (status) => (
+                          <select
+                            value={
+                              detailsShipment.status
+                            }
+                            onChange={(e) =>
+                              updateShipmentStatus(
+                                e.target.value
+                              )
+                            }
+                            disabled={
+                              updatingStatus ||
+                              !nextStatus ||
+                              isTerminalStatus(
+                                detailsShipment.status
+                              )
+                            }
+                            className="w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 disabled:cursor-not-allowed disabled:bg-gray-100"
+                          >
+
+                            <option
+                              value={
+                                detailsShipment.status
+                              }
+                            >
+                              {formatStatus(
+                                detailsShipment.status
+                              )}
+                            </option>
+
+                            {nextStatus && (
                               <option
-                                key={
-                                  status.value
-                                }
                                 value={
-                                  status.value
+                                  nextStatus
                                 }
                               >
-                                {status.label}
+                                Move to{" "}
+                                {formatStatus(
+                                  nextStatus
+                                )}
                               </option>
-                            )
-                          )}
+                            )}
 
-                        </select>
+                          </select>
+
+                        </div>
+
+                        {nextStatus && (
+                          <div className="mt-3 rounded-lg bg-gray-50 p-3">
+
+                            <p className="text-xs text-gray-400">
+                              Next step
+                            </p>
+
+                            <p className="mt-1 text-sm font-semibold text-gray-700">
+                              {formatStatus(
+                                nextStatus
+                              )}
+                            </p>
+
+                          </div>
+                        )}
+
+                        {!nextStatus &&
+                          detailsShipment.status ===
+                            "DELIVERED" && (
+                          <div className="mt-3 rounded-lg bg-green-50 p-3">
+
+                            <p className="text-xs font-medium text-green-700">
+                              Shipment has been
+                              delivered.
+                            </p>
+
+                          </div>
+                        )}
 
                         {updatingStatus && (
                           <p className="mt-2 text-xs text-gray-500">
@@ -1615,12 +1883,10 @@ export default function VendorShipmentsPage() {
                         }
                         className="mt-4 w-full rounded-xl bg-accent px-4 py-3 text-sm font-semibold text-white hover:bg-accent-dark"
                       >
-                        Print A5 Bill
+                        Print Bill
                       </button>
 
-                      {/* ==================================================
-                          RIDER — assigned info + assign/reassign dropdown
-                      =================================================== */}
+                      {/* RIDER */}
 
                       <div className="mt-4 rounded-xl border p-4">
 
@@ -1726,108 +1992,134 @@ export default function VendorShipmentsPage() {
                           </p>
                         )}
 
-                        {/* ASSIGN / REASSIGN */}
+                        {/* ASSIGN RIDER */}
 
-                        <div className="mt-4 border-t pt-4">
+                        {canAssignRider && (
+                          <div className="mt-4 border-t pt-4">
 
-                          <p className="text-xs text-gray-400">
-                            {detailsShipment.rider
-                              ? "Reassign rider"
-                              : "Assign a rider"}
-                          </p>
+                            <p className="text-xs text-gray-400">
+                              Assign a rider
+                            </p>
 
-                          <select
-                            value={
-                              selectedRiderId
-                            }
-                            onChange={(e) =>
-                              setSelectedRiderId(
-                                e.target.value
-                              )
-                            }
-                            disabled={
-                              ridersLoading ||
-                              assigningRider
-                            }
-                            className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 disabled:cursor-not-allowed disabled:bg-gray-100"
-                          >
+                            <select
+                              value={
+                                selectedRiderId
+                              }
+                              onChange={(e) =>
+                                setSelectedRiderId(
+                                  e.target.value
+                                )
+                              }
+                              disabled={
+                                ridersLoading ||
+                                assigningRider
+                              }
+                              className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 disabled:cursor-not-allowed disabled:bg-gray-100"
+                            >
 
-                            <option value="">
-                              {ridersLoading
-                                ? "Loading riders..."
-                                : "Select a rider"}
-                            </option>
+                              <option value="">
+                                {ridersLoading
+                                  ? "Loading riders..."
+                                  : "Select a rider"}
+                              </option>
 
-                            {availableRiders.map(
-                              (rider) => (
-                                <option
-                                  key={
-                                    rider.id
-                                  }
-                                  value={
-                                    rider.id
-                                  }
-                                >
+                              {availableRiders.map(
+                                (
+                                  rider
+                                ) => (
+                                  <option
+                                    key={
+                                      rider.id
+                                    }
+                                    value={
+                                      rider.id
+                                    }
+                                  >
+                                    {
+                                      rider.user
+                                        ?.name
+                                    }{" "}
+                                    —{" "}
+                                    {
+                                      rider.phone
+                                    }
+
+                                    {rider.vehicleNumber
+                                      ? ` (${rider.vehicleNumber})`
+                                      : ""}
+                                  </option>
+                                )
+                              )}
+
+                            </select>
+
+                            <button
+                              onClick={
+                                assignRiderToShipment
+                              }
+                              disabled={
+                                !selectedRiderId ||
+                                assigningRider ||
+                                ridersLoading
+                              }
+                              className="mt-3 w-full rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-dark disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {assigningRider
+                                ? "Assigning..."
+                                : "Assign Rider"}
+                            </button>
+
+                            {assignMessage && (
+                              <div className="mt-3 rounded-lg bg-green-50 p-3">
+
+                                <p className="text-xs font-medium text-green-700">
                                   {
-                                    rider.user
-                                      ?.name
-                                  }{" "}
-                                  —{" "}
-                                  {
-                                    rider.phone
+                                    assignMessage
                                   }
-                                  {rider.vehicleNumber
-                                    ? ` (${rider.vehicleNumber})`
-                                    : ""}
-                                </option>
-                              )
+                                </p>
+
+                              </div>
                             )}
 
-                          </select>
+                            {assignError && (
+                              <div className="mt-3 rounded-lg bg-red-50 p-3">
 
-                          <button
-                            onClick={
-                              assignRiderToShipment
-                            }
-                            disabled={
-                              !selectedRiderId ||
-                              assigningRider
-                            }
-                            className="mt-3 w-full rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-dark disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            {assigningRider
-                              ? "Assigning..."
-                              : "Assign Rider"}
-                          </button>
+                                <p className="text-xs font-medium text-red-700">
+                                  {assignError}
+                                </p>
 
-                          {assignMessage && (
-                            <div className="mt-3 rounded-lg bg-green-50 p-3">
-                              <p className="text-xs font-medium text-green-700">
-                                {
-                                  assignMessage
-                                }
-                              </p>
-                            </div>
-                          )}
-
-                          {assignError && (
-                            <div className="mt-3 rounded-lg bg-red-50 p-3">
-                              <p className="text-xs font-medium text-red-700">
-                                {assignError}
-                              </p>
-                            </div>
-                          )}
-
-                          {!ridersLoading &&
-                            availableRiders.length ===
-                              0 && (
-                              <p className="mt-3 text-xs text-gray-400">
-                                No available
-                                riders right now.
-                              </p>
+                              </div>
                             )}
 
-                        </div>
+                            {!ridersLoading &&
+                              availableRiders.length ===
+                                0 && (
+                                <p className="mt-3 text-xs text-gray-400">
+                                  No available
+                                  riders right
+                                  now.
+                                </p>
+                              )}
+
+                          </div>
+                        )}
+
+                        {detailsShipment.rider &&
+                          !canAssignRider && (
+                            <div className="mt-4 border-t pt-4">
+
+                              <p className="text-xs text-gray-400">
+                                Rider assignment
+                              </p>
+
+                              <p className="mt-1 text-xs text-gray-500">
+                                Rider has already
+                                been assigned to
+                                this shipment.
+                              </p>
+
+                            </div>
+                          )}
 
                       </div>
 
@@ -1844,44 +2136,175 @@ export default function VendorShipmentsPage() {
       )}
 
       {/* ======================================================
-          A5 RECEIPT
+          PRINTABLE BILL
       ======================================================= */}
 
       {receiptShipment && (
         <div
-          id="a5-receipt"
-          className="mx-auto hidden min-h-[210mm] w-[148mm] bg-white p-[12mm] text-black print:block"
+          id="print-bill"
+          className="text-black"
         >
 
-          <div className="border-b-2 border-black pb-4">
+          {/* ==================================================
+              COMPANY HEADER
+          =================================================== */}
 
-            <div className="flex items-start justify-between">
+          <div className="border-b-2 border-black pb-3">
+
+            <div className="text-center">
+
+              {/* FIXED CARGO COMPANY NAME */}
+
+              <h1 className="text-[18px] font-black uppercase leading-tight">
+                {CARGO_COMPANY_NAME}
+              </h1>
+
+              <p className="mt-1 text-[9px] uppercase tracking-[0.15em] text-gray-500">
+                Shipment Receipt
+              </p>
+
+            </div>
+
+          </div>
+
+          {/* ==================================================
+              TRACKING
+          =================================================== */}
+
+          <div className="border-b py-3 text-center">
+
+            <p className="text-[8px] font-semibold uppercase tracking-wider text-gray-500">
+              Tracking Number
+            </p>
+
+            <p className="mt-1 text-[16px] font-black tracking-wide">
+              {
+                receiptShipment.trackingNumber
+              }
+            </p>
+
+          </div>
+
+          {/* ==================================================
+              FROM / TO
+          =================================================== */}
+
+          <div className="border-b py-3">
+
+            {/* FROM */}
+
+            <div>
+
+              <p className="text-[8px] font-bold uppercase tracking-wider text-gray-500">
+                From / Sender
+              </p>
+
+              <p className="mt-1 text-[12px] font-bold">
+                {
+                  receiptShipment.vendor
+                    ?.companyName ||
+                  "Vendor"
+                }
+              </p>
+
+              {receiptShipment.vendor
+                ?.location && (
+                <p className="mt-1 text-[9px] text-gray-500">
+                  {
+                    receiptShipment.vendor
+                      .location
+                  }
+                </p>
+              )}
+
+            </div>
+
+            {/* ARROW */}
+
+            <div className="my-2 text-center text-[11px] font-bold">
+              ↓
+            </div>
+
+            {/* TO */}
+
+            <div>
+
+              <p className="text-[8px] font-bold uppercase tracking-wider text-gray-500">
+                To / Receiver
+              </p>
+
+              <p className="mt-1 text-[12px] font-bold">
+                {
+                  receiptShipment.receiverName
+                }
+              </p>
+
+              <p className="mt-1 text-[10px]">
+                {
+                  receiptShipment.receiverPhone
+                }
+              </p>
+
+            </div>
+
+          </div>
+
+          {/* ==================================================
+              ADDRESS
+          =================================================== */}
+
+          <div className="border-b py-3">
+
+            <p className="text-[8px] font-bold uppercase tracking-wider text-gray-500">
+              Delivery Address
+            </p>
+
+            <p className="mt-1 break-words text-[10px] leading-4">
+              {
+                receiptShipment.receiverAddress
+              }
+            </p>
+
+          </div>
+
+          {/* ==================================================
+              DESTINATION
+          =================================================== */}
+
+          <div className="border-b py-3">
+
+            <div className="flex items-start justify-between gap-3">
 
               <div>
 
-                <h1 className="text-2xl font-bold">
-                  {
-                    receiptShipment.vendor
-                      ?.companyName ||
-                    "Vendor"
-                  }
-                </h1>
+                <p className="text-[8px] font-semibold uppercase text-gray-500">
+                  Destination
+                </p>
 
-                <p className="mt-1 text-xs text-gray-500">
-                  Parcel Shipping Receipt
+                <p className="mt-1 text-[11px] font-bold">
+                  {
+                    receiptShipment
+                      .locationRate
+                      ?.location?.name ||
+                    "—"
+                  }
                 </p>
 
               </div>
 
               <div className="text-right">
 
-                <p className="text-xs font-semibold uppercase">
-                  Tracking No.
+                <p className="text-[8px] font-semibold uppercase text-gray-500">
+                  Delivery Type
                 </p>
 
-                <p className="mt-1 text-lg font-bold">
+                <p className="mt-1 text-[10px] font-semibold">
                   {
-                    receiptShipment.trackingNumber
+                    receiptShipment
+                      .locationRate
+                      ?.deliveryType
+                      ?.name ||
+                    "—"
                   }
                 </p>
 
@@ -1891,189 +2314,127 @@ export default function VendorShipmentsPage() {
 
           </div>
 
-          <div className="mt-5">
+          {/* ==================================================
+              PACKAGE
+          =================================================== */}
 
-            <p className="text-xs font-bold uppercase tracking-wide text-gray-500">
-              Deliver To
-            </p>
+          <div className="border-b py-3">
 
-            <div className="mt-2 rounded-lg border p-3">
+            <div className="grid grid-cols-2 gap-y-3">
 
-              <div className="flex justify-between gap-4">
+              {/* PACKAGE */}
 
-                <div>
+              <div>
 
-                  <p className="text-base font-bold">
-                    {
-                      receiptShipment.receiverName
-                    }
-                  </p>
+                <p className="text-[8px] font-semibold uppercase text-gray-500">
+                  Package
+                </p>
 
-                  <p className="mt-1 text-sm">
-                    {
-                      receiptShipment.receiverPhone
-                    }
-                  </p>
+                <p className="mt-1 text-[10px] font-semibold">
+                  {
+                    receiptShipment.packageType
+                  }
+                </p>
 
-                </div>
+              </div>
 
+              {/* WEIGHT */}
+
+              <div className="text-right">
+
+                <p className="text-[8px] font-semibold uppercase text-gray-500">
+                  Weight
+                </p>
+
+                <p className="mt-1 text-[10px] font-semibold">
+                  {
+                    receiptShipment.weight
+                  }{" "}
+                  kg
+                </p>
+
+              </div>
+
+              {/* PAYMENT */}
+
+              <div>
+
+                <p className="text-[8px] font-semibold uppercase text-gray-500">
+                  Payment
+                </p>
+
+                <p className="mt-1 text-[10px] font-semibold">
+                  {
+                    receiptShipment.paymentType
+                  }
+                </p>
+
+              </div>
+
+              {/* COD */}
+
+              {receiptShipment.paymentType ===
+                "COD" && (
                 <div className="text-right">
 
-                  <p className="text-xs text-gray-500">
-                    Destination
+                  <p className="text-[8px] font-semibold uppercase text-gray-500">
+                    COD Amount
                   </p>
 
-                  <p className="mt-1 text-sm font-semibold">
-                    {
-                      receiptShipment
-                        .locationRate
-                        ?.location?.name
-                    }
+                  <p className="mt-1 text-[11px] font-bold">
+                    {formatCurrency(
+                      receiptShipment.codAmount
+                    )}
                   </p>
 
                 </div>
-
-              </div>
-
-              <div className="mt-3 border-t pt-3">
-
-                <p className="text-xs text-gray-500">
-                  Address
-                </p>
-
-                <p className="mt-1 text-sm font-medium">
-                  {
-                    receiptShipment.receiverAddress
-                  }
-                </p>
-
-              </div>
+              )}
 
             </div>
 
           </div>
 
-          <div className="mt-5">
+          {/* ==================================================
+              SHIPPING CHARGE
+          =================================================== */}
 
-            <p className="text-xs font-bold uppercase tracking-wide text-gray-500">
-              Shipment Details
-            </p>
+          <div className="border-b py-3">
 
-            <table className="mt-2 w-full border-collapse text-sm">
+            <div className="flex items-center justify-between">
 
-              <tbody>
+              <span className="text-[11px] font-bold">
+                Shipping Charge
+              </span>
 
-                <tr className="border-b">
-
-                  <td className="py-2 text-gray-500">
-                    Package Type
-                  </td>
-
-                  <td className="py-2 text-right font-semibold">
-                    {
-                      receiptShipment.packageType
-                    }
-                  </td>
-
-                </tr>
-
-                <tr className="border-b">
-
-                  <td className="py-2 text-gray-500">
-                    Weight
-                  </td>
-
-                  <td className="py-2 text-right font-semibold">
-                    {
-                      receiptShipment.weight
-                    }{" "}
-                    kg
-                  </td>
-
-                </tr>
-
-                <tr className="border-b">
-
-                  <td className="py-2 text-gray-500">
-                    Delivery Type
-                  </td>
-
-                  <td className="py-2 text-right font-semibold">
-                    {
-                      receiptShipment
-                        .locationRate
-                        ?.deliveryType?.name
-                    }
-                  </td>
-
-                </tr>
-
-                <tr className="border-b">
-
-                  <td className="py-2 text-gray-500">
-                    Payment
-                  </td>
-
-                  <td className="py-2 text-right font-semibold">
-                    {
-                      receiptShipment.paymentType
-                    }
-                  </td>
-
-                </tr>
-
-                {receiptShipment.paymentType ===
-                  "COD" && (
-                  <tr className="border-b">
-
-                    <td className="py-2 text-gray-500">
-                      COD Amount
-                    </td>
-
-                    <td className="py-2 text-right font-bold">
-                      {formatCurrency(
-                        receiptShipment.codAmount
-                      )}
-                    </td>
-
-                  </tr>
+              <span className="text-[14px] font-black">
+                {formatCurrency(
+                  receiptShipment.shippingCharge
                 )}
+              </span>
 
-                <tr>
-
-                  <td className="py-3 text-base font-bold">
-                    Shipping Charge
-                  </td>
-
-                  <td className="py-3 text-right text-base font-bold">
-                    {formatCurrency(
-                      receiptShipment.shippingCharge
-                    )}
-                  </td>
-
-                </tr>
-
-              </tbody>
-
-            </table>
+            </div>
 
           </div>
 
-          <div className="mt-6 flex items-center justify-between border-t border-b py-5">
+          {/* ==================================================
+              QR SECTION
+          =================================================== */}
 
-            <div>
+          <div className="flex items-center justify-between gap-4 py-4">
 
-              <p className="text-xs font-bold uppercase tracking-wide">
-                Scan to Track
+            <div className="flex-1">
+
+              <p className="text-[9px] font-bold uppercase tracking-wider">
+                Track Shipment
               </p>
 
-              <p className="mt-2 max-w-[55mm] text-xs text-gray-500">
-                Scan this QR code to view
+              <p className="mt-1 text-[8px] leading-3 text-gray-500">
+                Scan the QR code to see
                 the latest shipment
-                tracking information.
+                status.
               </p>
 
-              <p className="mt-3 text-xs font-bold">
+              <p className="mt-2 break-all text-[8px] font-bold">
                 {
                   receiptShipment.trackingNumber
                 }
@@ -2081,50 +2442,37 @@ export default function VendorShipmentsPage() {
 
             </div>
 
-            <div className="rounded-lg border bg-white p-2">
+            <div className="shrink-0 border border-black p-1">
 
               <QRCode
                 value={`${process.env.NEXT_PUBLIC_APP_URL}/track/${receiptShipment.trackingNumber}`}
-                size={125}
+                size={82}
               />
 
             </div>
 
           </div>
 
-          {receiptShipment.notes && (
-            <div className="mt-5">
+          {/* ==================================================
+              FOOTER
+          =================================================== */}
 
-              <p className="text-xs font-bold uppercase tracking-wide text-gray-500">
-                Notes
-              </p>
+          <div className="border-t pt-3 text-center">
 
-              <p className="mt-1 text-sm">
-                {
-                  receiptShipment.notes
-                }
-              </p>
-
-            </div>
-          )}
-
-          <div className="mt-8 border-t pt-4 text-center">
-
-            <p className="text-xs font-semibold">
-              Thank you for shipping with us.
+            <p className="text-[9px] font-semibold">
+              Thank you for choosing{" "}
+              {CARGO_COMPANY_NAME}.
             </p>
 
-            <p className="mt-1 text-[10px] text-gray-400">
-              Created:{" "}
+            <p className="mt-1 text-[7px] text-gray-500">
+              Please keep this receipt
+              for your reference.
+            </p>
+
+            <p className="mt-2 text-[7px] text-gray-400">
               {formatDate(
                 receiptShipment.createdAt
               )}
-            </p>
-
-            <p className="mt-3 text-[9px] text-gray-400">
-              Please keep this receipt for
-              shipment reference and
-              tracking.
             </p>
 
           </div>

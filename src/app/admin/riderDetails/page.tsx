@@ -75,7 +75,7 @@ export default function RidersPage() {
       setLoading(true);
 
       const res = await fetch(
-        "https://evolving-tech.onrender.com/api/rider"
+        "http://localhost:5001/api/rider"
       );
 
       if (!res.ok) {
@@ -124,7 +124,7 @@ export default function RidersPage() {
       setCreating(true);
 
       const res = await fetch(
-        "https://evolving-tech.onrender.com/api/rider",
+        "http://localhost:5001/api/rider",
         {
           method: "POST",
           headers: {

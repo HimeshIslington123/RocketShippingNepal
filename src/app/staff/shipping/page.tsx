@@ -1,22 +1,36 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
+
+// =====================================================
+// TYPES
+// =====================================================
 
 type Vendor = {
   id: number;
   companyName: string;
-  location: string;
+  location?: string;
 };
 
-type LocationPrice = {
+type LocationRate = {
   id: number;
-  location: string;
   price: number;
+
+  location: {
+    id: number;
+    name: string;
+    zone: string;
+  };
+
+  deliveryType: {
+    id: number;
+    name: string;
+  };
 };
 
 type ShipmentForm = {
   vendorId: number;
-  priceLocationId: number;
+  locationRateId: number;
 
   receiverName: string;
   receiverPhone: string;
@@ -28,38 +42,58 @@ type ShipmentForm = {
 
   paymentType: "PREPAID" | "COD";
 
-  shippingCharge: number;
-
   codAmount: number;
 
   notes: string;
 };
 
-export default function CreateShipmentPage() {
+// =====================================================
+// PAGE
+// =====================================================
+
+export default function StaffCreateShipmentPage() {
+  // ===================================================
+  // STATE
+  // ===================================================
+
   const [vendors, setVendors] = useState<Vendor[]>([]);
-  const [locations, setLocations] = useState<LocationPrice[]>([]);
-  const [vendorLocation, setVendorLocation] = useState("");
 
-  const [form, setForm] = useState<ShipmentForm>({
-    vendorId: 0,
-    priceLocationId: 0,
+  const [locationRates, setLocationRates] =
+    useState<LocationRate[]>([]);
 
-    receiverName: "",
-    receiverPhone: "",
-    receiverAddress: "",
+  const [loading, setLoading] = useState(true);
 
-    packageType: "DOCUMENT",
+  const [submitting, setSubmitting] =
+    useState(false);
 
-    weight: 1,
+  const [error, setError] = useState("");
 
-    paymentType: "PREPAID",
+  const [success, setSuccess] = useState("");
 
-    shippingCharge: 0,
+  const [form, setForm] =
+    useState<ShipmentForm>({
+      vendorId: 0,
 
-    codAmount: 0,
+      locationRateId: 0,
 
-    notes: "",
-  });
+      receiverName: "",
+      receiverPhone: "",
+      receiverAddress: "",
+
+      packageType: "DOCUMENT",
+
+      weight: 1,
+
+      paymentType: "PREPAID",
+
+      codAmount: 0,
+
+      notes: "",
+    });
+
+  // ===================================================
+  // UPDATE FIELD
+  // ===================================================
 
   function updateField<K extends keyof ShipmentForm>(
     key: K,
@@ -71,291 +105,1131 @@ export default function CreateShipmentPage() {
     }));
   }
 
+  // ===================================================
+  // LOAD VENDORS + LOCATION RATES
+  // ===================================================
+
   useEffect(() => {
-    async function load() {
-      try {
-const vendorsRes = await fetch(
-  `${process.env.NEXT_PUBLIC_API_URL}/api/vendor/getvendor`
-);
-        const vendorsData = await vendorsRes.json();
-        setVendors(vendorsData);
-
-       const locationRes = await fetch(
-  `${process.env.NEXT_PUBLIC_API_URL}/api/locationRate/getlocation`
-);
-        const locationData = await locationRes.json();
-        setLocations(locationData);
-      } catch (err) {
-        console.error("Failed to load vendors/locations", err);
-      }
-    }
-
-    load();
+    loadData();
   }, []);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-
+  async function loadData() {
     try {
-const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/shipment`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(form),
-      });
+      setLoading(true);
+      setError("");
 
-      const data = await res.json();
+      const [
+        vendorsRes,
+        locationRatesRes,
+      ] = await Promise.all([
+        fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/vendor/getvendor`
+        ),
 
-      if (!res.ok) {
-        alert(data.message || "Failed to create shipment");
-        return;
+        fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/locationRate`
+        ),
+      ]);
+
+      if (!vendorsRes.ok) {
+        throw new Error(
+          "Failed to load vendors"
+        );
       }
 
-      alert("Shipment Created");
+      if (!locationRatesRes.ok) {
+        throw new Error(
+          "Failed to load location rates"
+        );
+      }
+
+      const vendorsData =
+        await vendorsRes.json();
+
+      const locationRatesData =
+        await locationRatesRes.json();
+
+      setVendors(
+        Array.isArray(vendorsData)
+          ? vendorsData
+          : vendorsData.vendors || []
+      );
+
+      setLocationRates(
+        Array.isArray(locationRatesData)
+          ? locationRatesData
+          : locationRatesData.locationRates ||
+              locationRatesData.rates ||
+              []
+      );
     } catch (err) {
-      console.error(err);
-      alert("Something went wrong while creating the shipment");
+      console.error(
+        "LOAD STAFF SHIPMENT DATA ERROR:",
+        err
+      );
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to load data"
+      );
+    } finally {
+      setLoading(false);
     }
   }
 
+  // ===================================================
+  // SELECTED VENDOR
+  // ===================================================
+
+  const selectedVendor = useMemo(() => {
+    return vendors.find(
+      (vendor) =>
+        vendor.id === form.vendorId
+    );
+  }, [vendors, form.vendorId]);
+
+  // ===================================================
+  // SELECTED LOCATION RATE
+  // ===================================================
+
+  const selectedRate = useMemo(() => {
+    return locationRates.find(
+      (rate) =>
+        rate.id === form.locationRateId
+    );
+  }, [
+    locationRates,
+    form.locationRateId,
+  ]);
+
+  // ===================================================
+  // SHIPPING CHARGE
+  //
+  // Example:
+  //
+  // Rate = 200
+  // Weight = 2
+  //
+  // 200 × 2 = 400
+  // ===================================================
+
+  const shippingCharge =
+    selectedRate
+      ? Number(selectedRate.price) *
+        Number(form.weight || 0)
+      : 0;
+
+  // ===================================================
+  // SUBMIT
+  // ===================================================
+
+  async function handleSubmit(
+    e: React.FormEvent
+  ) {
+    e.preventDefault();
+
+    setError("");
+    setSuccess("");
+
+    // -----------------------------------------------
+    // VALIDATION
+    // -----------------------------------------------
+
+    if (!form.vendorId) {
+      setError("Please select a vendor.");
+      return;
+    }
+
+    if (!form.locationRateId) {
+      setError(
+        "Please select destination and delivery type."
+      );
+      return;
+    }
+
+    if (
+      !form.receiverName.trim()
+    ) {
+      setError(
+        "Receiver name is required."
+      );
+      return;
+    }
+
+    if (
+      !form.receiverPhone.trim()
+    ) {
+      setError(
+        "Receiver phone is required."
+      );
+      return;
+    }
+
+    if (
+      !form.receiverAddress.trim()
+    ) {
+      setError(
+        "Receiver address is required."
+      );
+      return;
+    }
+
+    if (
+      !form.weight ||
+      Number(form.weight) <= 0
+    ) {
+      setError(
+        "Weight must be greater than 0."
+      );
+      return;
+    }
+
+    if (
+      form.paymentType === "COD" &&
+      Number(form.codAmount) <= 0
+    ) {
+      setError(
+        "Please enter a valid COD amount."
+      );
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+
+      // ---------------------------------------------
+      // GET AUTH TOKEN
+      // ---------------------------------------------
+
+      const token =
+        localStorage.getItem("token");
+
+      if (!token) {
+        setError(
+          "You are not logged in. Please login again."
+        );
+
+        return;
+      }
+
+      // ---------------------------------------------
+      // REQUEST BODY
+      //
+      // shippingCharge is NOT needed.
+      //
+      // Backend calculates:
+      //
+      // locationRate.price × weight
+      // ---------------------------------------------
+
+      const payload = {
+        vendorId: form.vendorId,
+
+        locationRateId:
+          form.locationRateId,
+
+        receiverName:
+          form.receiverName.trim(),
+
+        receiverPhone:
+          form.receiverPhone.trim(),
+
+        receiverAddress:
+          form.receiverAddress.trim(),
+
+        packageType:
+          form.packageType,
+
+        weight:
+          Number(form.weight),
+
+        paymentType:
+          form.paymentType,
+
+        codAmount:
+          form.paymentType === "COD"
+            ? Number(form.codAmount)
+            : 0,
+
+        notes:
+          form.notes.trim() || null,
+      };
+
+      // ---------------------------------------------
+      // CREATE SHIPMENT
+      // ---------------------------------------------
+
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/shipment`,
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+
+            Authorization:
+              `Bearer ${token}`,
+          },
+
+          body: JSON.stringify(payload),
+        }
+      );
+
+      const data =
+        await res.json();
+
+      if (!res.ok) {
+        throw new Error(
+          data.message ||
+            "Failed to create shipment"
+        );
+      }
+
+      // ---------------------------------------------
+      // SUCCESS
+      // ---------------------------------------------
+
+      setSuccess(
+        `Shipment ${
+          data.shipment?.trackingNumber ||
+          ""
+        } created successfully.`
+      );
+
+      // ---------------------------------------------
+      // RESET FORM
+      // ---------------------------------------------
+
+      setForm({
+        vendorId: 0,
+
+        locationRateId: 0,
+
+        receiverName: "",
+        receiverPhone: "",
+        receiverAddress: "",
+
+        packageType: "DOCUMENT",
+
+        weight: 1,
+
+        paymentType: "PREPAID",
+
+        codAmount: 0,
+
+        notes: "",
+      });
+    } catch (err) {
+      console.error(
+        "CREATE STAFF SHIPMENT ERROR:",
+        err
+      );
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Something went wrong"
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  // ===================================================
+  // CANCEL
+  // ===================================================
+
+  function handleCancel() {
+    setForm({
+      vendorId: 0,
+
+      locationRateId: 0,
+
+      receiverName: "",
+      receiverPhone: "",
+      receiverAddress: "",
+
+      packageType: "DOCUMENT",
+
+      weight: 1,
+
+      paymentType: "PREPAID",
+
+      codAmount: 0,
+
+      notes: "",
+    });
+
+    setError("");
+    setSuccess("");
+  }
+
+  // ===================================================
+  // LOADING
+  // ===================================================
+
+  if (loading) {
+    return (
+      <div className="mx-auto max-w-5xl">
+        <div className="flex min-h-[400px] items-center justify-center">
+          <div className="rounded-xl bg-white px-6 py-4 text-sm text-gray-500 shadow-sm ring-1 ring-black/5">
+            Loading shipment form...
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ===================================================
+  // RENDER
+  // ===================================================
+
   return (
     <div className="mx-auto max-w-5xl text-black">
+
+      {/* =================================================
+          HEADER
+      ================================================= */}
+
       <div>
-        <h1 className="text-2xl font-bold text-ink">Create Shipment</h1>
+        <h1 className="text-2xl font-bold text-ink">
+          Create Shipment
+        </h1>
 
         <p className="mt-1 text-sm text-gray-500">
-          Fill in shipment details below.
+          Create a shipment on behalf of a vendor.
         </p>
       </div>
+
+      {/* =================================================
+          ERROR
+      ================================================= */}
+
+      {error && (
+        <div className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+          {error}
+        </div>
+      )}
+
+      {/* =================================================
+          SUCCESS
+      ================================================= */}
+
+      {success && (
+        <div className="mt-5 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-700">
+          {success}
+        </div>
+      )}
+
+      {/* =================================================
+          FORM
+      ================================================= */}
 
       <form
         onSubmit={handleSubmit}
         className="mt-6 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-black/5"
       >
-        <div className="grid gap-5 md:grid-cols-2">
-          {/* Receiver Name */}
-          <div>
-            <label className="mb-2 block text-sm font-medium">
-              Receiver Name
-            </label>
 
-            <input
-              type="text"
-              value={form.receiverName}
-              onChange={(e) => updateField("receiverName", e.target.value)}
-              className="w-full rounded-xl border p-3 outline-none focus:border-accent"
-            />
+        {/* =================================================
+            VENDOR SECTION
+        ================================================= */}
+
+        <div>
+
+          <div className="mb-5">
+
+            <h2 className="text-base font-bold">
+              Vendor Information
+            </h2>
+
+            <p className="mt-1 text-sm text-gray-500">
+              Select the vendor for this shipment.
+            </p>
+
           </div>
 
-          {/* Receiver Phone */}
-          <div>
-            <label className="mb-2 block text-sm font-medium">
-              Receiver Phone
-            </label>
+          <div className="grid gap-5 md:grid-cols-2">
 
-            <input
-              type="tel"
-              value={form.receiverPhone}
-              onChange={(e) => updateField("receiverPhone", e.target.value)}
-              className="w-full rounded-xl border p-3 outline-none focus:border-accent"
-            />
-          </div>
+            {/* VENDOR */}
 
-          {/* Receiver Address */}
-          <div className="md:col-span-2">
-            <label className="mb-2 block text-sm font-medium">
-              Receiver Address
-            </label>
-
-            <textarea
-              rows={3}
-              value={form.receiverAddress}
-              onChange={(e) => updateField("receiverAddress", e.target.value)}
-              className="w-full rounded-xl border p-3 outline-none focus:border-accent"
-            />
-          </div>
-
-          {/* Package Type */}
-          <div>
-            <label className="mb-2 block text-sm font-medium">
-              Package Type
-            </label>
-
-            <select
-              value={form.packageType}
-              onChange={(e) => updateField("packageType", e.target.value)}
-              className="w-full rounded-xl border p-3 outline-none focus:border-accent"
-            >
-              <option value="DOCUMENT">Document</option>
-              <option value="PARCEL">Parcel</option>
-              <option value="FRAGILE">Fragile</option>
-              <option value="ELECTRONICS">Electronics</option>
-              <option value="OTHER">Other</option>
-            </select>
-          </div>
-
-          {/* Vendor */}
-          <div>
-            <label className="mb-2 block text-sm font-medium">Vendor</label>
-
-            <select
-              value={form.vendorId}
-              onChange={(e) => {
-                const id = Number(e.target.value);
-                updateField("vendorId", id);
-
-                const vendor = vendors.find((v) => v.id === id);
-                setVendorLocation(vendor?.location || "");
-              }}
-              className="w-full rounded-xl border p-3"
-            >
-              <option value={0}>Select Vendor</option>
-
-              {vendors.map((vendor) => (
-                <option key={vendor.id} value={vendor.id}>
-                  {vendor.companyName}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Vendor Location (read-only) */}
-          <div>
-            <label className="mb-2 block text-sm font-medium">
-              Vendor Location
-            </label>
-
-            <input
-              value={vendorLocation}
-              readOnly
-              className="w-full rounded-xl border bg-gray-100 p-3"
-            />
-          </div>
-
-          {/* Destination */}
-          <div>
-            <label className="mb-2 block text-sm font-medium">
-              Destination
-            </label>
-
-            <select
-              value={form.priceLocationId}
-              onChange={(e) => {
-                const id = Number(e.target.value);
-                updateField("priceLocationId", id);
-
-                const selected = locations.find((x) => x.id === id);
-                if (selected) {
-                  updateField("shippingCharge", selected.price);
-                }
-              }}
-              className="w-full rounded-xl border p-3"
-            >
-              <option value={0}>Select Destination</option>
-
-              {locations.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.location}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Weight */}
-          <div>
-            <label className="mb-2 block text-sm font-medium">
-              Weight (kg)
-            </label>
-
-            <input
-              type="number"
-              step="0.1"
-              value={form.weight}
-              onChange={(e) => updateField("weight", Number(e.target.value))}
-              className="w-full rounded-xl border p-3 outline-none focus:border-accent"
-            />
-          </div>
-
-          {/* Shipping Charge (read-only, auto-filled from destination) */}
-          <div>
-            <label className="mb-2 block text-sm font-medium">
-              Shipping Charge
-            </label>
-
-            <input
-              type="number"
-              value={form.shippingCharge}
-              readOnly
-              className="w-full rounded-xl border bg-gray-100 p-3"
-            />
-          </div>
-
-          {/* Payment Type */}
-          <div>
-            <label className="mb-2 block text-sm font-medium">
-              Payment Type
-            </label>
-
-            <select
-              value={form.paymentType}
-              onChange={(e) =>
-                updateField(
-                  "paymentType",
-                  e.target.value as "PREPAID" | "COD"
-                )
-              }
-              className="w-full rounded-xl border p-3"
-            >
-              <option value="PREPAID">Prepaid</option>
-              <option value="COD">Cash On Delivery</option>
-            </select>
-          </div>
-
-          {/* COD Amount (only when payment type is COD) */}
-          {form.paymentType === "COD" && (
             <div>
               <label className="mb-2 block text-sm font-medium">
-                COD Amount
+                Vendor
+              </label>
+
+              <select
+                value={form.vendorId}
+                onChange={(e) => {
+                  updateField(
+                    "vendorId",
+                    Number(e.target.value)
+                  );
+                }}
+                className="w-full rounded-xl border border-gray-200 bg-white p-3 outline-none transition focus:border-accent"
+              >
+
+                <option value={0}>
+                  Select Vendor
+                </option>
+
+                {vendors.map(
+                  (vendor) => (
+                    <option
+                      key={vendor.id}
+                      value={vendor.id}
+                    >
+                      {vendor.companyName}
+                    </option>
+                  )
+                )}
+
+              </select>
+            </div>
+
+            {/* VENDOR LOCATION */}
+
+            <div>
+              <label className="mb-2 block text-sm font-medium">
+                Vendor Location
+              </label>
+
+              <input
+                type="text"
+                value={
+                  selectedVendor?.location ||
+                  ""
+                }
+                readOnly
+                placeholder="Vendor location"
+                className="w-full rounded-xl border border-gray-200 bg-gray-100 p-3 text-gray-600 outline-none"
+              />
+            </div>
+
+          </div>
+
+        </div>
+
+        {/* =================================================
+            DIVIDER
+        ================================================= */}
+
+        <div className="my-8 border-t border-gray-100" />
+
+        {/* =================================================
+            RECEIVER
+        ================================================= */}
+
+        <div>
+
+          <div className="mb-5">
+
+            <h2 className="text-base font-bold">
+              Receiver Information
+            </h2>
+
+            <p className="mt-1 text-sm text-gray-500">
+              Enter the customer's delivery details.
+            </p>
+
+          </div>
+
+          <div className="grid gap-5 md:grid-cols-2">
+
+            {/* NAME */}
+
+            <div>
+              <label className="mb-2 block text-sm font-medium">
+                Receiver Name
+              </label>
+
+              <input
+                type="text"
+                value={
+                  form.receiverName
+                }
+                onChange={(e) =>
+                  updateField(
+                    "receiverName",
+                    e.target.value
+                  )
+                }
+                placeholder="Enter receiver name"
+                className="w-full rounded-xl border border-gray-200 p-3 outline-none transition focus:border-accent"
+              />
+            </div>
+
+            {/* PHONE */}
+
+            <div>
+              <label className="mb-2 block text-sm font-medium">
+                Receiver Phone
+              </label>
+
+              <input
+                type="tel"
+                value={
+                  form.receiverPhone
+                }
+                onChange={(e) =>
+                  updateField(
+                    "receiverPhone",
+                    e.target.value
+                  )
+                }
+                placeholder="Enter receiver phone"
+                className="w-full rounded-xl border border-gray-200 p-3 outline-none transition focus:border-accent"
+              />
+            </div>
+
+            {/* ADDRESS */}
+
+            <div className="md:col-span-2">
+
+              <label className="mb-2 block text-sm font-medium">
+                Receiver Address
+              </label>
+
+              <textarea
+                rows={3}
+                value={
+                  form.receiverAddress
+                }
+                onChange={(e) =>
+                  updateField(
+                    "receiverAddress",
+                    e.target.value
+                  )
+                }
+                placeholder="Enter complete delivery address"
+                className="w-full resize-none rounded-xl border border-gray-200 p-3 outline-none transition focus:border-accent"
+              />
+
+            </div>
+
+          </div>
+
+        </div>
+
+        {/* =================================================
+            DIVIDER
+        ================================================= */}
+
+        <div className="my-8 border-t border-gray-100" />
+
+        {/* =================================================
+            DELIVERY INFORMATION
+        ================================================= */}
+
+        <div>
+
+          <div className="mb-5">
+
+            <h2 className="text-base font-bold">
+              Delivery Information
+            </h2>
+
+            <p className="mt-1 text-sm text-gray-500">
+              Select destination, delivery type and package details.
+            </p>
+
+          </div>
+
+          <div className="grid gap-5 md:grid-cols-2">
+
+            {/* DESTINATION + DELIVERY TYPE */}
+
+            <div className="md:col-span-2">
+
+              <label className="mb-2 block text-sm font-medium">
+                Destination & Delivery Type
+              </label>
+
+              <select
+                value={
+                  form.locationRateId
+                }
+                onChange={(e) =>
+                  updateField(
+                    "locationRateId",
+                    Number(
+                      e.target.value
+                    )
+                  )
+                }
+                className="w-full rounded-xl border border-gray-200 bg-white p-3 outline-none transition focus:border-accent"
+              >
+
+                <option value={0}>
+                  Select Destination
+                </option>
+
+                {locationRates.map(
+                  (rate) => (
+                    <option
+                      key={rate.id}
+                      value={rate.id}
+                    >
+                      {rate.location.name}
+                      {" — "}
+                      {rate.deliveryType.name}
+                      {" — Rs. "}
+                      {Number(
+                        rate.price
+                      ).toLocaleString()}
+                      /kg
+                    </option>
+                  )
+                )}
+
+              </select>
+
+            </div>
+
+            {/* DESTINATION DISPLAY */}
+
+            <div>
+
+              <label className="mb-2 block text-sm font-medium">
+                Destination
+              </label>
+
+              <input
+                value={
+                  selectedRate
+                    ?.location?.name ||
+                  ""
+                }
+                readOnly
+                placeholder="Select destination"
+                className="w-full rounded-xl border border-gray-200 bg-gray-100 p-3 text-gray-600"
+              />
+
+            </div>
+
+            {/* DELIVERY TYPE */}
+
+            <div>
+
+              <label className="mb-2 block text-sm font-medium">
+                Delivery Type
+              </label>
+
+              <input
+                value={
+                  selectedRate
+                    ?.deliveryType
+                    ?.name || ""
+                }
+                readOnly
+                placeholder="Select delivery type"
+                className="w-full rounded-xl border border-gray-200 bg-gray-100 p-3 text-gray-600"
+              />
+
+            </div>
+
+            {/* ZONE */}
+
+            <div>
+
+              <label className="mb-2 block text-sm font-medium">
+                Zone
+              </label>
+
+              <input
+                value={
+                  selectedRate
+                    ?.location?.zone ||
+                  ""
+                }
+                readOnly
+                placeholder="Zone"
+                className="w-full rounded-xl border border-gray-200 bg-gray-100 p-3 text-gray-600"
+              />
+
+            </div>
+
+            {/* PACKAGE */}
+
+            <div>
+
+              <label className="mb-2 block text-sm font-medium">
+                Package Type
+              </label>
+
+              <select
+                value={
+                  form.packageType
+                }
+                onChange={(e) =>
+                  updateField(
+                    "packageType",
+                    e.target.value
+                  )
+                }
+                className="w-full rounded-xl border border-gray-200 bg-white p-3 outline-none focus:border-accent"
+              >
+
+                <option value="DOCUMENT">
+                  Document
+                </option>
+
+                <option value="PARCEL">
+                  Parcel
+                </option>
+
+                <option value="BOX">
+                  Box
+                </option>
+
+                <option value="ELECTRONICS">
+                  Electronics
+                </option>
+
+                <option value="CLOTHING">
+                  Clothing
+                </option>
+
+                <option value="FOOD">
+                  Food
+                </option>
+
+                <option value="FRAGILE">
+                  Fragile
+                </option>
+
+                <option value="OTHER">
+                  Other
+                </option>
+
+              </select>
+
+            </div>
+
+            {/* WEIGHT */}
+
+            <div>
+
+              <label className="mb-2 block text-sm font-medium">
+                Weight (kg)
               </label>
 
               <input
                 type="number"
-                value={form.codAmount}
-                onChange={(e) =>
-                  updateField("codAmount", Number(e.target.value))
+                min="0.1"
+                step="0.1"
+                value={
+                  form.weight
                 }
-                className="w-full rounded-xl border p-3"
+                onChange={(e) =>
+                  updateField(
+                    "weight",
+                    Number(
+                      e.target.value
+                    )
+                  )
+                }
+                className="w-full rounded-xl border border-gray-200 p-3 outline-none focus:border-accent"
               />
+
             </div>
-          )}
 
-          {/* Notes */}
-          <div className="md:col-span-2">
-            <label className="mb-2 block text-sm font-medium">Notes</label>
+            {/* RATE */}
 
-            <textarea
-              rows={4}
-              value={form.notes}
-              onChange={(e) => updateField("notes", e.target.value)}
-              className="w-full rounded-xl border p-3 outline-none focus:border-accent"
-            />
+            <div>
+
+              <label className="mb-2 block text-sm font-medium">
+                Rate / kg
+              </label>
+
+              <input
+                type="text"
+                value={
+                  selectedRate
+                    ? `Rs. ${Number(
+                        selectedRate.price
+                      ).toLocaleString()}`
+                    : ""
+                }
+                readOnly
+                placeholder="Select destination"
+                className="w-full rounded-xl border border-gray-200 bg-gray-100 p-3 text-gray-600"
+              />
+
+            </div>
+
+            {/* TOTAL SHIPPING */}
+
+            <div>
+
+              <label className="mb-2 block text-sm font-medium">
+                Shipping Charge
+              </label>
+
+              <div className="flex min-h-[50px] items-center rounded-xl border border-gray-200 bg-gray-100 px-4">
+
+                <span className="text-lg font-bold">
+                  Rs.{" "}
+                  {Number(
+                    shippingCharge
+                  ).toLocaleString()}
+                </span>
+
+              </div>
+
+              <p className="mt-1 text-xs text-gray-500">
+                Rate × Weight
+              </p>
+
+            </div>
+
           </div>
+
         </div>
 
-        <div className="mt-8 flex justify-end gap-3">
-          <button type="button" className="rounded-xl border px-5 py-3 font-medium">
+        {/* =================================================
+            DIVIDER
+        ================================================= */}
+
+        <div className="my-8 border-t border-gray-100" />
+
+        {/* =================================================
+            PAYMENT
+        ================================================= */}
+
+        <div>
+
+          <div className="mb-5">
+
+            <h2 className="text-base font-bold">
+              Payment
+            </h2>
+
+          </div>
+
+          <div className="grid gap-5 md:grid-cols-2">
+
+            {/* PAYMENT TYPE */}
+
+            <div>
+
+              <label className="mb-2 block text-sm font-medium">
+                Payment Type
+              </label>
+
+              <select
+                value={
+                  form.paymentType
+                }
+                onChange={(e) =>
+                  updateField(
+                    "paymentType",
+                    e.target.value as
+                      | "PREPAID"
+                      | "COD"
+                  )
+                }
+                className="w-full rounded-xl border border-gray-200 bg-white p-3 outline-none focus:border-accent"
+              >
+
+                <option value="PREPAID">
+                  Prepaid
+                </option>
+
+                <option value="COD">
+                  Cash On Delivery
+                </option>
+
+              </select>
+
+            </div>
+
+            {/* COD */}
+
+            {form.paymentType ===
+              "COD" && (
+              <div>
+
+                <label className="mb-2 block text-sm font-medium">
+                  COD Amount
+                </label>
+
+                <input
+                  type="number"
+                  min="1"
+                  value={
+                    form.codAmount
+                  }
+                  onChange={(e) =>
+                    updateField(
+                      "codAmount",
+                      Number(
+                        e.target.value
+                      )
+                    )
+                  }
+                  placeholder="Enter COD amount"
+                  className="w-full rounded-xl border border-gray-200 p-3 outline-none focus:border-accent"
+                />
+
+              </div>
+            )}
+
+          </div>
+
+        </div>
+
+        {/* =================================================
+            DIVIDER
+        ================================================= */}
+
+        <div className="my-8 border-t border-gray-100" />
+
+        {/* =================================================
+            NOTES
+        ================================================= */}
+
+        <div>
+
+          <label className="mb-2 block text-sm font-medium">
+            Notes
+          </label>
+
+          <textarea
+            rows={4}
+            value={
+              form.notes
+            }
+            onChange={(e) =>
+              updateField(
+                "notes",
+                e.target.value
+              )
+            }
+            placeholder="Any additional shipment notes..."
+            className="w-full resize-none rounded-xl border border-gray-200 p-3 outline-none focus:border-accent"
+          />
+
+        </div>
+
+        {/* =================================================
+            SUMMARY
+        ================================================= */}
+
+        <div className="mt-8 rounded-2xl bg-gray-50 p-5">
+
+          <div className="mb-4">
+
+            <h3 className="font-bold">
+              Shipment Summary
+            </h3>
+
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+
+            {/* VENDOR */}
+
+            <div>
+
+              <p className="text-xs text-gray-500">
+                Vendor
+              </p>
+
+              <p className="mt-1 text-sm font-semibold">
+                {
+                  selectedVendor
+                    ?.companyName ||
+                  "Not selected"
+                }
+              </p>
+
+            </div>
+
+            {/* DESTINATION */}
+
+            <div>
+
+              <p className="text-xs text-gray-500">
+                Destination
+              </p>
+
+              <p className="mt-1 text-sm font-semibold">
+                {
+                  selectedRate
+                    ?.location
+                    ?.name ||
+                  "Not selected"
+                }
+              </p>
+
+            </div>
+
+            {/* WEIGHT */}
+
+            <div>
+
+              <p className="text-xs text-gray-500">
+                Weight
+              </p>
+
+              <p className="mt-1 text-sm font-semibold">
+                {form.weight} kg
+              </p>
+
+            </div>
+
+            {/* CHARGE */}
+
+            <div>
+
+              <p className="text-xs text-gray-500">
+                Shipping Charge
+              </p>
+
+              <p className="mt-1 text-lg font-bold">
+                Rs.{" "}
+                {Number(
+                  shippingCharge
+                ).toLocaleString()}
+              </p>
+
+            </div>
+
+          </div>
+
+        </div>
+
+        {/* =================================================
+            BUTTONS
+        ================================================= */}
+
+        <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+
+          <button
+            type="button"
+            onClick={handleCancel}
+            disabled={submitting}
+            className="rounded-xl border border-gray-200 px-6 py-3 font-medium transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
             Cancel
           </button>
 
           <button
             type="submit"
-            className="rounded-xl bg-accent px-6 py-3 font-semibold text-white hover:bg-accent-dark"
+            disabled={submitting}
+            className="rounded-xl bg-accent px-7 py-3 font-semibold text-white transition hover:bg-accent-dark disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Create Shipment
+            {submitting
+              ? "Creating Shipment..."
+              : "Create Shipment"}
           </button>
+
         </div>
+
       </form>
+
     </div>
   );
 }

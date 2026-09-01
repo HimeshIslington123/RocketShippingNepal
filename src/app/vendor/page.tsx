@@ -1,36 +1,45 @@
+
 "use client";
 
-import { useEffect, useState } from "react";
-
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
-  Package,
-  Truck,
+  AlertCircle,
+  ArrowUpRight,
+  Box,
+  Calendar,
   CheckCircle2,
-  Clock,
-  XCircle,
-  RotateCcw,
-  Warehouse,
-  Send,
-  MapPin,
-  Wallet,
-  Receipt,
-  TrendingUp,
-  Download,
-  LucideIcon,
   ChevronDown,
   ChevronUp,
-  User,
-  Calendar,
-  Box,
+  Clock3,
+  Download,
   Loader2,
-  AlertCircle,
+  MapPin,
+  Package,
+  Receipt,
+  RotateCcw,
+  Search,
+  Send,
+  Truck,
+  UserRound,
+  Wallet,
+  Warehouse,
+  XCircle,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
-const SHIPMENT_API_URL = `${process.env.NEXT_PUBLIC_API_URL}/api/shipment`;
+/* =========================================================
+   API
+========================================================= */
 
-// --------------------------------------------------
-// TYPES
-// --------------------------------------------------
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+const DASHBOARD_API_URL = `${API_URL}/api/vendor`;
+const SHIPMENT_API_URL = `${API_URL}/api/shipment`;
+
+/* =========================================================
+   TYPES
+========================================================= */
 
 interface VendorInfo {
   id: string;
@@ -109,10 +118,6 @@ interface RecentShipment {
   rider?: RiderInfo | null;
 }
 
-// The dashboard endpoint returns a lighter shipment shape
-// (no `rider` relation, and sometimes an empty `trackings`
-// array). We fetch the full record from /api/shipment/:id
-// on expand and merge it in — see loadShipmentDetail().
 type ShipmentDetail = RecentShipment;
 
 interface VendorDashboardData {
@@ -122,32 +127,153 @@ interface VendorDashboardData {
   recentShipments: RecentShipment[];
 }
 
-interface StatCard {
+/* =========================================================
+   STATUS CONFIG
+========================================================= */
+
+interface StatusConfig {
   label: string;
-  value: string | number;
-  tag: string;
-  tagColor: string;
   icon: LucideIcon;
+  text: string;
+  bg: string;
+  dot: string;
 }
 
-interface StatusStep {
-  label: string;
-  value: number;
-  icon: LucideIcon;
-  color: string;
+const STATUS_CONFIG: Record<string, StatusConfig> = {
+  PENDING: {
+    label: "Pending",
+    icon: Clock3,
+    text: "text-amber-700",
+    bg: "bg-amber-50",
+    dot: "bg-amber-500",
+  },
+
+  RECEIVED: {
+    label: "Received",
+    icon: Package,
+    text: "text-blue-700",
+    bg: "bg-blue-50",
+    dot: "bg-blue-500",
+  },
+
+  PROCESSING: {
+    label: "Processing",
+    icon: RotateCcw,
+    text: "text-indigo-700",
+    bg: "bg-indigo-50",
+    dot: "bg-indigo-500",
+  },
+
+  IN_WAREHOUSE: {
+    label: "In Warehouse",
+    icon: Warehouse,
+    text: "text-violet-700",
+    bg: "bg-violet-50",
+    dot: "bg-violet-500",
+  },
+
+  DISPATCHED: {
+    label: "Dispatched",
+    icon: Send,
+    text: "text-cyan-700",
+    bg: "bg-cyan-50",
+    dot: "bg-cyan-500",
+  },
+
+  IN_TRANSIT: {
+    label: "In Transit",
+    icon: Truck,
+    text: "text-blue-700",
+    bg: "bg-blue-50",
+    dot: "bg-blue-500",
+  },
+
+  ARRIVED: {
+    label: "Arrived",
+    icon: MapPin,
+    text: "text-violet-700",
+    bg: "bg-violet-50",
+    dot: "bg-violet-500",
+  },
+
+  OUT_FOR_DELIVERY: {
+    label: "Out for Delivery",
+    icon: Truck,
+    text: "text-orange-700",
+    bg: "bg-orange-50",
+    dot: "bg-orange-500",
+  },
+
+  DELIVERED: {
+    label: "Delivered",
+    icon: CheckCircle2,
+    text: "text-emerald-700",
+    bg: "bg-emerald-50",
+    dot: "bg-emerald-500",
+  },
+
+  CANCELLED: {
+    label: "Cancelled",
+    icon: XCircle,
+    text: "text-red-700",
+    bg: "bg-red-50",
+    dot: "bg-red-500",
+  },
+
+  RETURNED: {
+    label: "Returned",
+    icon: RotateCcw,
+    text: "text-rose-700",
+    bg: "bg-rose-50",
+    dot: "bg-rose-500",
+  },
+};
+
+/* =========================================================
+   HELPERS
+========================================================= */
+
+function getStatusConfig(status: string): StatusConfig {
+  return (
+    STATUS_CONFIG[status] ?? {
+      label: formatStatusLabel(status),
+      icon: Package,
+      text: "text-slate-700",
+      bg: "bg-slate-100",
+      dot: "bg-slate-500",
+    }
+  );
 }
 
-// --------------------------------------------------
-// HELPERS
-// --------------------------------------------------
+function formatStatusLabel(status: string) {
+  return status
+    .toLowerCase()
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
 
-function formatNPR(amount: number | null | undefined): string {
-  if (amount == null) return "NPR 0";
+function formatNPR(amount: number | null | undefined) {
+  if (amount == null || Number.isNaN(Number(amount))) {
+    return "NPR 0";
+  }
 
   return `NPR ${Number(amount).toLocaleString("en-IN")}`;
 }
 
-function formatDateTime(dateString: string): string {
+function formatDate(dateString: string) {
+  try {
+    return new Date(dateString).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  } catch {
+    return dateString;
+  }
+}
+
+function formatDateTime(dateString: string) {
   try {
     return new Date(dateString).toLocaleString("en-US", {
       month: "short",
@@ -161,57 +287,41 @@ function formatDateTime(dateString: string): string {
   }
 }
 
-function formatStatusLabel(status: string): string {
-  return status
-    .toLowerCase()
-    .split("_")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
+/* =========================================================
+   AUTH FETCH
+========================================================= */
+
+function getAuthHeaders(): HeadersInit {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  const token = localStorage.getItem("token");
+
+  return {
+    "Content-Type": "application/json",
+    ...(token
+      ? {
+          Authorization: `Bearer ${token}`,
+        }
+      : {}),
+  };
 }
 
-const STATUS_CONFIG: Record<
-  string,
-  {
-    label: string;
-    icon: LucideIcon;
-    color: string;
-    bg: string;
-  }
-> = {
-  PENDING: { label: "Pending", icon: Clock, color: "text-orange-600", bg: "bg-orange-50" },
-  RECEIVED: { label: "Received", icon: Package, color: "text-blue-600", bg: "bg-blue-50" },
-  PROCESSING: { label: "Processing", icon: RotateCcw, color: "text-blue-600", bg: "bg-blue-50" },
-  IN_WAREHOUSE: { label: "In Warehouse", icon: Warehouse, color: "text-purple-600", bg: "bg-purple-50" },
-  DISPATCHED: { label: "Dispatched", icon: Send, color: "text-blue-600", bg: "bg-blue-50" },
-  IN_TRANSIT: { label: "In Transit", icon: Truck, color: "text-blue-600", bg: "bg-blue-50" },
-  ARRIVED: { label: "Arrived", icon: MapPin, color: "text-purple-600", bg: "bg-purple-50" },
-  OUT_FOR_DELIVERY: { label: "Out for Delivery", icon: Truck, color: "text-amber-600", bg: "bg-amber-50" },
-  DELIVERED: { label: "Delivered", icon: CheckCircle2, color: "text-green-600", bg: "bg-green-50" },
-  CANCELLED: { label: "Cancelled", icon: XCircle, color: "text-red-600", bg: "bg-red-50" },
-  RETURNED: { label: "Returned", icon: RotateCcw, color: "text-red-600", bg: "bg-red-50" },
-};
-
-// --------------------------------------------------
-// COMPONENT
-// --------------------------------------------------
+/* =========================================================
+   COMPONENT
+========================================================= */
 
 export default function VendorDashboardPage() {
   const [data, setData] = useState<VendorDashboardData | null>(null);
 
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [expandedShipment, setExpandedShipment] = useState<string | null>(null);
+  const [expandedShipment, setExpandedShipment] =
+    useState<string | null>(null);
 
-  // --------------------------------------------------
-  // PER-SHIPMENT DETAIL CACHE
-  //
-  // The dashboard endpoint's `recentShipments` doesn't
-  // include the rider relation and can return an empty
-  // `trackings` array. When a row is expanded we fetch
-  // the full record from /api/shipment/:id (same endpoint
-  // your rider table already uses) and cache it here.
-  // --------------------------------------------------
+  const [search, setSearch] = useState("");
 
   const [detailsCache, setDetailsCache] = useState<
     Record<string, ShipmentDetail>
@@ -225,36 +335,48 @@ export default function VendorDashboardPage() {
     Record<string, string>
   >({});
 
-  // --------------------------------------------------
-  // FETCH DASHBOARD
-  // --------------------------------------------------
+  /* =========================================================
+     LOAD DASHBOARD
+  ========================================================= */
 
   useEffect(() => {
     let cancelled = false;
 
-    async function fetchDashboard() {
+    async function loadDashboard() {
       try {
         setLoading(true);
+        setError(null);
 
-        const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/vendor/dashboard`,
-          { cache: "no-store" }
-        );
+        const response = await fetch(DASHBOARD_API_URL, {
+          method: "GET",
+          headers: getAuthHeaders(),
+          cache: "no-store",
+        });
 
-        if (!res.ok) {
-          const body = await res.text().catch(() => "");
-          throw new Error(`Request failed: ${res.status} ${body}`);
+        if (response.status === 401) {
+          throw new Error("Your session has expired. Please login again.");
         }
 
-        const json: VendorDashboardData = await res.json();
+        if (!response.ok) {
+          const body = await response.text().catch(() => "");
+
+          throw new Error(
+            body || `Failed to load dashboard (${response.status})`
+          );
+        }
+
+        const json: VendorDashboardData = await response.json();
 
         if (!cancelled) {
           setData(json);
-          setError(null);
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Unknown error");
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Unable to load dashboard."
+          );
         }
       } finally {
         if (!cancelled) {
@@ -263,25 +385,27 @@ export default function VendorDashboardPage() {
       }
     }
 
-    fetchDashboard();
+    loadDashboard();
 
     return () => {
       cancelled = true;
     };
   }, []);
 
-  // --------------------------------------------------
-  // FETCH FULL SHIPMENT DETAIL (rider + trackings)
-  // --------------------------------------------------
+  /* =========================================================
+     LOAD SHIPMENT DETAIL
+  ========================================================= */
 
   async function loadShipmentDetail(shipmentId: string) {
-    // Already cached or already loading — don't refetch.
     if (detailsCache[shipmentId] || detailsLoading[shipmentId]) {
       return;
     }
 
     try {
-      setDetailsLoading((prev) => ({ ...prev, [shipmentId]: true }));
+      setDetailsLoading((prev) => ({
+        ...prev,
+        [shipmentId]: true,
+      }));
 
       setDetailsError((prev) => {
         const next = { ...prev };
@@ -289,771 +413,1081 @@ export default function VendorDashboardPage() {
         return next;
       });
 
-      const res = await fetch(`${SHIPMENT_API_URL}/${shipmentId}`, {
-        cache: "no-store",
-      });
+      const response = await fetch(
+        `${SHIPMENT_API_URL}/${shipmentId}`,
+        {
+          method: "GET",
+          headers: getAuthHeaders(),
+          cache: "no-store",
+        }
+      );
 
-      if (!res.ok) {
-        throw new Error(`Failed to load shipment (status ${res.status})`);
+      if (response.status === 401) {
+        throw new Error("Your session has expired.");
       }
 
-      const json: ShipmentDetail = await res.json();
+      if (!response.ok) {
+        throw new Error(
+          `Failed to load shipment (${response.status})`
+        );
+      }
 
-      setDetailsCache((prev) => ({ ...prev, [shipmentId]: json }));
+      const json: ShipmentDetail = await response.json();
+
+      setDetailsCache((prev) => ({
+        ...prev,
+        [shipmentId]: json,
+      }));
     } catch (err) {
       setDetailsError((prev) => ({
         ...prev,
         [shipmentId]:
           err instanceof Error
             ? err.message
-            : "Could not load rider and tracking details.",
+            : "Unable to load shipment details.",
       }));
     } finally {
-      setDetailsLoading((prev) => ({ ...prev, [shipmentId]: false }));
+      setDetailsLoading((prev) => ({
+        ...prev,
+        [shipmentId]: false,
+      }));
     }
   }
 
-  function toggleShipment(shipment: RecentShipment) {
-    const next = expandedShipment === shipment.id ? null : shipment.id;
+  function toggleShipment(shipmentId: string) {
+    const next =
+      expandedShipment === shipmentId ? null : shipmentId;
 
     setExpandedShipment(next);
 
     if (next) {
-      loadShipmentDetail(shipment.id);
+      loadShipmentDetail(next);
     }
   }
 
-  // --------------------------------------------------
-  // TOP STATS
-  // --------------------------------------------------
+  /* =========================================================
+     FILTER
+  ========================================================= */
 
-  const STATS: StatCard[] = data
+  const filteredShipments = useMemo(() => {
+    if (!data) return [];
+
+    const query = search.trim().toLowerCase();
+
+    if (!query) {
+      return data.recentShipments;
+    }
+
+    return data.recentShipments.filter((shipment) => {
+      return (
+        shipment.trackingNumber
+          ?.toLowerCase()
+          .includes(query) ||
+        shipment.receiverName
+          ?.toLowerCase()
+          .includes(query) ||
+        shipment.receiverPhone
+          ?.toLowerCase()
+          .includes(query) ||
+        shipment.receiverAddress
+          ?.toLowerCase()
+          .includes(query) ||
+        shipment.status?.toLowerCase().includes(query)
+      );
+    });
+  }, [data, search]);
+
+  /* =========================================================
+     MAIN STATS
+  ========================================================= */
+
+  const mainStats = data
     ? [
         {
-          label: "Total Orders",
+          label: "Total shipments",
           value: data.orders.total,
-          tag: "All time",
-          tagColor: "text-blue-600 bg-blue-50",
+          helper: "All shipments",
           icon: Package,
+          iconBg: "bg-slate-100",
+          iconColor: "text-slate-700",
         },
         {
-          label: "In Transit",
+          label: "In transit",
           value: data.orders.inTransit,
-          tag: "Live",
-          tagColor: "text-blue-600 bg-blue-50",
+          helper: "Currently moving",
           icon: Truck,
+          iconBg: "bg-blue-50",
+          iconColor: "text-blue-600",
         },
         {
           label: "Delivered",
           value: data.orders.delivered,
-          tag: "Success",
-          tagColor: "text-green-600 bg-green-50",
+          helper: "Successfully delivered",
           icon: CheckCircle2,
+          iconBg: "bg-emerald-50",
+          iconColor: "text-emerald-600",
         },
         {
-          label: "Total Revenue",
+          label: "Shipping revenue",
           value: formatNPR(data.finance.totalRevenue),
-          tag: "Shipping charges",
-          tagColor: "text-green-600 bg-green-50",
+          helper: "Total shipping charges",
           icon: Wallet,
+          iconBg: "bg-violet-50",
+          iconColor: "text-violet-600",
         },
       ]
     : [];
 
-  // --------------------------------------------------
-  // FINANCE STATS
-  // --------------------------------------------------
+  /* =========================================================
+     STATUS SUMMARY
+  ========================================================= */
 
-  const FINANCE_STATS: StatCard[] = data
+  const statusSummary = data
     ? [
         {
-          label: "COD Collected",
-          value: formatNPR(data.finance.codCollected),
-          tag: "Delivered COD",
-          tagColor: "text-green-600 bg-green-50",
-          icon: Wallet,
+          key: "PENDING",
+          label: "Pending",
+          value: data.orders.pending,
         },
         {
-          label: "Total COD",
-          value: formatNPR(data.finance.totalCOD),
-          tag: "All COD orders",
-          tagColor: "text-blue-600 bg-blue-50",
-          icon: Receipt,
+          key: "RECEIVED",
+          label: "Received",
+          value: data.orders.received,
         },
         {
-          label: "Avg. Shipping Charge",
-          value: formatNPR(data.finance.averageShippingCharge),
-          tag: "Per shipment",
-          tagColor: "text-blue-600 bg-blue-50",
-          icon: TrendingUp,
+          key: "PROCESSING",
+          label: "Processing",
+          value: data.orders.processing,
+        },
+        {
+          key: "IN_WAREHOUSE",
+          label: "Warehouse",
+          value: data.orders.inWarehouse,
+        },
+        {
+          key: "DISPATCHED",
+          label: "Dispatched",
+          value: data.orders.dispatched,
+        },
+        {
+          key: "IN_TRANSIT",
+          label: "In transit",
+          value: data.orders.inTransit,
+        },
+        {
+          key: "ARRIVED",
+          label: "Arrived",
+          value: data.orders.arrived,
+        },
+        {
+          key: "OUT_FOR_DELIVERY",
+          label: "Out for delivery",
+          value: data.orders.outForDelivery,
+        },
+        {
+          key: "DELIVERED",
+          label: "Delivered",
+          value: data.orders.delivered,
+        },
+        {
+          key: "CANCELLED",
+          label: "Cancelled",
+          value: data.orders.cancelled,
+        },
+        {
+          key: "RETURNED",
+          label: "Returned",
+          value: data.orders.returned,
         },
       ]
     : [];
 
-  // --------------------------------------------------
-  // STATUS STEPS
-  // --------------------------------------------------
-
-  const STATUS_STEPS: StatusStep[] = data
-    ? [
-        { label: "Pending", value: data.orders.pending, icon: Clock, color: "text-orange-500 bg-orange-50" },
-        { label: "Received", value: data.orders.received, icon: Package, color: "text-blue-600 bg-blue-50" },
-        { label: "Processing", value: data.orders.processing, icon: RotateCcw, color: "text-blue-600 bg-blue-50" },
-        { label: "In Warehouse", value: data.orders.inWarehouse, icon: Warehouse, color: "text-purple-600 bg-purple-50" },
-        { label: "Dispatched", value: data.orders.dispatched, icon: Send, color: "text-blue-600 bg-blue-50" },
-        { label: "In Transit", value: data.orders.inTransit, icon: Truck, color: "text-blue-600 bg-blue-50" },
-        { label: "Arrived", value: data.orders.arrived, icon: MapPin, color: "text-purple-600 bg-purple-50" },
-        { label: "Out for Delivery", value: data.orders.outForDelivery, icon: Truck, color: "text-amber-600 bg-amber-50" },
-        { label: "Delivered", value: data.orders.delivered, icon: CheckCircle2, color: "text-green-600 bg-green-50" },
-        { label: "Cancelled", value: data.orders.cancelled, icon: XCircle, color: "text-red-600 bg-red-50" },
-        { label: "Returned", value: data.orders.returned, icon: RotateCcw, color: "text-red-500 bg-red-50" },
-      ]
-    : [];
-
-  // --------------------------------------------------
-  // RENDER
-  // --------------------------------------------------
+  /* =========================================================
+     RENDER
+  ========================================================= */
 
   return (
-    <div className="mx-auto max-w-7xl text-black">
+    <main className="min-h-full  text-slate-900">
+      <div className="mx-auto max-w-[1450px] px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
 
-      {/* ==================================================
-          HEADER
-      ================================================== */}
+        {/* ===================================================
+            HEADER
+        =================================================== */}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
+        <header className="mb-7 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <div className="mb-2 flex items-center gap-2 text-xs font-medium text-slate-400">
+              <span>Workspace</span>
+              <span>/</span>
+              <span className="text-slate-500">Dashboard</span>
+            </div>
 
-        <div>
-          <h1 className="font-display text-2xl font-extrabold text-ink">
-            {data ? data.vendor.companyName : "Vendor Dashboard"}
-          </h1>
+            <h1 className="text-[28px] font-bold tracking-[-0.03em] text-slate-950">
+              {data?.vendor.companyName || "Vendor Dashboard"}
+            </h1>
 
-          <p className="mt-1 text-sm text-ink/50">
-            {data
-              ? `${data.vendor.location} · Overview of your shipments and earnings.`
-              : "Overview of your shipments and earnings."}
-          </p>
-        </div>
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500">
+              {data?.vendor.location && (
+                <>
+                  <span className="flex items-center gap-1.5">
+                    <MapPin className="h-3.5 w-3.5" />
+                    {data.vendor.location}
+                  </span>
 
-        <button
-          type="button"
-          className="flex items-center gap-2 rounded-lg border border-black/10 bg-white px-4 py-2 text-sm font-semibold text-ink/70 hover:bg-black/[0.03]"
-        >
-          <Download className="h-4 w-4" />
-          Export Report
-        </button>
-      </div>
+                  <span className="hidden text-slate-300 sm:inline">
+                    •
+                  </span>
+                </>
+              )}
 
+              <span>
+                Here's what's happening with your shipments.
+              </span>
+            </div>
+          </div>
 
-      {/* ==================================================
-          ERROR
-      ================================================== */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
+            >
+              <Download className="h-4 w-4" />
+              <span>Export</span>
+            </button>
 
-      {error && (
-        <div className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-600">
-          <p className="font-semibold">Failed to load dashboard</p>
-          <p className="mt-1">{error}</p>
-        </div>
-      )}
+            <Link
+              href="/vendor/order"
+              className="inline-flex h-10 items-center gap-2 rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
+            >
+              <Package className="h-4 w-4" />
+              New shipment
+            </Link>
+          </div>
+        </header>
 
+        {/* ===================================================
+            ERROR
+        =================================================== */}
 
-      {/* ==================================================
-          TOP STAT CARDS
-      ================================================== */}
+        {error && (
+          <div className="mb-6 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4">
+            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" />
 
-      {loading ? (
-        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, index) => (
-            <div
-              key={index}
-              className="h-[124px] animate-pulse rounded-2xl bg-white shadow-sm ring-1 ring-black/5"
-            />
-          ))}
-        </div>
-      ) : (
-        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {STATS.map((stat) => {
-            const Icon = stat.icon;
+            <div>
+              <p className="text-sm font-semibold text-red-800">
+                Unable to load dashboard
+              </p>
 
-            return (
+              <p className="mt-1 text-sm text-red-600">
+                {error}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* ===================================================
+            MAIN STATS
+        =================================================== */}
+
+        {loading ? (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {[1, 2, 3, 4].map((item) => (
               <div
-                key={stat.label}
-                className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent/10 text-accent">
-                    <Icon className="h-5 w-5" strokeWidth={2} />
-                  </span>
-
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${stat.tagColor}`}
-                  >
-                    {stat.tag}
-                  </span>
-                </div>
-
-                <p className="mt-4 text-sm text-ink/50">{stat.label}</p>
-
-                <p className="font-display text-2xl font-extrabold text-ink">
-                  {stat.value}
-                </p>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-
-      {/* ==================================================
-          FINANCE
-      ================================================== */}
-
-      {!loading && data && (
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
-          {FINANCE_STATS.map((stat) => {
-            const Icon = stat.icon;
-
-            return (
-              <div
-                key={stat.label}
-                className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent/10 text-accent">
-                    <Icon className="h-5 w-5" strokeWidth={2} />
-                  </span>
-
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${stat.tagColor}`}
-                  >
-                    {stat.tag}
-                  </span>
-                </div>
-
-                <p className="mt-4 text-sm text-ink/50">{stat.label}</p>
-
-                <p className="font-display text-2xl font-extrabold text-ink">
-                  {stat.value}
-                </p>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-
-      {/* ==================================================
-          ORDER STATUS BREAKDOWN
-      ================================================== */}
-
-      {!loading && data && (
-        <div className="mt-6 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-black/5">
-          <h2 className="font-display text-lg font-bold text-ink">
-            Order Status Breakdown
-          </h2>
-
-          <p className="mt-1 text-sm text-ink/40">
-            Current status of all your shipments.
-          </p>
-
-          <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
-            {STATUS_STEPS.map((step) => {
-              const Icon = step.icon;
+                key={item}
+                className="h-[142px] animate-pulse rounded-xl border border-slate-200 bg-white"
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {mainStats.map((stat) => {
+              const Icon = stat.icon;
 
               return (
                 <div
-                  key={step.label}
-                  className="rounded-xl border border-black/5 p-4"
+                  key={stat.label}
+                  className="group rounded-xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
                 >
-                  <span
-                    className={`flex h-8 w-8 items-center justify-center rounded-lg ${step.color}`}
-                  >
-                    <Icon className="h-4 w-4" strokeWidth={2} />
-                  </span>
+                  <div className="flex items-start justify-between">
+                    <div
+                      className={`flex h-10 w-10 items-center justify-center rounded-lg ${stat.iconBg} ${stat.iconColor}`}
+                    >
+                      <Icon className="h-5 w-5" />
+                    </div>
 
-                  <p className="mt-3 text-xs text-ink/50">{step.label}</p>
+                    <ArrowUpRight className="h-4 w-4 text-slate-300 transition group-hover:text-slate-500" />
+                  </div>
 
-                  <p className="font-display text-lg font-extrabold text-ink">
-                    {step.value}
-                  </p>
+                  <div className="mt-5">
+                    <p className="text-[13px] font-medium text-slate-500">
+                      {stat.label}
+                    </p>
+
+                    <p className="mt-1 text-[25px] font-bold tracking-[-0.025em] text-slate-950">
+                      {stat.value}
+                    </p>
+
+                    <p className="mt-1 text-xs text-slate-400">
+                      {stat.helper}
+                    </p>
+                  </div>
                 </div>
               );
             })}
           </div>
-        </div>
-      )}
+        )}
 
+        {/* ===================================================
+            SECOND ROW
+        =================================================== */}
 
-      {/* ==================================================
-          RECENT SHIPMENTS
-      ================================================== */}
+        {!loading && data && (
+          <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
 
-      {!loading && data && (
-        <div className="mt-6 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-black/5">
+            {/* Finance */}
 
-          {/* Header */}
+            <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.03)] lg:col-span-1">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900">
+                    Finance
+                  </h2>
 
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="font-display text-lg font-bold text-ink">
-                Recent Shipments
-              </h2>
+                  <p className="mt-1 text-xs text-slate-400">
+                    Your shipment earnings
+                  </p>
+                </div>
 
-              <p className="mt-1 text-sm text-ink/40">
-                Click a shipment to view complete delivery history.
-              </p>
-            </div>
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-50 text-violet-600">
+                  <Receipt className="h-4 w-4" />
+                </div>
+              </div>
 
-            <a href="#" className="text-sm font-semibold text-accent">
-              View All Shipments
-            </a>
-          </div>
+              <div className="mt-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-slate-500">
+                    COD collected
+                  </span>
 
+                  <span className="text-sm font-semibold text-slate-900">
+                    {formatNPR(data.finance.codCollected)}
+                  </span>
+                </div>
 
-          {/* Empty */}
+                <div className="h-px bg-slate-100" />
 
-          {data.recentShipments.length === 0 ? (
-            <div className="mt-6 rounded-xl border border-dashed border-black/10 p-8 text-center">
-              <Package className="mx-auto h-8 w-8 text-ink/20" />
-              <p className="mt-3 text-sm text-ink/50">No shipments yet.</p>
-            </div>
-          ) : (
-            <div className="mt-5 space-y-3">
-              {data.recentShipments.map((shipment) => {
-                const expanded = expandedShipment === shipment.id;
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-slate-500">
+                    Total COD
+                  </span>
 
-                // Full detail (rider + trackings) fetched on expand.
-                // Falls back to the summary object's own fields
-                // until the fetch resolves.
-                const detail = detailsCache[shipment.id];
-                const isLoadingDetail = !!detailsLoading[shipment.id];
-                const loadError = detailsError[shipment.id];
+                  <span className="text-sm font-semibold text-slate-900">
+                    {formatNPR(data.finance.totalCOD)}
+                  </span>
+                </div>
 
-                const trackings =
-                  detail?.trackings ?? shipment.trackings ?? [];
+                <div className="h-px bg-slate-100" />
 
-                const riderId = detail?.riderId ?? shipment.riderId ?? null;
-                const rider = detail?.rider ?? null;
-                const notes = detail?.notes ?? shipment.notes;
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-slate-500">
+                    Avg. shipping
+                  </span>
 
-                const statusConfig =
-                  STATUS_CONFIG[shipment.status] ?? {
-                    label: formatStatusLabel(shipment.status),
-                    icon: Package,
-                    color: "text-gray-600",
-                    bg: "bg-gray-50",
-                  };
+                  <span className="text-sm font-semibold text-slate-900">
+                    {formatNPR(
+                      data.finance.averageShippingCharge
+                    )}
+                  </span>
+                </div>
+              </div>
+            </section>
 
-                const StatusIcon = statusConfig.icon;
+            {/* Shipment Status */}
 
-                return (
-                  <div
-                    key={shipment.id}
-                    className="overflow-hidden rounded-xl border border-black/5"
-                  >
+            <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.03)] lg:col-span-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900">
+                    Shipment status
+                  </h2>
 
-                    {/* ==================================================
-                        SHIPMENT SUMMARY
-                    ================================================== */}
+                  <p className="mt-1 text-xs text-slate-400">
+                    Current distribution of your shipments
+                  </p>
+                </div>
 
-                    <button
-                      type="button"
-                      onClick={() => toggleShipment(shipment)}
-                      className="w-full px-5 py-4 text-left transition hover:bg-black/[0.02]"
+                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-500">
+                  {data.orders.total} total
+                </span>
+              </div>
+
+              <div className="mt-5 flex flex-wrap gap-2">
+                {statusSummary.map((item) => {
+                  const config = getStatusConfig(item.key);
+                  const Icon = config.icon;
+
+                  return (
+                    <div
+                      key={item.key}
+                      className="flex min-w-[130px] flex-1 items-center gap-3 rounded-lg border border-slate-100 bg-slate-50/70 px-3 py-3"
                     >
-                      <div className="grid grid-cols-1 gap-4 md:grid-cols-6 md:items-center">
-
-                        <div>
-                          <p className="text-[11px] uppercase tracking-wide text-ink/40">
-                            Tracking
-                          </p>
-                          <p className="mt-1 font-semibold text-ink">
-                            {shipment.trackingNumber}
-                          </p>
-                        </div>
-
-                        <div>
-                          <p className="text-[11px] uppercase tracking-wide text-ink/40">
-                            Receiver
-                          </p>
-                          <p className="mt-1 font-medium text-ink">
-                            {shipment.receiverName}
-                          </p>
-                          <p className="text-xs text-ink/40">
-                            {shipment.receiverPhone}
-                          </p>
-                        </div>
-
-                        <div>
-                          <p className="text-[11px] uppercase tracking-wide text-ink/40">
-                            Destination
-                          </p>
-                          <div className="mt-1 flex items-center gap-1 text-sm text-ink/60">
-                            <MapPin className="h-3.5 w-3.5 shrink-0" />
-                            <span className="truncate">
-                              {shipment.receiverAddress}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div>
-                          <p className="text-[11px] uppercase tracking-wide text-ink/40">
-                            Payment
-                          </p>
-                          <p className="mt-1 font-medium text-ink">
-                            {shipment.paymentType === "COD"
-                              ? formatNPR(shipment.codAmount)
-                              : "PREPAID"}
-                          </p>
-                          {shipment.paymentType === "COD" && (
-                            <p className="text-xs text-ink/40">COD</p>
-                          )}
-                        </div>
-
-                        <div>
-                          <p className="text-[11px] uppercase tracking-wide text-ink/40">
-                            Status
-                          </p>
-                          <span
-                            className={`mt-1 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${statusConfig.bg} ${statusConfig.color}`}
-                          >
-                            <StatusIcon className="h-3.5 w-3.5" />
-                            {statusConfig.label}
-                          </span>
-                        </div>
-
-                        <div className="flex justify-end">
-                          {expanded ? (
-                            <ChevronUp className="h-5 w-5 text-ink/40" />
-                          ) : (
-                            <ChevronDown className="h-5 w-5 text-ink/40" />
-                          )}
-                        </div>
+                      <div
+                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${config.bg} ${config.text}`}
+                      >
+                        <Icon className="h-4 w-4" />
                       </div>
-                    </button>
 
+                      <div className="min-w-0">
+                        <p className="truncate text-[11px] font-medium text-slate-400">
+                          {item.label}
+                        </p>
 
-                    {/* ==================================================
-                        EXPANDED DETAILS
-                    ================================================== */}
+                        <p className="mt-0.5 text-base font-bold text-slate-900">
+                          {item.value}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          </div>
+        )}
 
-                    {expanded && (
-                      <div className="border-t border-black/5 bg-gray-50/50 p-5">
+        {/* ===================================================
+            SHIPMENTS
+        =================================================== */}
 
-                        {/* Fetch error banner */}
+        {!loading && data && (
+          <section className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
 
-                        {loadError && (
-                          <div className="mb-4 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-red-600">
-                            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            {/* Section Header */}
+
+            <div className="border-b border-slate-100 px-5 py-5 sm:px-6">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base font-bold text-slate-950">
+                      Recent shipments
+                    </h2>
+
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500">
+                      {data.recentShipments.length}
+                    </span>
+                  </div>
+
+                  <p className="mt-1 text-xs text-slate-400">
+                    Latest activity across your shipments
+                  </p>
+                </div>
+
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+
+                    <input
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      placeholder="Search tracking, receiver..."
+                      className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-3 text-xs text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:bg-white sm:w-[240px]"
+                    />
+                  </div>
+
+                  <Link
+                    href="/vendor/View"
+                    className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                  >
+                    View all
+                    <ArrowUpRight className="h-3.5 w-3.5" />
+                  </Link>
+                </div>
+              </div>
+            </div>
+
+            {/* Empty */}
+
+            {filteredShipments.length === 0 ? (
+              <div className="px-6 py-16 text-center">
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-400">
+                  <Package className="h-6 w-6" />
+                </div>
+
+                <h3 className="mt-4 text-sm font-semibold text-slate-900">
+                  {search
+                    ? "No shipments found"
+                    : "No shipments yet"}
+                </h3>
+
+                <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-slate-400">
+                  {search
+                    ? "Try searching with another tracking number, receiver or status."
+                    : "Once you create shipments, your latest activity will appear here."}
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* Desktop Table Header */}
+
+                <div className="hidden grid-cols-[1.2fr_1.15fr_1.4fr_0.8fr_0.9fr_32px] gap-4 border-b border-slate-100 bg-slate-50/60 px-5 py-3 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400 lg:grid">
+                  <span>Shipment</span>
+                  <span>Receiver</span>
+                  <span>Destination</span>
+                  <span>Payment</span>
+                  <span>Status</span>
+                  <span />
+                </div>
+
+                <div className="divide-y divide-slate-100">
+                  {filteredShipments.map((shipment) => {
+                    const expanded =
+                      expandedShipment === shipment.id;
+
+                    const detail =
+                      detailsCache[shipment.id];
+
+                    const isLoadingDetail =
+                      !!detailsLoading[shipment.id];
+
+                    const loadError =
+                      detailsError[shipment.id];
+
+                    const trackings =
+                      detail?.trackings ??
+                      shipment.trackings ??
+                      [];
+
+                    const riderId =
+                      detail?.riderId ??
+                      shipment.riderId ??
+                      null;
+
+                    const rider =
+                      detail?.rider ??
+                      shipment.rider ??
+                      null;
+
+                    const notes =
+                      detail?.notes ??
+                      shipment.notes;
+
+                    const status =
+                      getStatusConfig(shipment.status);
+
+                    const StatusIcon = status.icon;
+
+                    return (
+                      <div key={shipment.id}>
+                        {/* =================================================
+                            ROW
+                        ================================================= */}
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            toggleShipment(shipment.id)
+                          }
+                          className="group w-full text-left transition hover:bg-slate-50/70"
+                        >
+                          <div className="grid grid-cols-1 gap-4 px-5 py-4 lg:grid-cols-[1.2fr_1.15fr_1.4fr_0.8fr_0.9fr_32px] lg:items-center lg:gap-4">
+
+                            {/* Shipment */}
+
                             <div>
-                              <p className="text-sm font-semibold">
-                                Couldn&apos;t load rider &amp; tracking details
+                              <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400 lg:hidden">
+                                Shipment
                               </p>
-                              <p className="mt-0.5 text-xs text-red-500">
-                                {loadError}
-                              </p>
+
+                              <div className="flex items-center gap-2.5">
+                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                                  <Package className="h-4 w-4" />
+                                </div>
+
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-bold text-slate-900">
+                                    {shipment.trackingNumber}
+                                  </p>
+
+                                  <p className="mt-0.5 text-[11px] text-slate-400">
+                                    {formatDate(
+                                      shipment.createdAt
+                                    )}
+                                  </p>
+                                </div>
+                              </div>
                             </div>
-                            <button
-                              onClick={() => loadShipmentDetail(shipment.id)}
-                              className="ml-auto shrink-0 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"
-                            >
-                              Retry
-                            </button>
-                          </div>
-                        )}
 
-                        {/* ==================================================
-                            SHIPMENT INFORMATION
-                        ================================================== */}
-
-                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-
-                          <div className="rounded-xl bg-white p-4 ring-1 ring-black/5">
-                            <div className="flex items-center gap-2 text-ink/40">
-                              <User className="h-4 w-4" />
-                              <span className="text-xs">Receiver</span>
-                            </div>
-                            <p className="mt-2 font-semibold text-ink">
-                              {shipment.receiverName}
-                            </p>
-                            <p className="mt-1 text-xs text-ink/50">
-                              {shipment.receiverPhone}
-                            </p>
-                          </div>
-
-                          <div className="rounded-xl bg-white p-4 ring-1 ring-black/5">
-                            <div className="flex items-center gap-2 text-ink/40">
-                              <MapPin className="h-4 w-4" />
-                              <span className="text-xs">Destination</span>
-                            </div>
-                            <p className="mt-2 text-sm font-semibold text-ink">
-                              {shipment.receiverAddress}
-                            </p>
-                          </div>
-
-                          <div className="rounded-xl bg-white p-4 ring-1 ring-black/5">
-                            <div className="flex items-center gap-2 text-ink/40">
-                              <Box className="h-4 w-4" />
-                              <span className="text-xs">Package</span>
-                            </div>
-                            <p className="mt-2 font-semibold text-ink">
-                              {shipment.packageType}
-                            </p>
-                            <p className="mt-1 text-xs text-ink/50">
-                              {shipment.weight} kg
-                            </p>
-                          </div>
-
-                          <div className="rounded-xl bg-white p-4 ring-1 ring-black/5">
-                            <div className="flex items-center gap-2 text-ink/40">
-                              <Wallet className="h-4 w-4" />
-                              <span className="text-xs">Charges</span>
-                            </div>
-                            <p className="mt-2 font-semibold text-ink">
-                              {formatNPR(shipment.shippingCharge)}
-                            </p>
-                            {shipment.paymentType === "COD" && (
-                              <p className="mt-1 text-xs text-green-600">
-                                COD: {formatNPR(shipment.codAmount)}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-
-
-                        {/* ==================================================
-                            RIDER + NOTES
-                        ================================================== */}
-
-                        <div className="mt-4 rounded-xl bg-white p-5 ring-1 ring-black/5">
-                          <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-
-                            {/* Rider */}
+                            {/* Receiver */}
 
                             <div>
-                              <p className="text-xs font-semibold uppercase tracking-wide text-ink/40">
-                                Delivery Rider
+                              <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400 lg:hidden">
+                                Receiver
                               </p>
 
-                              {isLoadingDetail && !detail ? (
-                                <div className="mt-2 flex items-center gap-2 text-ink/40">
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                  <span className="text-sm">
-                                    Loading rider...
-                                  </span>
-                                </div>
-                              ) : rider ? (
-                                <div className="mt-2 flex items-center gap-3">
-                                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-50 text-blue-600">
-                                    <Truck className="h-4 w-4" />
-                                  </span>
+                              <p className="truncate text-sm font-medium text-slate-800">
+                                {shipment.receiverName}
+                              </p>
 
-                                  <div>
-                                    <p className="text-sm font-semibold text-ink">
-                                      {rider.user?.name ??
-                                        `Rider #${rider.id}`}
-                                    </p>
+                              <p className="mt-0.5 text-[11px] text-slate-400">
+                                {shipment.receiverPhone}
+                              </p>
+                            </div>
 
-                                    <p className="text-xs text-ink/50">
-                                      {rider.phone}
-                                      {rider.vehicleNumber
-                                        ? ` · ${rider.vehicleNumber}`
-                                        : ""}
-                                    </p>
-                                  </div>
-                                </div>
-                              ) : riderId ? (
-                                <div className="mt-2 flex items-center gap-3">
-                                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-50 text-blue-600">
-                                    <Truck className="h-4 w-4" />
-                                  </span>
+                            {/* Destination */}
 
-                                  <div>
-                                    <p className="text-sm font-semibold text-ink">
-                                      Rider #{riderId}
-                                    </p>
-                                    <p className="text-xs text-green-600">
-                                      Assigned
-                                    </p>
-                                  </div>
-                                </div>
-                              ) : (
-                                <p className="mt-2 text-sm text-orange-500">
-                                  No rider assigned yet
+                            <div>
+                              <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400 lg:hidden">
+                                Destination
+                              </p>
+
+                              <div className="flex items-start gap-1.5">
+                                <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
+
+                                <p className="line-clamp-2 text-xs leading-5 text-slate-500">
+                                  {shipment.receiverAddress}
                                 </p>
-                              )}
+                              </div>
                             </div>
 
                             {/* Payment */}
 
                             <div>
-                              <p className="text-xs font-semibold uppercase tracking-wide text-ink/40">
-                                Payment Type
+                              <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400 lg:hidden">
+                                Payment
                               </p>
-                              <p className="mt-2 text-sm font-semibold text-ink">
-                                {shipment.paymentType}
-                              </p>
+
+                              {shipment.paymentType ===
+                              "COD" ? (
+                                <>
+                                  <p className="text-sm font-semibold text-slate-800">
+                                    {formatNPR(
+                                      shipment.codAmount
+                                    )}
+                                  </p>
+
+                                  <p className="mt-0.5 text-[10px] font-medium text-slate-400">
+                                    Cash on delivery
+                                  </p>
+                                </>
+                              ) : (
+                                <>
+                                  <p className="text-sm font-semibold text-slate-800">
+                                    Prepaid
+                                  </p>
+
+                                  <p className="mt-0.5 text-[10px] font-medium text-slate-400">
+                                    Paid online
+                                  </p>
+                                </>
+                              )}
                             </div>
 
-                            {/* Notes */}
+                            {/* Status */}
 
-                            {notes && (
-                              <div className="md:max-w-md">
-                                <p className="text-xs font-semibold uppercase tracking-wide text-ink/40">
-                                  Notes
-                                </p>
-                                <p className="mt-2 text-sm text-ink/60">
-                                  {notes}
-                                </p>
+                            <div>
+                              <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400 lg:hidden">
+                                Status
+                              </p>
+
+                              <span
+                                className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[11px] font-semibold ${status.bg} ${status.text}`}
+                              >
+                                <span
+                                  className={`h-1.5 w-1.5 rounded-full ${status.dot}`}
+                                />
+
+                                {status.label}
+                              </span>
+                            </div>
+
+                            {/* Chevron */}
+
+                            <div className="hidden justify-end lg:flex">
+                              {expanded ? (
+                                <ChevronUp className="h-4 w-4 text-slate-400" />
+                              ) : (
+                                <ChevronDown className="h-4 w-4 text-slate-300 transition group-hover:text-slate-500" />
+                              )}
+                            </div>
+                          </div>
+                        </button>
+
+                        {/* =================================================
+                            EXPANDED DETAILS
+                        ================================================= */}
+
+                        {expanded && (
+                          <div className="border-t border-slate-100 bg-[#fafbfc] px-5 py-5 sm:px-6">
+
+                            {/* Error */}
+
+                            {loadError && (
+                              <div className="mb-4 flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+                                <AlertCircle className="h-4 w-4 shrink-0 text-red-600" />
+
+                                <div className="min-w-0">
+                                  <p className="text-xs font-semibold text-red-800">
+                                    Could not load shipment
+                                    details
+                                  </p>
+
+                                  <p className="mt-0.5 text-[11px] text-red-600">
+                                    {loadError}
+                                  </p>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDetailsCache(
+                                      (prev) => {
+                                        const next = {
+                                          ...prev,
+                                        };
+                                        delete next[
+                                          shipment.id
+                                        ];
+                                        return next;
+                                      }
+                                    );
+                                    loadShipmentDetail(
+                                      shipment.id
+                                    );
+                                  }}
+                                  className="ml-auto rounded-md bg-white px-2.5 py-1.5 text-[11px] font-semibold text-red-700 shadow-sm ring-1 ring-red-200 hover:bg-red-50"
+                                >
+                                  Retry
+                                </button>
                               </div>
                             )}
-                          </div>
-                        </div>
 
+                            {/* Details grid */}
 
-                        {/* ==================================================
-                            DELIVERY PROGRESS
-                        ================================================== */}
+                            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
 
-                        <div className="mt-5 rounded-xl bg-white p-5 ring-1 ring-black/5">
-                          <div className="flex flex-wrap items-center justify-between gap-3">
-                            <div>
-                              <h3 className="font-display font-bold text-ink">
-                                Delivery Progress
-                              </h3>
-                              <p className="mt-1 text-xs text-ink/40">
-                                Complete tracking history for this shipment.
-                              </p>
+                              <DetailCard
+                                icon={UserRound}
+                                label="Receiver"
+                                value={
+                                  shipment.receiverName
+                                }
+                                subValue={
+                                  shipment.receiverPhone
+                                }
+                              />
+
+                              <DetailCard
+                                icon={MapPin}
+                                label="Destination"
+                                value={
+                                  shipment.receiverAddress
+                                }
+                                subValue="Delivery address"
+                              />
+
+                              <DetailCard
+                                icon={Box}
+                                label="Package"
+                                value={
+                                  shipment.packageType
+                                }
+                                subValue={`${shipment.weight} kg`}
+                              />
+
+                              <DetailCard
+                                icon={Wallet}
+                                label="Shipping charge"
+                                value={formatNPR(
+                                  shipment.shippingCharge
+                                )}
+                                subValue={
+                                  shipment.paymentType ===
+                                  "COD"
+                                    ? `COD ${formatNPR(
+                                        shipment.codAmount
+                                      )}`
+                                    : "Prepaid"
+                                }
+                              />
                             </div>
 
-                            <span
-                              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${statusConfig.bg} ${statusConfig.color}`}
-                            >
-                              <StatusIcon className="h-3.5 w-3.5" />
-                              {statusConfig.label}
-                            </span>
-                          </div>
+                            {/* Rider + Notes */}
 
-                          {/* Loading */}
+                            <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
 
-                          {isLoadingDetail && !detail ? (
-                            <div className="mt-5 flex items-center gap-2 rounded-lg bg-gray-50 p-4 text-ink/40">
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                              <p className="text-sm">
-                                Loading tracking history...
-                              </p>
-                            </div>
-                          ) : trackings.length === 0 ? (
-                            /* No tracking */
-                            <div className="mt-5 rounded-lg bg-orange-50 p-4">
-                              <div className="flex items-center gap-2 text-orange-600">
-                                <Clock className="h-4 w-4" />
-                                <p className="text-sm font-medium">
-                                  Shipment has not started tracking yet.
-                                </p>
-                              </div>
-                              <p className="mt-1 text-xs text-orange-500/70">
-                                Tracking events will appear here once the
-                                shipment is received.
-                              </p>
-                            </div>
-                          ) : (
-                            /* ==================================================
-                               TIMELINE
-                            ================================================== */
-                            <div className="relative mt-7">
-                              {trackings.map((tracking, index) => {
-                                const config =
-                                  STATUS_CONFIG[tracking.status] ?? {
-                                    label: formatStatusLabel(
-                                      tracking.status
-                                    ),
-                                    icon: Package,
-                                    color: "text-gray-600",
-                                    bg: "bg-gray-50",
-                                  };
+                              <div className="rounded-lg border border-slate-200 bg-white p-4">
+                                <div className="mb-3 flex items-center justify-between">
+                                  <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400">
+                                    Delivery rider
+                                  </p>
 
-                                const Icon = config.icon;
+                                  <Truck className="h-4 w-4 text-slate-300" />
+                                </div>
 
-                                const isLast =
-                                  index === trackings.length - 1;
-
-                                return (
-                                  <div
-                                    key={tracking.id}
-                                    className="relative flex gap-4 pb-7 last:pb-0"
-                                  >
-                                    {!isLast && (
-                                      <div className="absolute left-[15px] top-8 h-full w-px bg-black/10" />
-                                    )}
-
-                                    <div
-                                      className={`relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${config.bg} ${config.color}`}
-                                    >
-                                      <Icon className="h-4 w-4" />
+                                {isLoadingDetail &&
+                                !detail ? (
+                                  <div className="flex items-center gap-2 text-xs text-slate-400">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Loading rider...
+                                  </div>
+                                ) : rider ? (
+                                  <div className="flex items-center gap-3">
+                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+                                      <Truck className="h-4 w-4" />
                                     </div>
 
-                                    <div className="min-w-0 flex-1">
-                                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                        <div>
-                                          <p className="font-semibold text-ink">
-                                            {config.label}
-                                          </p>
+                                    <div>
+                                      <p className="text-sm font-semibold text-slate-900">
+                                        {rider.user?.name ||
+                                          `Rider #${rider.id}`}
+                                      </p>
 
-                                          {tracking.message && (
-                                            <p className="mt-1 text-sm leading-6 text-ink/60">
-                                              {tracking.message}
-                                            </p>
-                                          )}
-                                        </div>
+                                      <p className="mt-0.5 text-xs text-slate-400">
+                                        {rider.phone}
 
-                                        <p className="shrink-0 text-xs text-ink/40">
-                                          {formatDateTime(
-                                            tracking.createdAt
-                                          )}
-                                        </p>
-                                      </div>
-
-                                      {tracking.location && (
-                                        <div className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-gray-50 px-2.5 py-1.5 text-xs text-ink/50">
-                                          <MapPin className="h-3.5 w-3.5" />
-                                          <span>{tracking.location}</span>
-                                        </div>
-                                      )}
+                                        {rider.vehicleNumber
+                                          ? ` · ${rider.vehicleNumber}`
+                                          : ""}
+                                      </p>
                                     </div>
                                   </div>
-                                );
-                              })}
+                                ) : riderId ? (
+                                  <div>
+                                    <p className="text-sm font-semibold text-slate-900">
+                                      Rider #{riderId}
+                                    </p>
+
+                                    <p className="mt-0.5 text-xs text-emerald-600">
+                                      Assigned
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <p className="text-sm text-amber-600">
+                                    No rider assigned
+                                  </p>
+                                )}
+                              </div>
+
+                              <div className="rounded-lg border border-slate-200 bg-white p-4">
+                                <div className="mb-3 flex items-center justify-between">
+                                  <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400">
+                                    Notes
+                                  </p>
+
+                                  <Receipt className="h-4 w-4 text-slate-300" />
+                                </div>
+
+                                <p className="text-sm leading-6 text-slate-600">
+                                  {notes ||
+                                    "No additional notes for this shipment."}
+                                </p>
+                              </div>
                             </div>
-                          )}
-                        </div>
 
+                            {/* Timeline */}
 
-                        {/* ==================================================
-                            SHIPMENT DATES
-                        ================================================== */}
+                            <div className="mt-3 rounded-lg border border-slate-200 bg-white p-4">
+                              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                <div>
+                                  <h3 className="text-sm font-bold text-slate-900">
+                                    Tracking history
+                                  </h3>
 
-                        <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-xs text-ink/40">
-                          <span className="flex items-center gap-1.5">
-                            <Calendar className="h-3.5 w-3.5" />
-                            Created: {formatDateTime(shipment.createdAt)}
-                          </span>
+                                  <p className="mt-0.5 text-xs text-slate-400">
+                                    Shipment activity from creation
+                                    to current status
+                                  </p>
+                                </div>
 
-                          <span className="flex items-center gap-1.5">
-                            <Clock className="h-3.5 w-3.5" />
-                            Last Updated:{" "}
-                            {formatDateTime(shipment.updatedAt)}
-                          </span>
-                        </div>
+                                <span
+                                  className={`inline-flex w-fit items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold ${status.bg} ${status.text}`}
+                                >
+                                  <StatusIcon className="h-3 w-3" />
+                                  {status.label}
+                                </span>
+                              </div>
+
+                              {isLoadingDetail &&
+                              !detail ? (
+                                <div className="mt-5 flex items-center gap-2 rounded-lg bg-slate-50 p-4 text-xs text-slate-400">
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  Loading tracking history...
+                                </div>
+                              ) : trackings.length === 0 ? (
+                                <div className="mt-5 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
+                                  <Clock3 className="mx-auto h-5 w-5 text-slate-300" />
+
+                                  <p className="mt-2 text-xs font-medium text-slate-500">
+                                    No tracking events yet
+                                  </p>
+
+                                  <p className="mt-1 text-[11px] text-slate-400">
+                                    Tracking updates will appear
+                                    here as the shipment moves.
+                                  </p>
+                                </div>
+                              ) : (
+                                <div className="mt-6">
+                                  {trackings.map(
+                                    (tracking, index) => {
+                                      const trackingStatus =
+                                        getStatusConfig(
+                                          tracking.status
+                                        );
+
+                                      const TrackingIcon =
+                                        trackingStatus.icon;
+
+                                      const isLast =
+                                        index ===
+                                        trackings.length - 1;
+
+                                      return (
+                                        <div
+                                          key={tracking.id}
+                                          className="relative flex gap-3"
+                                        >
+                                          {!isLast && (
+                                            <div className="absolute left-[15px] top-8 h-[calc(100%-12px)] w-px bg-slate-200" />
+                                          )}
+
+                                          <div
+                                            className={`relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${trackingStatus.bg} ${trackingStatus.text}`}
+                                          >
+                                            <TrackingIcon className="h-3.5 w-3.5" />
+                                          </div>
+
+                                          <div className="min-w-0 flex-1 pb-6">
+                                            <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                                              <div>
+                                                <p className="text-sm font-semibold text-slate-900">
+                                                  {
+                                                    trackingStatus.label
+                                                  }
+                                                </p>
+
+                                                {tracking.message && (
+                                                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                                                    {
+                                                      tracking.message
+                                                    }
+                                                  </p>
+                                                )}
+                                              </div>
+
+                                              <span className="shrink-0 text-[10px] text-slate-400">
+                                                {formatDateTime(
+                                                  tracking.createdAt
+                                                )}
+                                              </span>
+                                            </div>
+
+                                            {tracking.location && (
+                                              <div className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-slate-50 px-2 py-1.5 text-[10px] text-slate-500">
+                                                <MapPin className="h-3 w-3" />
+                                                {
+                                                  tracking.location
+                                                }
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      );
+                                    }
+                                  )}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Dates */}
+
+                            <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-[10px] text-slate-400">
+                              <span className="flex items-center gap-1.5">
+                                <Calendar className="h-3.5 w-3.5" />
+                                Created{" "}
+                                {formatDateTime(
+                                  shipment.createdAt
+                                )}
+                              </span>
+
+                              <span className="flex items-center gap-1.5">
+                                <Clock3 className="h-3.5 w-3.5" />
+                                Updated{" "}
+                                {formatDateTime(
+                                  shipment.updatedAt
+                                )}
+                              </span>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </section>
+        )}
+
+        {/* ===================================================
+            LOADING BOTTOM
+        =================================================== */}
+
+        {loading && (
+          <div className="mt-3 rounded-xl border border-slate-200 bg-white p-12 text-center">
+            <Loader2 className="mx-auto h-6 w-6 animate-spin text-slate-400" />
+
+            <p className="mt-3 text-sm font-medium text-slate-600">
+              Loading dashboard...
+            </p>
+
+            <p className="mt-1 text-xs text-slate-400">
+              Fetching your shipments and account information.
+            </p>
+          </div>
+        )}
+      </div>
+    </main>
+  );
+}
+
+/* =========================================================
+   DETAIL CARD
+========================================================= */
+
+function DetailCard({
+  icon: Icon,
+  label,
+  value,
+  subValue,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  subValue?: string;
+}) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4">
+      <div className="flex items-center gap-2">
+        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-slate-100 text-slate-500">
+          <Icon className="h-3.5 w-3.5" />
         </div>
+
+        <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400">
+          {label}
+        </span>
+      </div>
+
+      <p className="mt-3 line-clamp-2 text-sm font-semibold text-slate-900">
+        {value}
+      </p>
+
+      {subValue && (
+        <p className="mt-1 text-[11px] text-slate-400">
+          {subValue}
+        </p>
       )}
     </div>
   );
 }
+
