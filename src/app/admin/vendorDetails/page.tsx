@@ -64,7 +64,9 @@ export default function VendorsPage() {
       setLoading(true);
 
       const res = await fetch(
-        "https://evolving-tech.onrender.com/api/vendor/getvendor"
+
+               `${process.env.NEXT_PUBLIC_API_URL}/api/vendor/getvendor`
+      
       );
 
       if (!res.ok) {
@@ -113,7 +115,8 @@ export default function VendorsPage() {
       setCreating(true);
 
       const res = await fetch(
-        "https://evolving-tech.onrender.com/api/auth/register",
+               `${process.env.NEXT_PUBLIC_API_URL}/api/auth/register`,
+      
         {
           method: "POST",
           headers: {

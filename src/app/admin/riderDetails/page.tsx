@@ -75,7 +75,8 @@ export default function RidersPage() {
       setLoading(true);
 
       const res = await fetch(
-        "http://localhost:5001/api/rider"
+             `${process.env.NEXT_PUBLIC_API_URL}/api/rider`
+        
       );
 
       if (!res.ok) {
@@ -124,7 +125,7 @@ export default function RidersPage() {
       setCreating(true);
 
       const res = await fetch(
-        "http://localhost:5001/api/rider",
+        `${process.env.NEXT_PUBLIC_API_URL}/api/rider`,
         {
           method: "POST",
           headers: {
