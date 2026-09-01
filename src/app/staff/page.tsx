@@ -178,7 +178,8 @@ export default function StaffOverviewPage() {
           localStorage.getItem("token");
 
         const response = await fetch(
-          "http://localhost:5001/api/vendor/dashboard",
+          `${process.env.NEXT_PUBLIC_API_URL}/api/vendor/dashboard`,
+   
           {
             headers: {
               Authorization: `Bearer ${token}`,

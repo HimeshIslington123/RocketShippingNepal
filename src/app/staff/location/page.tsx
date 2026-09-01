@@ -123,9 +123,9 @@ export default function LocationManagementPage() {
         deliveryTypesResponse,
         ratesResponse,
       ] = await Promise.all([
-        fetch(`${API_URL}/location`),
-        fetch(`${API_URL}/deliveryType`),
-        fetch(`${API_URL}/locationRate`),
+        fetch(`${API_URL}/api/location`),
+        fetch(`${API_URL}/api/deliveryType`),
+        fetch(`${API_URL}/api/locationRate`),
       ]);
 
       if (!locationsResponse.ok) {
