@@ -1,13 +1,77 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+
+// =====================================================
+// TYPES
+// =====================================================
+
+type ReturnStatus =
+  | "REQUESTED"
+  | "ASSIGNED_TO_RIDER"
+  | "PICKED_UP_FROM_CUSTOMER"
+  | "IN_WAREHOUSE"
+  | "OUT_FOR_RETURN"
+  | "RETURNED_TO_VENDOR"
+  | "CANCELLED";
+
+type ReturnReason =
+  | "CUSTOMER_CHANGED_MIND"
+  | "WRONG_PRODUCT"
+  | "DAMAGED_PRODUCT"
+  | "DEFECTIVE_PRODUCT"
+  | "WRONG_SIZE"
+  | "WRONG_COLOR"
+  | "PRODUCT_NOT_AS_DESCRIBED"
+  | "OTHER";
+
+type ReturnRequest = {
+  id: string;
+
+  shipmentId: string;
+
+  status: ReturnStatus;
+
+  reason: ReturnReason;
+
+  description?: string | null;
+
+  riderId?: number | null;
+
+  returnCharge?: number | null;
+
+  requestedAt: string;
+
+  pickedUpAt?: string | null;
+
+  completedAt?: string | null;
+
+  notes?: string | null;
+
+  createdAt: string;
+
+  updatedAt: string;
+
+  rider?: {
+    id: number;
+
+    user?: {
+      name?: string;
+
+      phone?: string;
+    };
+  } | null;
+};
 
 type Shipment = {
   id: string;
+
   trackingNumber: string;
 
   receiverName: string;
+
   receiverPhone: string;
+
   receiverAddress: string;
 
   packageType: string;
@@ -17,10 +81,13 @@ type Shipment = {
   paymentType: "PREPAID" | "COD";
 
   codAmount: number;
+
   shippingCharge: number;
 
   origin: string;
+
   deliveryZone: string;
+
   status: string;
 
   qrCode?: string;
@@ -29,16 +96,20 @@ type Shipment = {
 
   locationRate?: {
     id: number;
+
     price: number;
 
     location?: {
       id: number;
+
       name: string;
+
       zone: string;
     };
 
     deliveryType?: {
       id: number;
+
       name: string;
     };
   };
@@ -48,27 +119,231 @@ type Shipment = {
 
     user?: {
       name: string;
+
       phone?: string;
     };
   };
 
   trackings?: {
     id: string;
+
     status: string;
+
     location?: string;
+
     message?: string;
+
     createdAt: string;
   }[];
+
+  // ===================================================
+  // RETURN REQUEST
+  // ===================================================
+
+  returnRequest?: ReturnRequest | null;
 };
 
+// =====================================================
+// CONSTANTS
+// =====================================================
+
+const RETURN_REASONS: {
+  value: ReturnReason;
+  label: string;
+}[] = [
+  {
+    value: "CUSTOMER_CHANGED_MIND",
+    label: "Customer Changed Mind",
+  },
+  {
+    value: "WRONG_PRODUCT",
+    label: "Wrong Product",
+  },
+  {
+    value: "DAMAGED_PRODUCT",
+    label: "Damaged Product",
+  },
+  {
+    value: "DEFECTIVE_PRODUCT",
+    label: "Defective Product",
+  },
+  {
+    value: "WRONG_SIZE",
+    label: "Wrong Size",
+  },
+  {
+    value: "WRONG_COLOR",
+    label: "Wrong Color",
+  },
+  {
+    value: "PRODUCT_NOT_AS_DESCRIBED",
+    label: "Product Not As Described",
+  },
+  {
+    value: "OTHER",
+    label: "Other",
+  },
+];
+
+// =====================================================
+// STATUS LABEL
+// =====================================================
+
+function formatStatus(status: string) {
+  return status
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (char) =>
+      char.toUpperCase()
+    );
+}
+
+// =====================================================
+// RETURN STATUS LABEL
+// =====================================================
+
+function getReturnStatusLabel(
+  status: ReturnStatus
+) {
+  switch (status) {
+    case "REQUESTED":
+      return "Return Requested";
+
+    case "ASSIGNED_TO_RIDER":
+      return "Rider Assigned";
+
+    case "PICKED_UP_FROM_CUSTOMER":
+      return "Picked Up From Customer";
+
+    case "IN_WAREHOUSE":
+      return "In Warehouse";
+
+    case "OUT_FOR_RETURN":
+      return "Out For Return";
+
+    case "RETURNED_TO_VENDOR":
+      return "Returned To Vendor";
+
+    case "CANCELLED":
+      return "Return Cancelled";
+
+    default:
+      return formatStatus(status);
+  }
+}
+
+// =====================================================
+// RETURN STATUS COLOR
+// =====================================================
+
+function getReturnStatusClass(
+  status: ReturnStatus
+) {
+  switch (status) {
+    case "REQUESTED":
+      return "bg-yellow-50 text-yellow-700";
+
+    case "ASSIGNED_TO_RIDER":
+      return "bg-blue-50 text-blue-700";
+
+    case "PICKED_UP_FROM_CUSTOMER":
+      return "bg-purple-50 text-purple-700";
+
+    case "IN_WAREHOUSE":
+      return "bg-indigo-50 text-indigo-700";
+
+    case "OUT_FOR_RETURN":
+      return "bg-orange-50 text-orange-700";
+
+    case "RETURNED_TO_VENDOR":
+      return "bg-green-50 text-green-700";
+
+    case "CANCELLED":
+      return "bg-red-50 text-red-700";
+
+    default:
+      return "bg-gray-100 text-gray-700";
+  }
+}
+
+// =====================================================
+// SHIPMENT STATUS COLOR
+// =====================================================
+
+function getStatusClass(status: string) {
+  switch (status) {
+    case "CREATED":
+      return "bg-blue-50 text-blue-700";
+
+    case "IN_WAREHOUSE":
+      return "bg-indigo-50 text-indigo-700";
+
+    case "ASSIGNED_TO_RIDER":
+      return "bg-purple-50 text-purple-700";
+
+    case "OUT_FOR_DELIVERY":
+      return "bg-orange-50 text-orange-700";
+
+    case "DELIVERED":
+      return "bg-green-50 text-green-700";
+
+    case "RETURN_REQUESTED":
+      return "bg-yellow-50 text-yellow-700";
+
+    case "RETURN_ASSIGNED_TO_RIDER":
+      return "bg-blue-50 text-blue-700";
+
+    case "RETURN_PICKED_UP_FROM_CUSTOMER":
+      return "bg-purple-50 text-purple-700";
+
+    case "RETURN_IN_WAREHOUSE":
+      return "bg-indigo-50 text-indigo-700";
+
+    case "OUT_FOR_RETURN":
+      return "bg-orange-50 text-orange-700";
+
+    case "RETURNED_TO_VENDOR":
+      return "bg-green-50 text-green-700";
+
+    case "CANCELLED":
+      return "bg-red-50 text-red-700";
+
+    default:
+      return "bg-gray-100 text-gray-700";
+  }
+}
+
+// =====================================================
+// RETURN REASON LABEL
+// =====================================================
+
+function getReturnReasonLabel(
+  reason: ReturnReason
+) {
+  const found = RETURN_REASONS.find(
+    (item) => item.value === reason
+  );
+
+  return found?.label || formatStatus(reason);
+}
+
+// =====================================================
+// MAIN PAGE
+// =====================================================
+
 export default function VendorShipmentsPage() {
-  const [shipments, setShipments] = useState<Shipment[]>([]);
+  const [shipments, setShipments] = useState<
+    Shipment[]
+  >([]);
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] =
+    useState(true);
 
-  const [error, setError] = useState("");
+  const [error, setError] =
+    useState("");
 
-  const [search, setSearch] = useState("");
+  const [search, setSearch] =
+    useState("");
 
   const [statusFilter, setStatusFilter] =
     useState("ALL");
@@ -76,17 +351,53 @@ export default function VendorShipmentsPage() {
   const [selectedShipment, setSelectedShipment] =
     useState<Shipment | null>(null);
 
+  // ===================================================
+  // RETURN MODAL
+  // ===================================================
+
+  const [returnShipment, setReturnShipment] =
+    useState<Shipment | null>(null);
+
+  const [returnReason, setReturnReason] =
+    useState<ReturnReason>(
+      "CUSTOMER_CHANGED_MIND"
+    );
+
+  const [returnDescription, setReturnDescription] =
+    useState("");
+
+  const [returnNotes, setReturnNotes] =
+    useState("");
+
+  const [returnLoading, setReturnLoading] =
+    useState(false);
+
+  const [cancelLoading, setCancelLoading] =
+    useState(false);
+
+  // ===================================================
+  // API URL
+  // ===================================================
+
+  const API_URL =
+    process.env.NEXT_PUBLIC_API_URL;
+
   // =====================================================
-  // LOAD MY SHIPMENTS
+  // LOAD DATA
   // =====================================================
 
   useEffect(() => {
     loadShipments();
   }, []);
 
+  // =====================================================
+  // LOAD SHIPMENTS + RETURNS
+  // =====================================================
+
   async function loadShipments() {
     try {
       setLoading(true);
+
       setError("");
 
       const token =
@@ -100,8 +411,20 @@ export default function VendorShipmentsPage() {
         return;
       }
 
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/shipment/my`,
+      if (!API_URL) {
+        setError(
+          "NEXT_PUBLIC_API_URL is not configured."
+        );
+
+        return;
+      }
+
+      // =================================================
+      // LOAD SHIPMENTS
+      // =================================================
+
+      const shipmentRes = await fetch(
+        `${API_URL}/api/shipment/my`,
         {
           method: "GET",
 
@@ -111,20 +434,100 @@ export default function VendorShipmentsPage() {
         }
       );
 
-      const data = await res.json();
+      const shipmentData =
+        await shipmentRes.json();
 
-      if (!res.ok) {
+      if (!shipmentRes.ok) {
         throw new Error(
-          data.message ||
+          shipmentData.message ||
             "Failed to load shipments"
         );
       }
 
-      setShipments(
-        Array.isArray(data)
-          ? data
-          : data.shipments || []
-      );
+      const shipmentList: Shipment[] =
+        Array.isArray(shipmentData)
+          ? shipmentData
+          : shipmentData.shipments || [];
+
+      // =================================================
+      // LOAD RETURNS
+      // =================================================
+
+      let returnList: ReturnRequest[] = [];
+
+      try {
+        const returnRes = await fetch(
+          `${API_URL}/api/returns/my`,
+          {
+            method: "GET",
+
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        const returnData =
+          await returnRes.json();
+
+        if (returnRes.ok) {
+          returnList = Array.isArray(
+            returnData
+          )
+            ? returnData
+            : returnData.returns || [];
+        }
+      } catch (returnError) {
+        console.error(
+          "LOAD RETURNS ERROR:",
+          returnError
+        );
+      }
+
+      // =================================================
+      // MERGE RETURN INTO SHIPMENT
+      // =================================================
+
+      const returnMap = new Map<
+        string,
+        ReturnRequest
+      >();
+
+      returnList.forEach((returnRequest) => {
+        returnMap.set(
+          returnRequest.shipmentId,
+          returnRequest
+        );
+      });
+
+      const mergedShipments =
+        shipmentList.map((shipment) => ({
+          ...shipment,
+
+          returnRequest:
+            shipment.returnRequest ||
+            returnMap.get(shipment.id) ||
+            null,
+        }));
+
+      setShipments(mergedShipments);
+
+      // =================================================
+      // UPDATE SELECTED SHIPMENT IF OPEN
+      // =================================================
+
+      setSelectedShipment((current) => {
+        if (!current) {
+          return null;
+        }
+
+        return (
+          mergedShipments.find(
+            (shipment) =>
+              shipment.id === current.id
+          ) || null
+        );
+      });
     } catch (error) {
       console.error(
         "LOAD SHIPMENTS ERROR:",
@@ -142,49 +545,233 @@ export default function VendorShipmentsPage() {
   }
 
   // =====================================================
+  // REQUEST RETURN
+  // =====================================================
+
+  async function handleRequestReturn() {
+    if (!returnShipment) {
+      return;
+    }
+
+    try {
+      setReturnLoading(true);
+
+      setError("");
+
+      const token =
+        localStorage.getItem("token");
+
+      if (!token) {
+        throw new Error(
+          "You are not logged in."
+        );
+      }
+
+      if (!API_URL) {
+        throw new Error(
+          "NEXT_PUBLIC_API_URL is not configured."
+        );
+      }
+
+      // =================================================
+      // SAFETY CHECK
+      // =================================================
+
+      if (
+        returnShipment.status !==
+        "DELIVERED"
+      ) {
+        throw new Error(
+          "Only delivered shipments can be returned."
+        );
+      }
+
+      if (returnShipment.returnRequest) {
+        throw new Error(
+          "A return request already exists for this shipment."
+        );
+      }
+
+      // =================================================
+      // CREATE RETURN
+      // =================================================
+
+      const res = await fetch(
+        `${API_URL}/api/returns`,
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+
+            Authorization: `Bearer ${token}`,
+          },
+
+          body: JSON.stringify({
+            shipmentId:
+              returnShipment.id,
+
+            reason: returnReason,
+
+            description:
+              returnDescription.trim() ||
+              null,
+
+            notes:
+              returnNotes.trim() ||
+              null,
+          }),
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(
+          data.message ||
+            "Failed to request return"
+        );
+      }
+
+      // =================================================
+      // CLOSE RETURN MODAL
+      // =================================================
+
+      setReturnShipment(null);
+
+      setReturnReason(
+        "CUSTOMER_CHANGED_MIND"
+      );
+
+      setReturnDescription("");
+
+      setReturnNotes("");
+
+      // =================================================
+      // RELOAD
+      // =================================================
+
+      await loadShipments();
+    } catch (error) {
+      console.error(
+        "REQUEST RETURN ERROR:",
+        error
+      );
+
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Failed to request return"
+      );
+    } finally {
+      setReturnLoading(false);
+    }
+  }
+
+  // =====================================================
+  // CANCEL RETURN
+  // =====================================================
+
+  async function handleCancelReturn(
+    shipment: Shipment
+  ) {
+    const returnRequest =
+      shipment.returnRequest;
+
+    if (!returnRequest) {
+      return;
+    }
+
+    const confirmed =
+      window.confirm(
+        "Are you sure you want to cancel this return request?"
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setCancelLoading(true);
+
+      setError("");
+
+      const token =
+        localStorage.getItem("token");
+
+      if (!token) {
+        throw new Error(
+          "You are not logged in."
+        );
+      }
+
+      if (!API_URL) {
+        throw new Error(
+          "NEXT_PUBLIC_API_URL is not configured."
+        );
+      }
+
+      const res = await fetch(
+        `${API_URL}/api/returns/${returnRequest.id}/cancel`,
+        {
+          method: "PATCH",
+
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(
+          data.message ||
+            "Failed to cancel return"
+        );
+      }
+
+      await loadShipments();
+    } catch (error) {
+      console.error(
+        "CANCEL RETURN ERROR:",
+        error
+      );
+
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Failed to cancel return"
+      );
+    } finally {
+      setCancelLoading(false);
+    }
+  }
+
+  // =====================================================
   // FORMAT DATE
   // =====================================================
 
   function formatDate(date: string) {
+    if (!date) {
+      return "N/A";
+    }
+
     return new Date(date).toLocaleString(
       "en-US",
       {
         year: "numeric",
+
         month: "short",
+
         day: "numeric",
+
         hour: "2-digit",
+
         minute: "2-digit",
       }
     );
-  }
-
-  // =====================================================
-  // STATUS COLOR
-  // =====================================================
-
-  function getStatusClass(status: string) {
-    switch (status) {
-      case "CREATED":
-        return "bg-blue-50 text-blue-700";
-
-      case "RECEIVED":
-        return "bg-indigo-50 text-indigo-700";
-
-      case "PICKED_UP":
-        return "bg-purple-50 text-purple-700";
-
-      case "OUT_FOR_DELIVERY":
-        return "bg-orange-50 text-orange-700";
-
-      case "DELIVERED":
-        return "bg-green-50 text-green-700";
-
-      case "CANCELLED":
-        return "bg-red-50 text-red-700";
-
-      default:
-        return "bg-gray-100 text-gray-700";
-    }
   }
 
   // =====================================================
@@ -192,34 +779,45 @@ export default function VendorShipmentsPage() {
   // =====================================================
 
   const filteredShipments =
-    shipments.filter((shipment) => {
-      const searchText =
-        search.toLowerCase().trim();
+    useMemo(() => {
+      return shipments.filter(
+        (shipment) => {
+          const searchText =
+            search
+              .toLowerCase()
+              .trim();
 
-      const matchesSearch =
-        !searchText ||
-        shipment.trackingNumber
-          .toLowerCase()
-          .includes(searchText) ||
-        shipment.receiverName
-          .toLowerCase()
-          .includes(searchText) ||
-        shipment.receiverPhone
-          .toLowerCase()
-          .includes(searchText) ||
-        shipment.locationRate?.location?.name
-          ?.toLowerCase()
-          .includes(searchText);
+          const matchesSearch =
+            !searchText ||
+            shipment.trackingNumber
+              .toLowerCase()
+              .includes(searchText) ||
+            shipment.receiverName
+              .toLowerCase()
+              .includes(searchText) ||
+            shipment.receiverPhone
+              .toLowerCase()
+              .includes(searchText) ||
+            shipment.locationRate?.location?.name
+              ?.toLowerCase()
+              .includes(searchText);
 
-      const matchesStatus =
-        statusFilter === "ALL" ||
-        shipment.status === statusFilter;
+          const matchesStatus =
+            statusFilter === "ALL" ||
+            shipment.status ===
+              statusFilter;
 
-      return (
-        matchesSearch &&
-        matchesStatus
+          return (
+            matchesSearch &&
+            matchesStatus
+          );
+        }
       );
-    });
+    }, [
+      shipments,
+      search,
+      statusFilter,
+    ]);
 
   // =====================================================
   // STATISTICS
@@ -236,12 +834,42 @@ export default function VendorShipmentsPage() {
   const deliveryCount =
     shipments.filter(
       (s) =>
-        s.status === "OUT_FOR_DELIVERY"
+        s.status ===
+        "OUT_FOR_DELIVERY"
     ).length;
 
   const deliveredCount =
     shipments.filter(
-      (s) => s.status === "DELIVERED"
+      (s) =>
+        s.status === "DELIVERED"
+    ).length;
+
+  const returnRequestedCount =
+    shipments.filter(
+      (s) =>
+        s.returnRequest?.status ===
+        "REQUESTED"
+    ).length;
+
+  const returnInProgressCount =
+    shipments.filter(
+      (s) =>
+        s.returnRequest &&
+        [
+          "ASSIGNED_TO_RIDER",
+          "PICKED_UP_FROM_CUSTOMER",
+          "IN_WAREHOUSE",
+          "OUT_FOR_RETURN",
+        ].includes(
+          s.returnRequest.status
+        )
+    ).length;
+
+  const returnedCount =
+    shipments.filter(
+      (s) =>
+        s.returnRequest?.status ===
+        "RETURNED_TO_VENDOR"
     ).length;
 
   // =====================================================
@@ -279,7 +907,8 @@ export default function VendorShipmentsPage() {
           </h1>
 
           <p className="mt-1 text-sm text-gray-500">
-            View and track all shipments created by you.
+            View, track and manage all shipments
+            created by you.
           </p>
         </div>
 
@@ -296,8 +925,17 @@ export default function VendorShipmentsPage() {
       ================================================= */}
 
       {error && (
-        <div className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
+        <div className="mt-5 flex items-center justify-between gap-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+
+          <span>{error}</span>
+
+          <button
+            onClick={() => setError("")}
+            className="font-bold"
+          >
+            ✕
+          </button>
+
         </div>
       )}
 
@@ -310,6 +948,7 @@ export default function VendorShipmentsPage() {
         {/* TOTAL */}
 
         <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
+
           <p className="text-sm text-gray-500">
             Total Shipments
           </p>
@@ -317,11 +956,13 @@ export default function VendorShipmentsPage() {
           <p className="mt-2 text-3xl font-bold">
             {totalShipments}
           </p>
+
         </div>
 
         {/* CREATED */}
 
         <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
+
           <p className="text-sm text-gray-500">
             Created
           </p>
@@ -329,11 +970,13 @@ export default function VendorShipmentsPage() {
           <p className="mt-2 text-3xl font-bold text-blue-600">
             {createdCount}
           </p>
+
         </div>
 
         {/* OUT FOR DELIVERY */}
 
         <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
+
           <p className="text-sm text-gray-500">
             Out for Delivery
           </p>
@@ -341,11 +984,13 @@ export default function VendorShipmentsPage() {
           <p className="mt-2 text-3xl font-bold text-orange-600">
             {deliveryCount}
           </p>
+
         </div>
 
         {/* DELIVERED */}
 
         <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
+
           <p className="text-sm text-gray-500">
             Delivered
           </p>
@@ -353,6 +998,51 @@ export default function VendorShipmentsPage() {
           <p className="mt-2 text-3xl font-bold text-green-600">
             {deliveredCount}
           </p>
+
+        </div>
+
+      </div>
+
+      {/* =================================================
+          RETURN STATISTICS
+      ================================================= */}
+
+      <div className="mt-4 grid gap-4 sm:grid-cols-3">
+
+        <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
+
+          <p className="text-sm text-gray-500">
+            Return Requests
+          </p>
+
+          <p className="mt-2 text-2xl font-bold text-yellow-600">
+            {returnRequestedCount}
+          </p>
+
+        </div>
+
+        <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
+
+          <p className="text-sm text-gray-500">
+            Returns In Progress
+          </p>
+
+          <p className="mt-2 text-2xl font-bold text-orange-600">
+            {returnInProgressCount}
+          </p>
+
+        </div>
+
+        <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
+
+          <p className="text-sm text-gray-500">
+            Returned To Vendor
+          </p>
+
+          <p className="mt-2 text-2xl font-bold text-green-600">
+            {returnedCount}
+          </p>
+
         </div>
 
       </div>
@@ -373,7 +1063,9 @@ export default function VendorShipmentsPage() {
               type="text"
               value={search}
               onChange={(e) =>
-                setSearch(e.target.value)
+                setSearch(
+                  e.target.value
+                )
               }
               placeholder="Search tracking number, receiver or destination..."
               className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none transition focus:border-accent"
@@ -383,7 +1075,7 @@ export default function VendorShipmentsPage() {
 
           {/* STATUS */}
 
-          <div className="md:w-56">
+          <div className="md:w-64">
 
             <select
               value={statusFilter}
@@ -394,6 +1086,7 @@ export default function VendorShipmentsPage() {
               }
               className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-accent"
             >
+
               <option value="ALL">
                 All Status
               </option>
@@ -402,25 +1095,50 @@ export default function VendorShipmentsPage() {
                 Created
               </option>
 
-              <option value="RECEIVED">
-                Received
+              <option value="IN_WAREHOUSE">
+                In Warehouse
               </option>
 
-              <option value="PICKED_UP">
-                Picked Up
+              <option value="ASSIGNED_TO_RIDER">
+                Assigned To Rider
               </option>
 
               <option value="OUT_FOR_DELIVERY">
-                Out for Delivery
+                Out For Delivery
               </option>
 
               <option value="DELIVERED">
                 Delivered
               </option>
 
+              <option value="RETURN_REQUESTED">
+                Return Requested
+              </option>
+
+              <option value="RETURN_ASSIGNED_TO_RIDER">
+                Return Rider Assigned
+              </option>
+
+              <option value="RETURN_PICKED_UP_FROM_CUSTOMER">
+                Return Picked Up
+              </option>
+
+              <option value="RETURN_IN_WAREHOUSE">
+                Return In Warehouse
+              </option>
+
+              <option value="OUT_FOR_RETURN">
+                Out For Return
+              </option>
+
+              <option value="RETURNED_TO_VENDOR">
+                Returned To Vendor
+              </option>
+
               <option value="CANCELLED">
                 Cancelled
               </option>
+
             </select>
 
           </div>
@@ -485,7 +1203,8 @@ export default function VendorShipmentsPage() {
 
             <tbody className="divide-y">
 
-              {filteredShipments.length === 0 ? (
+              {filteredShipments.length ===
+              0 ? (
 
                 <tr>
 
@@ -493,13 +1212,16 @@ export default function VendorShipmentsPage() {
                     colSpan={9}
                     className="px-5 py-16 text-center"
                   >
+
                     <div className="text-sm font-medium text-gray-700">
                       No shipments found
                     </div>
 
                     <p className="mt-1 text-sm text-gray-500">
-                      Try changing your search or filter.
+                      Try changing your
+                      search or filter.
                     </p>
+
                   </td>
 
                 </tr>
@@ -519,7 +1241,9 @@ export default function VendorShipmentsPage() {
                       <td className="px-5 py-4">
 
                         <div className="font-semibold">
-                          {shipment.trackingNumber}
+                          {
+                            shipment.trackingNumber
+                          }
                         </div>
 
                         <div className="mt-1 text-xs text-gray-500">
@@ -528,6 +1252,29 @@ export default function VendorShipmentsPage() {
                           )}
                         </div>
 
+                        {/* RETURN BADGE */}
+
+                        {shipment.returnRequest && (
+                          <div className="mt-2">
+
+                            <span
+                              className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${getReturnStatusClass(
+                                shipment
+                                  .returnRequest
+                                  .status
+                              )}`}
+                            >
+                              Return:{" "}
+                              {getReturnStatusLabel(
+                                shipment
+                                  .returnRequest
+                                  .status
+                              )}
+                            </span>
+
+                          </div>
+                        )}
+
                       </td>
 
                       {/* RECEIVER */}
@@ -535,11 +1282,15 @@ export default function VendorShipmentsPage() {
                       <td className="px-5 py-4">
 
                         <div className="font-medium">
-                          {shipment.receiverName}
+                          {
+                            shipment.receiverName
+                          }
                         </div>
 
                         <div className="mt-1 text-xs text-gray-500">
-                          {shipment.receiverPhone}
+                          {
+                            shipment.receiverPhone
+                          }
                         </div>
 
                       </td>
@@ -551,7 +1302,8 @@ export default function VendorShipmentsPage() {
                         <div className="font-medium">
                           {
                             shipment.locationRate
-                              ?.location?.name ||
+                              ?.location
+                              ?.name ||
                             "N/A"
                           }
                         </div>
@@ -559,22 +1311,25 @@ export default function VendorShipmentsPage() {
                         <div className="mt-1 text-xs text-gray-500">
                           {
                             shipment.deliveryZone ||
-                            shipment.locationRate
-                              ?.location?.zone ||
+                            shipment
+                              .locationRate
+                              ?.location
+                              ?.zone ||
                             ""
                           }
                         </div>
 
                       </td>
 
-                      {/* DELIVERY TYPE */}
+                      {/* DELIVERY */}
 
                       <td className="px-5 py-4">
 
                         <span className="rounded-lg bg-gray-100 px-2.5 py-1 text-xs font-medium">
                           {
                             shipment.locationRate
-                              ?.deliveryType?.name ||
+                              ?.deliveryType
+                              ?.name ||
                             "N/A"
                           }
                         </span>
@@ -585,7 +1340,10 @@ export default function VendorShipmentsPage() {
 
                       <td className="px-5 py-4">
 
-                        {shipment.weight} kg
+                        {
+                          shipment.weight
+                        }{" "}
+                        kg
 
                       </td>
 
@@ -634,9 +1392,8 @@ export default function VendorShipmentsPage() {
                             shipment.status
                           )}`}
                         >
-                          {shipment.status.replace(
-                            /_/g,
-                            " "
+                          {formatStatus(
+                            shipment.status
                           )}
                         </span>
 
@@ -646,16 +1403,37 @@ export default function VendorShipmentsPage() {
 
                       <td className="px-5 py-4">
 
-                        <button
-                          onClick={() =>
-                            setSelectedShipment(
-                              shipment
-                            )
-                          }
-                          className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold transition hover:bg-gray-50"
-                        >
-                          View
-                        </button>
+                        <div className="flex flex-col gap-2">
+
+                          <button
+                            onClick={() =>
+                              setSelectedShipment(
+                                shipment
+                              )
+                            }
+                            className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold transition hover:bg-gray-50"
+                          >
+                            View
+                          </button>
+
+                          {/* RETURN BUTTON */}
+
+                          {shipment.status ===
+                            "DELIVERED" &&
+                            !shipment.returnRequest && (
+                              <button
+                                onClick={() =>
+                                  setReturnShipment(
+                                    shipment
+                                  )
+                                }
+                                className="rounded-lg bg-orange-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-orange-600"
+                              >
+                                Request Return
+                              </button>
+                            )}
+
+                        </div>
 
                       </td>
 
@@ -680,7 +1458,8 @@ export default function VendorShipmentsPage() {
 
       <div className="mt-6 space-y-4 lg:hidden">
 
-        {filteredShipments.length === 0 ? (
+        {filteredShipments.length ===
+        0 ? (
 
           <div className="rounded-2xl bg-white p-10 text-center shadow-sm ring-1 ring-black/5">
 
@@ -700,12 +1479,16 @@ export default function VendorShipmentsPage() {
                 className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5"
               >
 
+                {/* HEADER */}
+
                 <div className="flex items-start justify-between gap-3">
 
                   <div>
 
                     <p className="font-bold">
-                      {shipment.trackingNumber}
+                      {
+                        shipment.trackingNumber
+                      }
                     </p>
 
                     <p className="mt-1 text-xs text-gray-500">
@@ -721,27 +1504,71 @@ export default function VendorShipmentsPage() {
                       shipment.status
                     )}`}
                   >
-                    {shipment.status.replace(
-                      /_/g,
-                      " "
+                    {formatStatus(
+                      shipment.status
                     )}
                   </span>
 
                 </div>
 
+                {/* RETURN STATUS */}
+
+                {shipment.returnRequest && (
+                  <div className="mt-4 rounded-xl border border-orange-100 bg-orange-50 p-3">
+
+                    <div className="flex items-center justify-between gap-3">
+
+                      <div>
+
+                        <p className="text-xs font-medium text-orange-700">
+                          Return Status
+                        </p>
+
+                        <p className="mt-1 text-sm font-bold text-orange-800">
+                          {getReturnStatusLabel(
+                            shipment
+                              .returnRequest
+                              .status
+                          )}
+                        </p>
+
+                      </div>
+
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${getReturnStatusClass(
+                          shipment
+                            .returnRequest
+                            .status
+                        )}`}
+                      >
+                        Return
+                      </span>
+
+                    </div>
+
+                  </div>
+                )}
+
+                {/* DETAILS */}
+
                 <div className="mt-5 grid grid-cols-2 gap-4">
 
                   <div>
+
                     <p className="text-xs text-gray-500">
                       Receiver
                     </p>
 
                     <p className="mt-1 text-sm font-medium">
-                      {shipment.receiverName}
+                      {
+                        shipment.receiverName
+                      }
                     </p>
+
                   </div>
 
                   <div>
+
                     <p className="text-xs text-gray-500">
                       Destination
                     </p>
@@ -749,13 +1576,16 @@ export default function VendorShipmentsPage() {
                     <p className="mt-1 text-sm font-medium">
                       {
                         shipment.locationRate
-                          ?.location?.name ||
+                          ?.location
+                          ?.name ||
                         "N/A"
                       }
                     </p>
+
                   </div>
 
                   <div>
+
                     <p className="text-xs text-gray-500">
                       Delivery
                     </p>
@@ -763,23 +1593,31 @@ export default function VendorShipmentsPage() {
                     <p className="mt-1 text-sm font-medium">
                       {
                         shipment.locationRate
-                          ?.deliveryType?.name ||
+                          ?.deliveryType
+                          ?.name ||
                         "N/A"
                       }
                     </p>
+
                   </div>
 
                   <div>
+
                     <p className="text-xs text-gray-500">
                       Weight
                     </p>
 
                     <p className="mt-1 text-sm font-medium">
-                      {shipment.weight} kg
+                      {
+                        shipment.weight
+                      }{" "}
+                      kg
                     </p>
+
                   </div>
 
                   <div>
+
                     <p className="text-xs text-gray-500">
                       Shipping Charge
                     </p>
@@ -790,9 +1628,11 @@ export default function VendorShipmentsPage() {
                         shipment.shippingCharge
                       ).toLocaleString()}
                     </p>
+
                   </div>
 
                   <div>
+
                     <p className="text-xs text-gray-500">
                       Payment
                     </p>
@@ -805,20 +1645,42 @@ export default function VendorShipmentsPage() {
                           ).toLocaleString()}`
                         : "Prepaid"}
                     </p>
+
                   </div>
 
                 </div>
 
-                <button
-                  onClick={() =>
-                    setSelectedShipment(
-                      shipment
-                    )
-                  }
-                  className="mt-5 w-full rounded-xl border border-gray-200 px-4 py-3 text-sm font-semibold transition hover:bg-gray-50"
-                >
-                  View Shipment
-                </button>
+                {/* BUTTONS */}
+
+                <div className="mt-5 grid gap-2">
+
+                  <button
+                    onClick={() =>
+                      setSelectedShipment(
+                        shipment
+                      )
+                    }
+                    className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm font-semibold transition hover:bg-gray-50"
+                  >
+                    View Shipment
+                  </button>
+
+                  {shipment.status ===
+                    "DELIVERED" &&
+                    !shipment.returnRequest && (
+                      <button
+                        onClick={() =>
+                          setReturnShipment(
+                            shipment
+                          )
+                        }
+                        className="w-full rounded-xl bg-orange-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-orange-600"
+                      >
+                        Request Return
+                      </button>
+                    )}
+
+                </div>
 
               </div>
 
@@ -860,16 +1722,21 @@ export default function VendorShipmentsPage() {
                 </h2>
 
                 <p className="mt-1 text-sm text-gray-500">
-                  {
-                    selectedShipment.trackingNumber
-                  }
+                  Tracking Number:{" "}
+                  <span className="font-semibold text-gray-700">
+                    {
+                      selectedShipment.trackingNumber
+                    }
+                  </span>
                 </p>
 
               </div>
 
               <button
                 onClick={() =>
-                  setSelectedShipment(null)
+                  setSelectedShipment(
+                    null
+                  )
                 }
                 className="rounded-lg px-3 py-2 text-gray-500 hover:bg-gray-100"
               >
@@ -882,39 +1749,273 @@ export default function VendorShipmentsPage() {
 
             <div className="space-y-6 p-6">
 
-              {/* STATUS */}
+              {/* =========================================
+                  CURRENT STATUS
+              ========================================= */}
 
-              <div className="flex items-center justify-between rounded-xl bg-gray-50 p-4">
+              <div className="rounded-xl bg-gray-50 p-4">
 
-                <div>
+                <div className="flex items-center justify-between gap-4">
 
-                  <p className="text-xs text-gray-500">
-                    Current Status
-                  </p>
+                  <div>
 
-                  <p className="mt-1 font-semibold">
-                    {selectedShipment.status.replace(
-                      /_/g,
-                      " "
+                    <p className="text-xs text-gray-500">
+                      Current Shipment Status
+                    </p>
+
+                    <p className="mt-1 font-semibold">
+                      {formatStatus(
+                        selectedShipment.status
+                      )}
+                    </p>
+
+                  </div>
+
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(
+                      selectedShipment.status
+                    )}`}
+                  >
+                    {formatStatus(
+                      selectedShipment.status
                     )}
-                  </p>
+                  </span>
 
                 </div>
 
-                <span
-                  className={`rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(
-                    selectedShipment.status
-                  )}`}
-                >
-                  {selectedShipment.status.replace(
-                    /_/g,
-                    " "
-                  )}
-                </span>
-
               </div>
 
-              {/* RECEIVER */}
+              {/* =========================================
+                  RETURN STATUS
+              ========================================= */}
+
+              {selectedShipment.returnRequest && (
+
+                <div className="rounded-2xl border border-orange-200 bg-orange-50 p-5">
+
+                  <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+
+                    <div>
+
+                      <p className="text-xs font-semibold uppercase tracking-wide text-orange-600">
+                        Return Process
+                      </p>
+
+                      <h3 className="mt-1 text-lg font-bold text-orange-900">
+                        {
+                          getReturnStatusLabel(
+                            selectedShipment
+                              .returnRequest
+                              .status
+                          )
+                        }
+                      </h3>
+
+                    </div>
+
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-semibold ${getReturnStatusClass(
+                        selectedShipment
+                          .returnRequest
+                          .status
+                      )}`}
+                    >
+                      {
+                        selectedShipment
+                          .returnRequest
+                          .status
+                      }
+                    </span>
+
+                  </div>
+
+                  {/* SAME TRACKING NUMBER */}
+
+                  <div className="mt-5 rounded-xl bg-white p-4">
+
+                    <p className="text-xs text-gray-500">
+                      Shipment Tracking Number
+                    </p>
+
+                    <p className="mt-1 text-lg font-bold">
+                      {
+                        selectedShipment
+                          .trackingNumber
+                      }
+                    </p>
+
+                    <p className="mt-1 text-xs text-gray-500">
+                      The return uses the same
+                      original shipment tracking
+                      number.
+                    </p>
+
+                  </div>
+
+                  {/* RETURN DETAILS */}
+
+                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
+
+                    <Info
+                      label="Return Reason"
+                      value={getReturnReasonLabel(
+                        selectedShipment
+                          .returnRequest
+                          .reason
+                      )}
+                    />
+
+                    <Info
+                      label="Requested At"
+                      value={formatDate(
+                        selectedShipment
+                          .returnRequest
+                          .requestedAt
+                      )}
+                    />
+
+                    {selectedShipment
+                      .returnRequest
+                      .pickedUpAt && (
+                      <Info
+                        label="Picked Up At"
+                        value={formatDate(
+                          selectedShipment
+                            .returnRequest
+                            .pickedUpAt
+                        )}
+                      />
+                    )}
+
+                    {selectedShipment
+                      .returnRequest
+                      .completedAt && (
+                      <Info
+                        label="Completed At"
+                        value={formatDate(
+                          selectedShipment
+                            .returnRequest
+                            .completedAt
+                        )}
+                      />
+                    )}
+
+                  </div>
+
+                  {/* DESCRIPTION */}
+
+                  {selectedShipment
+                    .returnRequest
+                    .description && (
+
+                    <div className="mt-4">
+
+                      <p className="text-xs text-gray-500">
+                        Description
+                      </p>
+
+                      <p className="mt-1 rounded-xl bg-white p-3 text-sm text-gray-700">
+                        {
+                          selectedShipment
+                            .returnRequest
+                            .description
+                        }
+                      </p>
+
+                    </div>
+
+                  )}
+
+                  {/* RIDER */}
+
+                  <div className="mt-4">
+
+                    <p className="text-xs text-gray-500">
+                      Return Rider
+                    </p>
+
+                    {selectedShipment
+                      .returnRequest
+                      .rider ? (
+
+                      <div className="mt-2 rounded-xl bg-white p-4">
+
+                        <p className="font-semibold">
+                          {
+                            selectedShipment
+                              .returnRequest
+                              .rider
+                              .user
+                              ?.name ||
+                            "Rider"
+                          }
+                        </p>
+
+                        {selectedShipment
+                          .returnRequest
+                          .rider
+                          .user
+                          ?.phone && (
+
+                          <p className="mt-1 text-sm text-gray-500">
+                            {
+                              selectedShipment
+                                .returnRequest
+                                .rider
+                                .user
+                                .phone
+                            }
+                          </p>
+
+                        )}
+
+                      </div>
+
+                    ) : (
+
+                      <div className="mt-2 rounded-xl bg-white p-4 text-sm text-gray-500">
+                        Staff/Admin has not assigned
+                        a return rider yet.
+                      </div>
+
+                    )}
+
+                  </div>
+
+                  {/* CANCEL */}
+
+                  {[
+                    "REQUESTED",
+                    "ASSIGNED_TO_RIDER",
+                  ].includes(
+                    selectedShipment
+                      .returnRequest
+                      .status
+                  ) && (
+
+                    <button
+                      onClick={() =>
+                        handleCancelReturn(
+                          selectedShipment
+                        )
+                      }
+                      disabled={cancelLoading}
+                      className="mt-4 rounded-xl border border-red-200 bg-white px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {cancelLoading
+                        ? "Cancelling..."
+                        : "Cancel Return"}
+                    </button>
+
+                  )}
+
+                </div>
+
+              )}
+
+              {/* =========================================
+                  RECEIVER
+              ========================================= */}
 
               <div>
 
@@ -939,19 +2040,23 @@ export default function VendorShipmentsPage() {
                   />
 
                   <div className="sm:col-span-2">
+
                     <Info
                       label="Address"
                       value={
                         selectedShipment.receiverAddress
                       }
                     />
+
                   </div>
 
                 </div>
 
               </div>
 
-              {/* DELIVERY */}
+              {/* =========================================
+                  DELIVERY
+              ========================================= */}
 
               <div>
 
@@ -1017,7 +2122,9 @@ export default function VendorShipmentsPage() {
 
               </div>
 
-              {/* PAYMENT */}
+              {/* =========================================
+                  PAYMENT
+              ========================================= */}
 
               <div>
 
@@ -1039,24 +2146,28 @@ export default function VendorShipmentsPage() {
 
                   {selectedShipment.paymentType ===
                     "COD" && (
+
                     <Info
                       label="COD Amount"
                       value={`Rs. ${Number(
                         selectedShipment.codAmount
                       ).toLocaleString()}`}
                     />
+
                   )}
 
                 </div>
 
               </div>
 
-              {/* RIDER */}
+              {/* =========================================
+                  ORIGINAL RIDER
+              ========================================= */}
 
               <div>
 
                 <h3 className="mb-3 font-semibold">
-                  Rider
+                  Original Delivery Rider
                 </h3>
 
                 {selectedShipment.rider ? (
@@ -1065,20 +2176,25 @@ export default function VendorShipmentsPage() {
 
                     <p className="font-medium">
                       {
-                        selectedShipment.rider
+                        selectedShipment
+                          .rider
                           .user?.name ||
                         "Rider"
                       }
                     </p>
 
-                    {selectedShipment.rider
+                    {selectedShipment
+                      .rider
                       .user?.phone && (
+
                       <p className="mt-1 text-sm text-gray-500">
                         {
-                          selectedShipment.rider
+                          selectedShipment
+                            .rider
                             .user.phone
                         }
                       </p>
+
                     )}
 
                   </div>
@@ -1086,20 +2202,37 @@ export default function VendorShipmentsPage() {
                 ) : (
 
                   <div className="rounded-xl bg-gray-50 p-4 text-sm text-gray-500">
-                    Rider has not been assigned yet.
+                    Rider has not been assigned
+                    yet.
                   </div>
 
                 )}
 
               </div>
 
-              {/* TRACKING */}
+              {/* =========================================
+                  TRACKING
+              ========================================= */}
 
               <div>
 
-                <h3 className="mb-3 font-semibold">
-                  Tracking History
-                </h3>
+                <div className="mb-3 flex items-center justify-between">
+
+                  <h3 className="font-semibold">
+                    Tracking History
+                  </h3>
+
+                  {selectedShipment
+                    .returnRequest && (
+
+                    <span className="text-xs font-medium text-orange-600">
+                      Return updates use the
+                      same tracking number
+                    </span>
+
+                  )}
+
+                </div>
 
                 {selectedShipment.trackings &&
                 selectedShipment.trackings.length >
@@ -1115,23 +2248,47 @@ export default function VendorShipmentsPage() {
                           className="relative border-l-2 border-gray-200 pl-4"
                         >
 
-                          <div className="font-medium">
-                            {tracking.status.replace(
-                              /_/g,
-                              " "
-                            )}
+                          <div className="flex flex-wrap items-center gap-2">
+
+                            <div className="font-medium">
+                              {formatStatus(
+                                tracking.status
+                              )}
+                            </div>
+
+                            {tracking.status
+                              .startsWith(
+                                "RETURN"
+                              ) ||
+                              tracking.status ===
+                                "OUT_FOR_RETURN" ? (
+
+                              <span className="rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-semibold text-orange-700">
+                                RETURN
+                              </span>
+
+                            ) : null}
+
                           </div>
 
                           {tracking.location && (
+
                             <div className="mt-1 text-sm text-gray-500">
-                              {tracking.location}
+                              {
+                                tracking.location
+                              }
                             </div>
+
                           )}
 
                           {tracking.message && (
+
                             <div className="mt-1 text-sm text-gray-600">
-                              {tracking.message}
+                              {
+                                tracking.message
+                              }
                             </div>
+
                           )}
 
                           <div className="mt-1 text-xs text-gray-400">
@@ -1157,7 +2314,9 @@ export default function VendorShipmentsPage() {
 
               </div>
 
-              {/* QR */}
+              {/* =========================================
+                  QR
+              ========================================= */}
 
               {selectedShipment.qrCode && (
 
@@ -1175,6 +2334,13 @@ export default function VendorShipmentsPage() {
                     className="mx-auto h-40 w-40 object-contain"
                   />
 
+                  <p className="mt-3 text-xs text-gray-500">
+                    Tracking Number:{" "}
+                    {
+                      selectedShipment.trackingNumber
+                    }
+                  </p>
+
                 </div>
 
               )}
@@ -1187,7 +2353,9 @@ export default function VendorShipmentsPage() {
 
               <button
                 onClick={() =>
-                  setSelectedShipment(null)
+                  setSelectedShipment(
+                    null
+                  )
                 }
                 className="w-full rounded-xl bg-accent px-5 py-3 font-semibold text-white transition hover:bg-accent-dark"
               >
@@ -1202,10 +2370,267 @@ export default function VendorShipmentsPage() {
 
       )}
 
+      {/* =================================================
+          REQUEST RETURN MODAL
+      ================================================= */}
+
+      {returnShipment && (
+
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          onClick={() =>
+            !returnLoading &&
+            setReturnShipment(null)
+          }
+        >
+
+          <div
+            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white shadow-2xl"
+            onClick={(e) =>
+              e.stopPropagation()
+            }
+          >
+
+            {/* HEADER */}
+
+            <div className="flex items-center justify-between border-b px-6 py-5">
+
+              <div>
+
+                <h2 className="text-lg font-bold">
+                  Request Shipment Return
+                </h2>
+
+                <p className="mt-1 text-sm text-gray-500">
+                  {
+                    returnShipment.trackingNumber
+                  }
+                </p>
+
+              </div>
+
+              <button
+                disabled={returnLoading}
+                onClick={() =>
+                  setReturnShipment(null)
+                }
+                className="rounded-lg px-3 py-2 text-gray-500 hover:bg-gray-100 disabled:opacity-50"
+              >
+                ✕
+              </button>
+
+            </div>
+
+            {/* BODY */}
+
+            <div className="space-y-5 p-6">
+
+              {/* INFO */}
+
+              <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
+
+                <p className="text-sm font-semibold text-blue-800">
+                  Return information
+                </p>
+
+                <p className="mt-1 text-xs leading-5 text-blue-700">
+                  The return will be collected
+                  from the customer, brought to
+                  the warehouse, and then sent
+                  back to you.
+                </p>
+
+              </div>
+
+              {/* TRACKING */}
+
+              <div className="rounded-xl bg-gray-50 p-4">
+
+                <p className="text-xs text-gray-500">
+                  Original Shipment Tracking
+                </p>
+
+                <p className="mt-1 text-lg font-bold">
+                  {
+                    returnShipment.trackingNumber
+                  }
+                </p>
+
+                <p className="mt-1 text-xs text-gray-500">
+                  This same tracking number will
+                  be used throughout the return.
+                </p>
+
+              </div>
+
+              {/* RECEIVER */}
+
+              <div className="grid grid-cols-2 gap-4">
+
+                <Info
+                  label="Customer"
+                  value={
+                    returnShipment.receiverName
+                  }
+                />
+
+                <Info
+                  label="Phone"
+                  value={
+                    returnShipment.receiverPhone
+                  }
+                />
+
+              </div>
+
+              <div>
+
+                <Info
+                  label="Pickup Address"
+                  value={
+                    returnShipment.receiverAddress
+                  }
+                />
+
+              </div>
+
+              {/* REASON */}
+
+              <div>
+
+                <label className="text-sm font-semibold text-gray-700">
+                  Return Reason
+                </label>
+
+                <select
+                  value={returnReason}
+                  onChange={(e) =>
+                    setReturnReason(
+                      e.target
+                        .value as ReturnReason
+                    )
+                  }
+                  disabled={returnLoading}
+                  className="mt-2 w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-accent"
+                >
+
+                  {RETURN_REASONS.map(
+                    (reason) => (
+
+                      <option
+                        key={reason.value}
+                        value={reason.value}
+                      >
+                        {reason.label}
+                      </option>
+
+                    )
+                  )}
+
+                </select>
+
+              </div>
+
+              {/* DESCRIPTION */}
+
+              <div>
+
+                <label className="text-sm font-semibold text-gray-700">
+                  Description
+                </label>
+
+                <textarea
+                  value={returnDescription}
+                  onChange={(e) =>
+                    setReturnDescription(
+                      e.target.value
+                    )
+                  }
+                  disabled={returnLoading}
+                  rows={4}
+                  placeholder="Explain why the shipment needs to be returned..."
+                  className="mt-2 w-full resize-none rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-accent"
+                />
+
+              </div>
+
+              {/* NOTES */}
+
+              <div>
+
+                <label className="text-sm font-semibold text-gray-700">
+                  Additional Notes
+                </label>
+
+                <textarea
+                  value={returnNotes}
+                  onChange={(e) =>
+                    setReturnNotes(
+                      e.target.value
+                    )
+                  }
+                  disabled={returnLoading}
+                  rows={3}
+                  placeholder="Any additional instructions for staff/rider..."
+                  className="mt-2 w-full resize-none rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-accent"
+                />
+
+              </div>
+
+              {/* WARNING */}
+
+              <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-4">
+
+                <p className="text-xs leading-5 text-yellow-800">
+                  After submitting, staff/admin
+                  will review the return and
+                  assign a rider. The rider will
+                  collect the package from the
+                  customer and return it to your
+                  company.
+                </p>
+
+              </div>
+
+            </div>
+
+            {/* FOOTER */}
+
+            <div className="flex gap-3 border-t px-6 py-4">
+
+              <button
+                disabled={returnLoading}
+                onClick={() =>
+                  setReturnShipment(null)
+                }
+                className="flex-1 rounded-xl border border-gray-200 px-4 py-3 text-sm font-semibold transition hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+
+              <button
+                disabled={returnLoading}
+                onClick={
+                  handleRequestReturn
+                }
+                className="flex-1 rounded-xl bg-orange-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {returnLoading
+                  ? "Submitting..."
+                  : "Request Return"}
+              </button>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      )}
+
     </div>
   );
 }
-
 
 // =====================================================
 // INFO COMPONENT
@@ -1220,13 +2645,15 @@ function Info({
 }) {
   return (
     <div>
+
       <p className="text-xs text-gray-500">
         {label}
       </p>
 
       <p className="mt-1 text-sm font-medium">
-        {value}
+        {value || "N/A"}
       </p>
+
     </div>
   );
 }

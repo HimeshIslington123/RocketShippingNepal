@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -27,7 +26,13 @@ type ShipmentStatus =
   | "OUT_FOR_DELIVERY"
   | "DELIVERED"
   | "RETURNED"
-  | "CANCELLED";
+  | "CANCELLED"
+  | "RETURN_REQUESTED"
+  | "RETURN_ASSIGNED_TO_RIDER"
+  | "RETURN_PICKED_UP_FROM_CUSTOMER"
+  | "RETURN_IN_WAREHOUSE"
+  | "OUT_FOR_RETURN"
+  | "RETURNED_TO_VENDOR";
 
 interface Shipment {
   id: string;
@@ -95,6 +100,10 @@ const STATUS_STYLES: Record<
     dot: string;
   }
 > = {
+  // ====================================================
+  // NORMAL SHIPMENT STATUSES
+  // ====================================================
+
   CREATED: {
     label: "Created",
     className: "bg-blue-50 text-blue-600",
@@ -136,6 +145,56 @@ const STATUS_STYLES: Record<
     className: "bg-gray-100 text-gray-600",
     dot: "bg-gray-500",
   },
+
+  // ====================================================
+  // RETURN WORKFLOW
+  // ====================================================
+
+  RETURN_REQUESTED: {
+    label: "Return Requested",
+    className: "bg-pink-50 text-pink-600",
+    dot: "bg-pink-500",
+  },
+
+  RETURN_ASSIGNED_TO_RIDER: {
+    label: "Return Assigned to Rider",
+    className: "bg-indigo-50 text-indigo-600",
+    dot: "bg-indigo-500",
+  },
+
+  RETURN_PICKED_UP_FROM_CUSTOMER: {
+    label: "Return Picked Up",
+    className: "bg-cyan-50 text-cyan-600",
+    dot: "bg-cyan-500",
+  },
+
+  RETURN_IN_WAREHOUSE: {
+    label: "Return In Warehouse",
+    className: "bg-amber-50 text-amber-600",
+    dot: "bg-amber-500",
+  },
+
+  OUT_FOR_RETURN: {
+    label: "Out for Return",
+    className: "bg-orange-50 text-orange-600",
+    dot: "bg-orange-500",
+  },
+
+  RETURNED_TO_VENDOR: {
+    label: "Returned to Vendor",
+    className: "bg-emerald-50 text-emerald-600",
+    dot: "bg-emerald-500",
+  },
+};
+
+// ======================================================
+// FALLBACK STATUS
+// ======================================================
+
+const FALLBACK_STATUS = {
+  label: "Unknown",
+  className: "bg-gray-100 text-gray-600",
+  dot: "bg-gray-500",
 };
 
 // ======================================================
@@ -143,11 +202,28 @@ const STATUS_STYLES: Record<
 // ======================================================
 
 function formatDate(date: string) {
-  return new Date(date).toLocaleDateString("en-US", {
+  if (!date) return "-";
+
+  const parsedDate = new Date(date);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "-";
+  }
+
+  return parsedDate.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
   });
+}
+
+function getStatusStyle(status: string) {
+  return (
+    STATUS_STYLES[status as ShipmentStatus] || {
+      ...FALLBACK_STATUS,
+      label: status || "Unknown",
+    }
+  );
 }
 
 // ======================================================
@@ -179,7 +255,6 @@ export default function StaffOverviewPage() {
 
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/api/vendor/dashboard`,
-   
           {
             headers: {
               Authorization: `Bearer ${token}`,
@@ -558,9 +633,7 @@ export default function StaffOverviewPage() {
               .map((shipment) => {
 
                 const status =
-                  STATUS_STYLES[
-                    shipment.status
-                  ];
+                  getStatusStyle(shipment.status);
 
                 return (
                   <div
@@ -728,9 +801,7 @@ export default function StaffOverviewPage() {
                   .map((shipment) => {
 
                     const status =
-                      STATUS_STYLES[
-                        shipment.status
-                      ];
+                      getStatusStyle(shipment.status);
 
                     return (
                       <tr
@@ -824,18 +895,7 @@ export default function StaffOverviewPage() {
 
                         {/* ACTION */}
 
-                        <td className="py-4">
-
-                          <button
-                            type="button"
-                            className="flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-white transition hover:bg-accent-dark"
-                          >
-                            View
-
-                            <ChevronRight className="h-4 w-4" />
-                          </button>
-
-                        </td>
+                      
 
                       </tr>
                     );
@@ -854,4 +914,3 @@ export default function StaffOverviewPage() {
     </div>
   );
 }
-

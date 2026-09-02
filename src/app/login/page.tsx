@@ -70,6 +70,7 @@ export default function LoginPage() {
 
       // Save JWT token
       localStorage.setItem("token", data.token);
+      localStorage.setItem("role", data.role);
 
       // Get role from backend response
       const role = data.role;
