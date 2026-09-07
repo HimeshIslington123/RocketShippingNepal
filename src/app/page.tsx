@@ -6,12 +6,13 @@ import Footer from "@/components/Footer";
 import HeroSection from "@/components/HeroSection";
 import WhyChooseUs from "@/components/whyto";
 import Testimonials from "@/components/Text";
+import ShipmentTracking from "@/components/shippinghome";
 export default function Home() {
   return (
     <>
       <Navbar />
       <main>
-        <Hero />
+<ShipmentTracking></ShipmentTracking>
         <Partners />
 
         <About />
