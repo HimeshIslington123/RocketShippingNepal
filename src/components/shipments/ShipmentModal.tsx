@@ -14,9 +14,7 @@ type ShipmentModalProps = {
 
   statusError: string;
 
-  onUpdateStatus: (
-    newStatus: string
-  ) => void;
+  onUpdateStatus: (newStatus: string) => void;
 
   riders: Rider[];
 
@@ -24,9 +22,7 @@ type ShipmentModalProps = {
 
   selectedRiderId: string;
 
-  setSelectedRiderId: (
-    value: string
-  ) => void;
+  setSelectedRiderId: (value: string) => void;
 
   assigningRider: boolean;
 
@@ -38,6 +34,10 @@ type ShipmentModalProps = {
 
   onPrint: (shipment: Shipment) => void;
 };
+
+/* =========================================================
+   STATUS FLOW
+========================================================= */
 
 const STATUS_FLOW = [
   "CREATED",
@@ -54,6 +54,10 @@ const STEPS = [
   "OUT_FOR_DELIVERY",
   "DELIVERED",
 ];
+
+/* =========================================================
+   STATUS STYLES
+========================================================= */
 
 const STATUS_STYLES: Record<string, string> = {
   CREATED:
@@ -78,21 +82,37 @@ const STATUS_STYLES: Record<string, string> = {
     "bg-red-50 text-red-700 ring-red-600/20",
 };
 
-function formatDate(iso?: string) {
-  if (!iso) return "—";
+/* =========================================================
+   HELPERS
+========================================================= */
 
-  return new Date(iso).toLocaleString("en-US", {
+function formatDate(iso?: string | null) {
+  if (!iso) {
+    return "—";
+  }
+
+  const date = new Date(iso);
+
+  if (Number.isNaN(date.getTime())) {
+    return "—";
+  }
+
+  return date.toLocaleString("en-US", {
     dateStyle: "medium",
     timeStyle: "short",
   });
 }
 
-function formatCurrency(amount?: number) {
+function formatCurrency(
+  amount?: number | null
+) {
   return `Rs. ${(Number(amount) || 0).toLocaleString()}`;
 }
 
-function formatStatus(status?: string) {
-  if (!status) return "—";
+function formatStatus(status?: string | null) {
+  if (!status) {
+    return "—";
+  }
 
   return status
     .replaceAll("_", " ")
@@ -102,15 +122,21 @@ function formatStatus(status?: string) {
     );
 }
 
-function getStatusStyle(status?: string) {
+function getStatusStyle(
+  status?: string | null
+) {
   return (
     STATUS_STYLES[status || ""] ||
     "bg-gray-50 text-gray-700 ring-gray-600/20"
   );
 }
 
-function getNextStatus(status?: string) {
-  if (!status) return null;
+function getNextStatus(
+  status?: string | null
+) {
+  if (!status) {
+    return null;
+  }
 
   const index =
     STATUS_FLOW.indexOf(status);
@@ -119,20 +145,29 @@ function getNextStatus(status?: string) {
     return null;
   }
 
-  if (index >= STATUS_FLOW.length - 1) {
+  if (
+    index >=
+    STATUS_FLOW.length - 1
+  ) {
     return null;
   }
 
   return STATUS_FLOW[index + 1];
 }
 
-function isTerminalStatus(status?: string) {
+function isTerminalStatus(
+  status?: string | null
+) {
   return (
     status === "DELIVERED" ||
     status === "RETURNED" ||
     status === "CANCELLED"
   );
 }
+
+/* =========================================================
+   MAIN COMPONENT
+========================================================= */
 
 export default function ShipmentModal({
   shipment,
@@ -155,11 +190,19 @@ export default function ShipmentModal({
     return null;
   }
 
+  /* =======================================================
+     STATUS
+  ======================================================= */
+
   const nextStatus =
     getNextStatus(shipment.status);
 
   const canAssignRider =
     shipment.status === "IN_WAREHOUSE";
+
+  /* =======================================================
+     RIDERS
+  ======================================================= */
 
   const availableRiders =
     riders.filter(
@@ -167,16 +210,34 @@ export default function ShipmentModal({
         rider.isAvailable !== false
     );
 
+  /* =======================================================
+     TRACKING
+  ======================================================= */
+
   const completedSteps =
     shipment.trackings?.map(
       (tracking) => tracking.status
     ) || [];
 
+  /* =======================================================
+     TRACKING URL
+  ======================================================= */
+
+  const appUrl =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    "";
+
+  const trackingUrl =
+    `${appUrl}/track/${shipment.trackingNumber}`;
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center text-black justify-center bg-black/40 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 text-black"
       onClick={onClose}
     >
+      {/* ===================================================
+          MODAL
+      =================================================== */}
 
       <div
         className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-2xl bg-white shadow-xl"
@@ -184,23 +245,22 @@ export default function ShipmentModal({
           e.stopPropagation()
         }
       >
-
-        {/* HEADER */}
+        {/* =================================================
+            HEADER
+        ================================================= */}
 
         <div className="flex items-start justify-between border-b px-6 py-5">
-
           <div>
-
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
               Tracking Number
             </p>
 
             <h2 className="mt-1 text-xl font-bold">
-              {shipment.trackingNumber}
+              {shipment.trackingNumber ||
+                "—"}
             </h2>
 
             <div className="mt-2">
-
               <span
                 className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset ${getStatusStyle(
                   shipment.status
@@ -210,9 +270,7 @@ export default function ShipmentModal({
                   shipment.status
                 )}
               </span>
-
             </div>
-
           </div>
 
           <button
@@ -221,34 +279,36 @@ export default function ShipmentModal({
               updatingStatus ||
               assigningRider
             }
+            type="button"
+            aria-label="Close"
             className="rounded-full p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
           >
             ✕
           </button>
-
         </div>
 
-        {/* CONTENT */}
+        {/* =================================================
+            CONTENT
+        ================================================= */}
 
         <div className="grid gap-6 p-6 md:grid-cols-3">
-
-          {/* =====================================================
+          {/* =================================================
               LEFT SIDE
-          ====================================================== */}
+          ================================================= */}
 
           <div className="md:col-span-2">
-
-            {/* SHIPMENT INFORMATION */}
+            {/* =================================================
+                SHIPMENT INFORMATION
+            ================================================= */}
 
             <div>
-
               <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
                 Shipment Information
               </p>
 
-              <div className="mt-4 rounded-xl border">
-
+              <div className="mt-4 overflow-hidden rounded-xl border">
                 <div className="grid grid-cols-2 divide-x divide-y">
+                  {/* RECEIVER */}
 
                   <InfoItem
                     label="Receiver"
@@ -257,6 +317,8 @@ export default function ShipmentModal({
                     }
                   />
 
+                  {/* PHONE */}
+
                   <InfoItem
                     label="Phone"
                     value={
@@ -264,10 +326,18 @@ export default function ShipmentModal({
                     }
                   />
 
+                  {/* PACKAGE */}
+
                   <InfoItem
                     label="Package"
-                    value={`${shipment.packageType} · ${shipment.weight} kg`}
+                    value={`${shipment.packageType || "—"} · ${
+                      shipment.weight != null
+                        ? `${shipment.weight} kg`
+                        : "—"
+                    }`}
                   />
+
+                  {/* PAYMENT */}
 
                   <InfoItem
                     label="Payment"
@@ -275,6 +345,8 @@ export default function ShipmentModal({
                       shipment.paymentType
                     }
                   />
+
+                  {/* COD */}
 
                   {shipment.paymentType ===
                     "COD" && (
@@ -286,6 +358,8 @@ export default function ShipmentModal({
                     />
                   )}
 
+                  {/* SHIPPING CHARGE */}
+
                   <InfoItem
                     label="Shipping Charge"
                     value={formatCurrency(
@@ -293,23 +367,28 @@ export default function ShipmentModal({
                     )}
                   />
 
+                  {/* DESTINATION */}
+
                   <InfoItem
                     label="Destination"
                     value={
                       shipment.locationRate
-                        ?.location?.name ||
-                      "—"
+                        ?.location?.name
                     }
                   />
+
+                  {/* DELIVERY TYPE */}
 
                   <InfoItem
                     label="Delivery Type"
                     value={
                       shipment.locationRate
                         ?.deliveryType
-                        ?.name || "—"
+                        ?.name
                     }
                   />
+
+                  {/* ZONE */}
 
                   <InfoItem
                     label="Zone"
@@ -317,17 +396,20 @@ export default function ShipmentModal({
                       shipment.deliveryZone ||
                       shipment.locationRate
                         ?.location?.zone ||
-                      "—"
+                      shipment.zone
                     }
                   />
+
+                  {/* ORIGIN */}
 
                   <InfoItem
                     label="Origin"
                     value={
-                      shipment.origin ||
-                      "—"
+                      shipment.origin
                     }
                   />
+
+                  {/* CREATED */}
 
                   <InfoItem
                     label="Created"
@@ -336,53 +418,48 @@ export default function ShipmentModal({
                     )}
                   />
 
-                  <div className="col-span-2 px-4 py-4">
+                  {/* RECEIVER ADDRESS */}
 
+                  <div className="col-span-2 px-4 py-4">
                     <p className="text-xs text-gray-400">
                       Receiver Address
                     </p>
 
-                    <p className="mt-1 text-sm font-medium">
-                      {
-                        shipment.receiverAddress
-                      }
+                    <p className="mt-1 break-words text-sm font-medium">
+                      {shipment.receiverAddress ||
+                        "—"}
                     </p>
-
                   </div>
+
+                  {/* NOTES */}
 
                   {shipment.notes && (
                     <div className="col-span-2 border-t px-4 py-4">
-
                       <p className="text-xs text-gray-400">
                         Notes
                       </p>
 
-                      <p className="mt-1 text-sm font-medium">
+                      <p className="mt-1 break-words text-sm font-medium">
                         {shipment.notes}
                       </p>
-
                     </div>
                   )}
-
                 </div>
-
               </div>
-
             </div>
 
-            {/* TRACKING TIMELINE */}
+            {/* =================================================
+                TRACKING TIMELINE
+            ================================================= */}
 
             <div className="mt-8 border-t pt-6">
-
               <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
                 Shipment Tracking
               </p>
 
               <div className="mt-5 space-y-4">
-
                 {STEPS.map(
                   (step, index) => {
-
                     const done =
                       completedSteps.includes(
                         step
@@ -404,9 +481,9 @@ export default function ShipmentModal({
                         key={step}
                         className="flex gap-4"
                       >
+                        {/* STEP ICON */}
 
                         <div className="flex flex-col items-center">
-
                           <div
                             className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold ${
                               done
@@ -434,11 +511,11 @@ export default function ShipmentModal({
                               }`}
                             />
                           )}
-
                         </div>
 
-                        <div className="pb-3">
+                        {/* STEP DETAILS */}
 
+                        <div className="pb-3">
                           <p
                             className={`text-sm font-semibold ${
                               done
@@ -474,39 +551,34 @@ export default function ShipmentModal({
                               )}
                             </>
                           )}
-
                         </div>
-
                       </div>
                     );
                   }
                 )}
-
               </div>
             </div>
 
-            {/* TRACKING HISTORY */}
+            {/* =================================================
+                TRACKING HISTORY
+            ================================================= */}
 
             {shipment.trackings &&
               shipment.trackings.length >
                 0 && (
                 <div className="mt-8 border-t pt-6">
-
                   <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
                     Tracking History
                   </p>
 
                   <div className="mt-4 space-y-2">
-
                     {shipment.trackings.map(
                       (tracking) => (
                         <div
                           key={tracking.id}
                           className="rounded-xl bg-gray-50 p-3"
                         >
-
                           <div className="flex items-center justify-between gap-3">
-
                             <span className="text-xs font-semibold">
                               {formatStatus(
                                 tracking.status
@@ -518,7 +590,6 @@ export default function ShipmentModal({
                                 tracking.createdAt
                               )}
                             </span>
-
                           </div>
 
                           {tracking.location && (
@@ -537,28 +608,24 @@ export default function ShipmentModal({
                               }
                             </p>
                           )}
-
                         </div>
                       )
                     )}
-
                   </div>
-
                 </div>
               )}
-
           </div>
 
-          {/* =====================================================
+          {/* =================================================
               RIGHT SIDE
-          ====================================================== */}
+          ================================================= */}
 
           <div>
-
-            {/* STATUS */}
+            {/* =================================================
+                UPDATE STATUS
+            ================================================= */}
 
             <div className="rounded-xl border p-4">
-
               <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
                 Update Shipment Status
               </p>
@@ -569,7 +636,6 @@ export default function ShipmentModal({
               </p>
 
               <div className="mt-4">
-
                 <select
                   value={shipment.status}
                   onChange={(e) =>
@@ -586,7 +652,6 @@ export default function ShipmentModal({
                   }
                   className="w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 disabled:cursor-not-allowed disabled:bg-gray-100"
                 >
-
                   <option
                     value={
                       shipment.status
@@ -607,14 +672,13 @@ export default function ShipmentModal({
                       )}
                     </option>
                   )}
-
                 </select>
-
               </div>
+
+              {/* NEXT STATUS */}
 
               {nextStatus && (
                 <div className="mt-3 rounded-lg bg-gray-50 p-3">
-
                   <p className="text-xs text-gray-400">
                     Next step
                   </p>
@@ -624,28 +688,31 @@ export default function ShipmentModal({
                       nextStatus
                     )}
                   </p>
-
                 </div>
               )}
+
+              {/* DELIVERED */}
 
               {!nextStatus &&
                 shipment.status ===
                   "DELIVERED" && (
                   <div className="mt-3 rounded-lg bg-green-50 p-3">
-
                     <p className="text-xs font-medium text-green-700">
                       Shipment has been
                       delivered.
                     </p>
-
                   </div>
                 )}
+
+              {/* UPDATING */}
 
               {updatingStatus && (
                 <p className="mt-2 text-xs text-gray-500">
                   Updating shipment...
                 </p>
               )}
+
+              {/* SUCCESS */}
 
               {statusMessage && (
                 <div className="mt-3 rounded-lg bg-green-50 p-3">
@@ -655,6 +722,8 @@ export default function ShipmentModal({
                 </div>
               )}
 
+              {/* ERROR */}
+
               {statusError && (
                 <div className="mt-3 rounded-lg bg-red-50 p-3">
                   <p className="text-xs font-medium text-red-700">
@@ -662,13 +731,13 @@ export default function ShipmentModal({
                   </p>
                 </div>
               )}
-
             </div>
 
-            {/* CURRENT STATUS */}
+            {/* =================================================
+                CURRENT STATUS
+            ================================================= */}
 
             <div className="mt-4 rounded-xl border p-4">
-
               <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
                 Current Status
               </p>
@@ -682,40 +751,38 @@ export default function ShipmentModal({
                   shipment.status
                 )}
               </span>
-
             </div>
 
-            {/* QR */}
+            {/* =================================================
+                QR CODE
+            ================================================= */}
 
             <div className="mt-4 rounded-xl border p-4">
-
               <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
                 Track Shipment
               </p>
 
               <div className="mt-4 flex justify-center">
-
                 <div className="rounded-xl border bg-white p-3">
-
                   <QRCode
-                    value={`${process.env.NEXT_PUBLIC_APP_URL}/track/${shipment.trackingNumber}`}
+                    value={trackingUrl}
                     size={150}
                   />
-
                 </div>
-
               </div>
 
               <p className="mt-3 text-center text-xs text-gray-400">
                 Scan QR code to track this
                 shipment.
               </p>
-
             </div>
 
-            {/* PRINT */}
+            {/* =================================================
+                PRINT BILL
+            ================================================= */}
 
             <button
+              type="button"
               onClick={() =>
                 onPrint(shipment)
               }
@@ -724,50 +791,48 @@ export default function ShipmentModal({
               Print Bill
             </button>
 
-            {/* RIDER */}
+            {/* =================================================
+                RIDER
+            ================================================= */}
 
             <div className="mt-4 rounded-xl border p-4">
-
               <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
                 Delivery Rider
               </p>
 
               {shipment.rider ? (
                 <div className="mt-3 space-y-2">
+                  {/* NAME */}
 
                   <div className="flex justify-between gap-3">
-
                     <span className="text-xs text-gray-400">
                       Name
                     </span>
 
                     <span className="text-right text-sm font-medium">
-                      {
-                        shipment.rider.user
-                          ?.name
-                      }
+                      {shipment.rider.user
+                        ?.name || "—"}
                     </span>
-
                   </div>
 
-                  <div className="flex justify-between gap-3">
+                  {/* PHONE */}
 
+                  <div className="flex justify-between gap-3">
                     <span className="text-xs text-gray-400">
                       Phone
                     </span>
 
                     <span className="text-right text-sm font-medium">
-                      {
-                        shipment.rider.phone
-                      }
+                      {shipment.rider.phone ||
+                        "—"}
                     </span>
-
                   </div>
+
+                  {/* VEHICLE */}
 
                   {shipment.rider
                     .vehicleNumber && (
                     <div className="flex justify-between gap-3">
-
                       <span className="text-xs text-gray-400">
                         Vehicle
                       </span>
@@ -778,12 +843,12 @@ export default function ShipmentModal({
                             .vehicleNumber
                         }
                       </span>
-
                     </div>
                   )}
 
-                  <div className="border-t pt-3">
+                  {/* LIVE LOCATION */}
 
+                  <div className="border-t pt-3">
                     <p className="text-xs text-gray-400">
                       Live Location
                     </p>
@@ -808,9 +873,7 @@ export default function ShipmentModal({
                         Location not available
                       </p>
                     )}
-
                   </div>
-
                 </div>
               ) : (
                 <p className="mt-3 text-xs text-gray-400">
@@ -819,11 +882,12 @@ export default function ShipmentModal({
                 </p>
               )}
 
-              {/* ASSIGN RIDER */}
+              {/* =================================================
+                  ASSIGN RIDER
+              ================================================= */}
 
               {canAssignRider && (
                 <div className="mt-4 border-t pt-4">
-
                   <p className="text-xs text-gray-400">
                     Assign a rider
                   </p>
@@ -843,7 +907,6 @@ export default function ShipmentModal({
                     }
                     className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 disabled:cursor-not-allowed disabled:bg-gray-100"
                   >
-
                     <option value="">
                       {ridersLoading
                         ? "Loading riders..."
@@ -854,21 +917,27 @@ export default function ShipmentModal({
                       (rider) => (
                         <option
                           key={rider.id}
-                          value={rider.id}
+                          value={String(
+                            rider.id
+                          )}
                         >
-                          {rider.user?.name} —{" "}
-                          {rider.phone}
-
+                          {rider.user?.name ||
+                            "Unnamed rider"}{" "}
+                          —{" "}
+                          {rider.phone ||
+                            "No phone"}
                           {rider.vehicleNumber
                             ? ` (${rider.vehicleNumber})`
                             : ""}
                         </option>
                       )
                     )}
-
                   </select>
 
+                  {/* ASSIGN BUTTON */}
+
                   <button
+                    type="button"
                     onClick={
                       onAssignRider
                     }
@@ -884,6 +953,8 @@ export default function ShipmentModal({
                       : "Assign Rider"}
                   </button>
 
+                  {/* SUCCESS */}
+
                   {assignMessage && (
                     <div className="mt-3 rounded-lg bg-green-50 p-3">
                       <p className="text-xs font-medium text-green-700">
@@ -891,6 +962,8 @@ export default function ShipmentModal({
                       </p>
                     </div>
                   )}
+
+                  {/* ERROR */}
 
                   {assignError && (
                     <div className="mt-3 rounded-lg bg-red-50 p-3">
@@ -900,6 +973,8 @@ export default function ShipmentModal({
                     </div>
                   )}
 
+                  {/* NO RIDERS */}
+
                   {!ridersLoading &&
                     availableRiders.length ===
                       0 && (
@@ -908,14 +983,16 @@ export default function ShipmentModal({
                         right now.
                       </p>
                     )}
-
                 </div>
               )}
+
+              {/* =================================================
+                  ALREADY ASSIGNED
+              ================================================= */}
 
               {shipment.rider &&
                 !canAssignRider && (
                   <div className="mt-4 border-t pt-4">
-
                     <p className="text-xs text-gray-400">
                       Rider assignment
                     </p>
@@ -924,39 +1001,36 @@ export default function ShipmentModal({
                       Rider has already been
                       assigned to this shipment.
                     </p>
-
                   </div>
                 )}
-
             </div>
-
           </div>
-
         </div>
-
       </div>
     </div>
   );
 }
+
+/* =========================================================
+   INFO ITEM
+========================================================= */
 
 function InfoItem({
   label,
   value,
 }: {
   label: string;
-  value: string;
+  value?: string | null;
 }) {
   return (
     <div className="px-4 py-4">
-
       <p className="text-xs text-gray-400">
         {label}
       </p>
 
-      <p className="mt-1 text-sm font-medium">
-        {value}
+      <p className="mt-1 break-words text-sm font-medium">
+        {value || "—"}
       </p>
-
     </div>
   );
 }

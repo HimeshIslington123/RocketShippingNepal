@@ -2,8 +2,6 @@
 
 import { Shipment } from "./types";
 
-
-
 type ShipmentTableProps = {
   shipments: Shipment[];
   loading: boolean;
@@ -39,20 +37,34 @@ const STATUS_STYLES: Record<string, string> = {
     "bg-red-50 text-red-700 ring-red-600/20",
 };
 
-function formatDate(iso?: string) {
+/*
+ * FIX:
+ * createdAt can be:
+ * string | null | undefined
+ *
+ * So we allow null here too.
+ */
+function formatDate(iso?: string | null) {
   if (!iso) return "—";
 
-  return new Date(iso).toLocaleString("en-US", {
+  const date = new Date(iso);
+
+  // Protect against invalid date values
+  if (Number.isNaN(date.getTime())) {
+    return "—";
+  }
+
+  return date.toLocaleString("en-US", {
     dateStyle: "medium",
     timeStyle: "short",
   });
 }
 
-function formatCurrency(amount?: number) {
+function formatCurrency(amount?: number | null) {
   return `Rs. ${(Number(amount) || 0).toLocaleString()}`;
 }
 
-function formatStatus(status?: string) {
+function formatStatus(status?: string | null) {
   if (!status) return "—";
 
   return status
@@ -63,7 +75,7 @@ function formatStatus(status?: string) {
     );
 }
 
-function getStatusStyle(status?: string) {
+function getStatusStyle(status?: string | null) {
   return (
     STATUS_STYLES[status || ""] ||
     "bg-gray-50 text-gray-700 ring-gray-600/20"
@@ -81,7 +93,9 @@ export default function ShipmentTable({
   return (
     <div className="mx-auto max-w-7xl text-black">
 
-      {/* HEADER */}
+      {/* =====================================================
+          HEADER
+      ====================================================== */}
 
       <div className="flex items-start justify-between">
 
@@ -97,18 +111,19 @@ export default function ShipmentTable({
         </div>
 
         <button
+          type="button"
           onClick={onRefresh}
           disabled={loading}
-          className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+          className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {loading
-            ? "Refreshing..."
-            : "Refresh"}
+          {loading ? "Refreshing..." : "Refresh"}
         </button>
 
       </div>
 
-      {/* ERROR */}
+      {/* =====================================================
+          ERROR
+      ====================================================== */}
 
       {!loading && error && (
         <div className="mt-6 rounded-2xl border border-red-100 bg-red-50 p-5">
@@ -118,7 +133,9 @@ export default function ShipmentTable({
         </div>
       )}
 
-      {/* LOADING */}
+      {/* =====================================================
+          LOADING
+      ====================================================== */}
 
       {loading && (
         <div className="mt-6 rounded-2xl bg-white p-10 text-center shadow-sm ring-1 ring-black/5">
@@ -128,12 +145,18 @@ export default function ShipmentTable({
         </div>
       )}
 
-      {/* TABLE */}
+      {/* =====================================================
+          TABLE
+      ====================================================== */}
 
       {!loading && !error && (
         <div className="mt-6 overflow-x-auto rounded-2xl bg-white shadow-sm ring-1 ring-black/5">
 
           <table className="min-w-full divide-y divide-gray-200 text-sm">
+
+            {/* =================================================
+                TABLE HEADER
+            ================================================== */}
 
             <thead className="bg-gray-50">
 
@@ -179,7 +202,13 @@ export default function ShipmentTable({
 
             </thead>
 
+            {/* =================================================
+                TABLE BODY
+            ================================================== */}
+
             <tbody className="divide-y divide-gray-100">
+
+              {/* EMPTY STATE */}
 
               {shipments.length === 0 && (
                 <tr>
@@ -192,6 +221,8 @@ export default function ShipmentTable({
                 </tr>
               )}
 
+              {/* SHIPMENTS */}
+
               {shipments.map((shipment) => (
                 <tr
                   key={shipment.id}
@@ -201,12 +232,14 @@ export default function ShipmentTable({
                   className="cursor-pointer hover:bg-gray-50"
                 >
 
-                  {/* TRACKING */}
+                  {/* =================================================
+                      TRACKING
+                  ================================================== */}
 
                   <td className="px-4 py-4">
 
                     <p className="font-semibold">
-                      {shipment.trackingNumber}
+                      {shipment.trackingNumber || "—"}
                     </p>
 
                     <p className="mt-1 text-xs text-gray-400">
@@ -217,21 +250,25 @@ export default function ShipmentTable({
 
                   </td>
 
-                  {/* RECEIVER */}
+                  {/* =================================================
+                      RECEIVER
+                  ================================================== */}
 
                   <td className="px-4 py-4">
 
                     <p className="font-medium">
-                      {shipment.receiverName}
+                      {shipment.receiverName || "—"}
                     </p>
 
                     <p className="mt-1 text-xs text-gray-400">
-                      {shipment.receiverPhone}
+                      {shipment.receiverPhone || "—"}
                     </p>
 
                   </td>
 
-                  {/* DESTINATION */}
+                  {/* =================================================
+                      DESTINATION
+                  ================================================== */}
 
                   <td className="px-4 py-4">
 
@@ -246,33 +283,38 @@ export default function ShipmentTable({
                         {
                           shipment
                             .locationRate
-                            .deliveryType.name
+                            .deliveryType
+                            .name
                         }
                       </p>
                     )}
 
                   </td>
 
-                  {/* PACKAGE */}
+                  {/* =================================================
+                      PACKAGE
+                  ================================================== */}
 
                   <td className="px-4 py-4">
 
                     <p className="font-medium">
-                      {shipment.packageType}
+                      {shipment.packageType || "—"}
                     </p>
 
                     <p className="mt-1 text-xs text-gray-400">
-                      {shipment.weight} kg
+                      {shipment.weight ?? 0} kg
                     </p>
 
                   </td>
 
-                  {/* PAYMENT */}
+                  {/* =================================================
+                      PAYMENT
+                  ================================================== */}
 
                   <td className="px-4 py-4">
 
                     <p className="font-medium">
-                      {shipment.paymentType}
+                      {shipment.paymentType || "—"}
                     </p>
 
                     {shipment.paymentType ===
@@ -287,7 +329,9 @@ export default function ShipmentTable({
 
                   </td>
 
-                  {/* CHARGE */}
+                  {/* =================================================
+                      CHARGE
+                  ================================================== */}
 
                   <td className="px-4 py-4 font-medium">
                     {formatCurrency(
@@ -295,24 +339,22 @@ export default function ShipmentTable({
                     )}
                   </td>
 
-                  {/* RIDER */}
+                  {/* =================================================
+                      RIDER
+                  ================================================== */}
 
                   <td className="px-4 py-4">
 
                     {shipment.rider ? (
                       <>
                         <p className="font-medium">
-                          {
-                            shipment.rider
-                              .user?.name
-                          }
+                          {shipment.rider.user?.name ||
+                            "—"}
                         </p>
 
                         <p className="mt-1 text-xs text-gray-400">
-                          {
-                            shipment.rider
-                              .phone
-                          }
+                          {shipment.rider.phone ||
+                            "—"}
                         </p>
                       </>
                     ) : (
@@ -323,7 +365,9 @@ export default function ShipmentTable({
 
                   </td>
 
-                  {/* STATUS */}
+                  {/* =================================================
+                      STATUS
+                  ================================================== */}
 
                   <td className="px-4 py-4">
 
@@ -339,17 +383,24 @@ export default function ShipmentTable({
 
                   </td>
 
-                  {/* PRINT */}
+                  {/* =================================================
+                      PRINT RECEIPT
+                  ================================================== */}
 
                   <td className="px-4 py-4 text-right">
 
                     <button
-                      onClick={(e) =>
+                      type="button"
+                      onClick={(e) => {
+                        // Prevent opening the shipment modal
+                        // when clicking Print Bill.
+                        e.stopPropagation();
+
                         onPrint(
                           shipment,
                           e
-                        )
-                      }
+                        );
+                      }}
                       className="rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-white hover:bg-accent-dark"
                     >
                       Print Bill
