@@ -1,384 +1,178 @@
 "use client";
 
-import { useState } from "react";
-import {
-  MapPin,
-  ArrowRight,
-  Zap,
-  Plane,
-  Ship,
-} from "lucide-react";
-
-export default function ShipmentTracking() {
-  const [trackingNumber, setTrackingNumber] = useState("");
-
-  const handleTrack = () => {
-    const tracking = trackingNumber.trim();
-
-    if (!tracking) return;
-
-    window.location.href = `https://www.rocketshippings.com/track/${encodeURIComponent(
-      tracking
-    )}`;
-  };
-
-  const handleKeyDown = (
-    e: React.KeyboardEvent<HTMLInputElement>
-  ) => {
-    if (e.key === "Enter") {
-      handleTrack();
-    }
-  };
-
+export default function HeroSection() {
   return (
-    <section className="relative isolate w-full overflow-hidden bg-[#f4f6fa]">
-      {/* =====================================================
-          BACKGROUND IMAGE
-      ====================================================== */}
+    <section className="relative min-h-[100svh] w-full overflow-hidden bg-[#0b1729]">
+
+      {/* Background Image */}
       <div
-        className="absolute inset-0 -z-20 bg-cover bg-center bg-no-repeat"
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
         style={{
           backgroundImage:
-            "url('https://images.unsplash.com/photo-1715645948484-da40dd56bc93?fm=jpg&q=80&w=2400&auto=format&fit=crop')",
+            "url('https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?q=80&w=2400&auto=format&fit=crop')",
         }}
       />
 
-      {/* =====================================================
-          IMAGE OVERLAY
-      ====================================================== */}
-      <div className="absolute inset-0 -z-10 bg-white/80" />
+      {/* Main dark overlay */}
+      <div className="absolute inset-0 bg-[#071221]/65" />
 
-      {/* Extra subtle left-to-right fade */}
-      <div className="absolute inset-0 -z-10 bg-gradient-to-r from-white/90 via-white/75 to-white/70" />
+      {/* Left dark gradient for text readability */}
+      <div className="absolute inset-0 bg-gradient-to-r from-[#071221]/95 via-[#071221]/70 to-transparent" />
 
-      {/* =====================================================
-          HERO CONTENT
-      ====================================================== */}
-      <div
-        className="
-          mx-auto
-          flex
-          min-h-[560px]
-          w-full
-          max-w-[1600px]
-          items-center
-          px-5
-          pb-14
-          pt-32
-          sm:px-8
-          sm:pb-16
-          sm:pt-36
-          md:min-h-[600px]
-          md:px-12
-          lg:px-20
-          lg:pt-32
-          xl:px-24
-        "
-      >
-        <div className="w-full max-w-[760px]">
+      {/* Bottom gradient */}
+      <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-[#0b1729] to-transparent" />
 
-          {/* =================================================
-              LABEL
-          ================================================= */}
-          <div
-            className="
-              mb-5
-              inline-flex
-              items-center
-              gap-2
-              rounded-full
-              border
-              border-gray-200
-              bg-white/90
-              px-3.5
-              py-1.5
-              text-[9px]
-              font-bold
-              tracking-[0.12em]
-              text-gray-500
-              shadow-sm
-              backdrop-blur
-              sm:text-[10px]
-            "
-          >
-           
+      {/* Content */}
+      <div className="relative z-10 flex min-h-[100svh] items-center">
 
-            GLOBAL CARGO & COURIER SERVICES
-          </div>
+        <div className="mx-auto w-full max-w-[1400px] px-6 py-32 sm:px-10 lg:px-16 xl:px-20">
 
-          {/* =================================================
-              TITLE
-          ================================================= */}
-          <h1
-            className="
-              max-w-[800px]
-              text-4xl
-              font-extrabold
-              leading-[1.05]
-              tracking-[-0.035em]
-              text-[#17243b]
-              sm:text-5xl
-              md:text-6xl
-              lg:text-[64px]
-              xl:text-[70px]
-            "
-          >
-            Track Your Shipment
-          </h1>
+          <div className="max-w-4xl">
 
-          {/* =================================================
-              DESCRIPTION
-          ================================================= */}
-          <p
-            className="
-              mt-5
-              max-w-[700px]
-              text-sm
-              leading-6
-              text-[#68758b]
-              sm:text-base
-              sm:leading-7
-              md:text-[17px]
-            "
-          >
-            Enter your tracking number to see the latest status,
-            transit telemetry, and real-time location of your
-            cargo manifest.
-          </p>
+            {/* Eyebrow */}
+            <div className="mb-7 flex items-center gap-3">
 
-          {/* =================================================
-              TRACKING BOX
-          ================================================= */}
-          <div
-            className="
-              mt-7
-              w-full
-              max-w-[680px]
-              rounded-2xl
-              border
-              border-white
-              bg-white
-              p-2.5
-              shadow-[0_15px_45px_rgba(25,40,70,0.14)]
-              sm:mt-8
-              sm:p-3
-            "
-          >
-            {/* INPUT + BUTTON */}
-            <div className="flex flex-col gap-2.5 sm:flex-row">
+              <span className="h-[2px] w-9 bg-[#E23C2E]" />
 
-              {/* INPUT */}
-              <div className="relative flex-1">
-                <MapPin
-                  size={17}
-                  strokeWidth={2}
-                  className="
-                    absolute
-                    left-4
-                    top-1/2
-                    -translate-y-1/2
-                    text-orange-500
-                  "
-                />
+              <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/70">
+                Nepal&apos;s Cargo &amp; Logistics Partner
+              </span>
 
-                <input
-                  type="text"
-                  value={trackingNumber}
-                  onChange={(e) =>
-                    setTrackingNumber(e.target.value)
-                  }
-                  onKeyDown={handleKeyDown}
-                  placeholder="Enter tracking number (e.g. RC-1788...)"
-                  className="
-                    h-14
-                    w-full
-                    rounded-xl
-                    bg-[#f0f4fc]
-                    pl-11
-                    pr-4
-                    text-sm
-                    text-gray-700
-                    outline-none
-                    transition
-                    placeholder:text-gray-400
-                    focus:bg-white
-                    focus:ring-2
-                    focus:ring-orange-200
-                  "
-                />
-              </div>
+            </div>
 
-              {/* BUTTON */}
-              <button
-                type="button"
-                onClick={handleTrack}
+            {/* Heading */}
+            <h1
+              className="
+                max-w-4xl
+                text-4xl
+                font-bold
+                leading-[1.12]
+                tracking-tight
+                text-white
+                sm:text-5xl
+                md:text-6xl
+                lg:text-[70px]
+                xl:text-[76px]
+              "
+            >
+              नेपालबाट संसारसम्म,
+              <br />
+              तपाईंको सामान हाम्रो जिम्मेवारी।
+            </h1>
+
+            {/* Description */}
+            <p
+              className="
+                mt-7
+                max-w-2xl
+                text-sm
+                leading-7
+                text-white/70
+                sm:text-base
+                md:text-lg
+              "
+            >
+              एक्सप्रेस, बल्क, होम डेलिभरी र अन्तर्राष्ट्रिय ढुवानी सेवाहरूका
+              साथ तपाईंको सामान सुरक्षित र समयमै पुर्‍याउने प्रतिबद्धता।
+            </p>
+
+            {/* ================= BUTTONS ================= */}
+            <div className="mt-9 flex flex-col gap-3 sm:flex-row">
+
+              {/* Register Now */}
+              <a
+                href="/register"
                 className="
-                  flex
-                  h-14
-                  shrink-0
+                  inline-flex
+                  h-12
                   items-center
                   justify-center
                   gap-2
-                  rounded-xl
-                  bg-orange-500
-                  px-7
+                  rounded-full
+                  border
+                  border-[#E23C2E]
+                  bg-[#E23C2E]
+                  px-6
                   text-sm
-                  font-bold
+                  font-semibold
                   text-white
-                  shadow-md
-                  shadow-orange-500/20
-                  transition-all
+                  transition-colors
                   duration-200
-                  hover:bg-orange-600
-                  hover:shadow-lg
-                  hover:shadow-orange-500/25
-                  active:scale-[0.98]
-                  sm:min-w-[185px]
+                  hover:bg-[#C92F22]
+                  hover:border-[#C92F22]
                 "
               >
-                Track Shipment
+                Register Now
+              </a>
 
-                <ArrowRight size={17} />
-              </button>
-            </div>
-
-            {/* =================================================
-                EXAMPLE + WAYBILL
-            ================================================= */}
-            <div
-              className="
-                mt-3
-                flex
-                flex-col
-                gap-2
-                px-1
-                sm:flex-row
-                sm:items-center
-                sm:justify-between
-              "
-            >
-              <p className="text-[10px] text-gray-400">
-                Example:
-
-                <span className="ml-1 font-semibold text-orange-500">
-                  RC-1788192647821-759
-                </span>
-              </p>
-
-              <div
-                className="
-                  flex
-                  items-center
-                  gap-1.5
-                  text-[9px]
-                  font-semibold
-                  tracking-wide
-                  text-gray-400
-                "
-              >
-                <Zap
-                  size={11}
-                  className="text-orange-500"
-                />
-
-                INSTANT WAYBILL SCAN
-              </div>
-            </div>
-
-            {/* =================================================
-                MODES
-            ================================================= */}
-            <div
-              className="
-                mt-3
-                flex
-                flex-wrap
-                items-center
-                gap-2
-                px-1
-              "
-            >
-              <span
-                className="
-                  mr-1
-                  text-[9px]
-                  font-bold
-                  tracking-wide
-                  text-gray-400
-                "
-              >
-                MODES:
-              </span>
-
-              {/* Domestic */}
-              <span
+              {/* Track Shipment */}
+              <a
+                href="#tracking"
                 className="
                   inline-flex
+                  h-12
                   items-center
-                  gap-1.5
+                  justify-center
+                  gap-2
                   rounded-full
-                  bg-[#f1f4f9]
-                  px-3
-                  py-1.5
-                  text-[9px]
+                  border
+                  border-white/40
+                  bg-transparent
+                  px-6
+                  text-sm
                   font-semibold
-                  text-gray-500
+                  text-white
+                  transition-colors
+                  duration-200
+                  hover:bg-white
+                  hover:border-white
+                  hover:text-[#0b1729]
                 "
               >
-                <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />
+                Track Your Shipment
+              </a>
 
-                Domestic Freight
-              </span>
-
-              {/* Air */}
-              <span
-                className="
-                  inline-flex
-                  items-center
-                  gap-1.5
-                  rounded-full
-                  bg-[#f1f4f9]
-                  px-3
-                  py-1.5
-                  text-[9px]
-                  font-semibold
-                  text-gray-500
-                "
-              >
-                <Plane
-                  size={10}
-                  className="text-orange-500"
-                />
-
-                International Air
-              </span>
-
-              {/* Sea */}
-              <span
-                className="
-                  inline-flex
-                  items-center
-                  gap-1.5
-                  rounded-full
-                  bg-[#f1f4f9]
-                  px-3
-                  py-1.5
-                  text-[9px]
-                  font-semibold
-                  text-gray-500
-                "
-              >
-                <Ship
-                  size={10}
-                  className="text-orange-500"
-                />
-
-                Container Sea
-              </span>
             </div>
+
+            {/* Services */}
+            <div className="mt-9 flex flex-wrap items-center gap-x-4 gap-y-2">
+
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/45">
+                Express Cargo
+              </span>
+
+              <span className="text-white/20">
+                •
+              </span>
+
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/45">
+                Bulk Cargo
+              </span>
+
+              <span className="text-white/20">
+                •
+              </span>
+
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/45">
+                Door-to-Door
+              </span>
+
+              <span className="text-white/20">
+                •
+              </span>
+
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/45">
+                International
+              </span>
+
+            </div>
+
           </div>
+
         </div>
+
       </div>
+
     </section>
   );
 }

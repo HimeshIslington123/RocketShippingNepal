@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -25,6 +26,10 @@ type ReturnReason =
   | "PRODUCT_NOT_AS_DESCRIBED"
   | "OTHER";
 
+type ReturnDeliveryOption =
+  | "VENDOR_PICKUP"
+  | "DELIVER_TO_VENDOR";
+
 type ReturnRequest = {
   id: string;
 
@@ -33,6 +38,8 @@ type ReturnRequest = {
   status: ReturnStatus;
 
   reason: ReturnReason;
+
+  deliveryOption?: ReturnDeliveryOption | null;
 
   description?: string | null;
 
@@ -136,10 +143,6 @@ type Shipment = {
     createdAt: string;
   }[];
 
-  // ===================================================
-  // RETURN REQUEST
-  // ===================================================
-
   returnRequest?: ReturnRequest | null;
 };
 
@@ -193,18 +196,14 @@ function formatStatus(status: string) {
   return status
     .replace(/_/g, " ")
     .toLowerCase()
-    .replace(/\b\w/g, (char) =>
-      char.toUpperCase()
-    );
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 // =====================================================
 // RETURN STATUS LABEL
 // =====================================================
 
-function getReturnStatusLabel(
-  status: ReturnStatus
-) {
+function getReturnStatusLabel(status: ReturnStatus) {
   switch (status) {
     case "REQUESTED":
       return "Return Requested";
@@ -236,9 +235,7 @@ function getReturnStatusLabel(
 // RETURN STATUS COLOR
 // =====================================================
 
-function getReturnStatusClass(
-  status: ReturnStatus
-) {
+function getReturnStatusClass(status: ReturnStatus) {
   switch (status) {
     case "REQUESTED":
       return "bg-yellow-50 text-yellow-700";
@@ -317,9 +314,7 @@ function getStatusClass(status: string) {
 // RETURN REASON LABEL
 // =====================================================
 
-function getReturnReasonLabel(
-  reason: ReturnReason
-) {
+function getReturnReasonLabel(reason: ReturnReason) {
   const found = RETURN_REASONS.find(
     (item) => item.value === reason
   );
@@ -332,21 +327,19 @@ function getReturnReasonLabel(
 // =====================================================
 
 export default function VendorShipmentsPage() {
-  const [shipments, setShipments] = useState<
-    Shipment[]
-  >([]);
+  // ===================================================
+  // SHIPMENTS
+  // ===================================================
 
-  const [loading, setLoading] =
-    useState(true);
+  const [shipments, setShipments] = useState<Shipment[]>([]);
 
-  const [error, setError] =
-    useState("");
+  const [loading, setLoading] = useState(true);
 
-  const [search, setSearch] =
-    useState("");
+  const [error, setError] = useState("");
 
-  const [statusFilter, setStatusFilter] =
-    useState("ALL");
+  const [search, setSearch] = useState("");
+
+  const [statusFilter, setStatusFilter] = useState("ALL");
 
   const [selectedShipment, setSelectedShipment] =
     useState<Shipment | null>(null);
@@ -359,31 +352,32 @@ export default function VendorShipmentsPage() {
     useState<Shipment | null>(null);
 
   const [returnReason, setReturnReason] =
-    useState<ReturnReason>(
-      "CUSTOMER_CHANGED_MIND"
-    );
+    useState<ReturnReason>("CUSTOMER_CHANGED_MIND");
 
   const [returnDescription, setReturnDescription] =
     useState("");
 
-  const [returnNotes, setReturnNotes] =
-    useState("");
+  const [returnNotes, setReturnNotes] = useState("");
 
-  const [returnLoading, setReturnLoading] =
-    useState(false);
+  const [returnLoading, setReturnLoading] = useState(false);
 
-  const [cancelLoading, setCancelLoading] =
+  const [cancelLoading, setCancelLoading] = useState(false);
+
+  // ===================================================
+  // RETURN DELIVERY OPTION LOADING
+  // ===================================================
+
+  const [returnDeliveryLoading, setReturnDeliveryLoading] =
     useState(false);
 
   // ===================================================
   // API URL
   // ===================================================
 
-  const API_URL =
-    process.env.NEXT_PUBLIC_API_URL;
+  const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
   // =====================================================
-  // LOAD DATA
+  // LOAD ON PAGE OPEN
   // =====================================================
 
   useEffect(() => {
@@ -400,8 +394,7 @@ export default function VendorShipmentsPage() {
 
       setError("");
 
-      const token =
-        localStorage.getItem("token");
+      const token = localStorage.getItem("token");
 
       if (!token) {
         setError(
@@ -434,8 +427,7 @@ export default function VendorShipmentsPage() {
         }
       );
 
-      const shipmentData =
-        await shipmentRes.json();
+      const shipmentData = await shipmentRes.json();
 
       if (!shipmentRes.ok) {
         throw new Error(
@@ -467,13 +459,10 @@ export default function VendorShipmentsPage() {
           }
         );
 
-        const returnData =
-          await returnRes.json();
+        const returnData = await returnRes.json();
 
         if (returnRes.ok) {
-          returnList = Array.isArray(
-            returnData
-          )
+          returnList = Array.isArray(returnData)
             ? returnData
             : returnData.returns || [];
         }
@@ -485,7 +474,7 @@ export default function VendorShipmentsPage() {
       }
 
       // =================================================
-      // MERGE RETURN INTO SHIPMENT
+      // MERGE RETURNS INTO SHIPMENTS
       // =================================================
 
       const returnMap = new Map<
@@ -500,20 +489,21 @@ export default function VendorShipmentsPage() {
         );
       });
 
-      const mergedShipments =
-        shipmentList.map((shipment) => ({
+      const mergedShipments = shipmentList.map(
+        (shipment) => ({
           ...shipment,
 
           returnRequest:
             shipment.returnRequest ||
             returnMap.get(shipment.id) ||
             null,
-        }));
+        })
+      );
 
       setShipments(mergedShipments);
 
       // =================================================
-      // UPDATE SELECTED SHIPMENT IF OPEN
+      // UPDATE SELECTED SHIPMENT
       // =================================================
 
       setSelectedShipment((current) => {
@@ -545,6 +535,90 @@ export default function VendorShipmentsPage() {
   }
 
   // =====================================================
+  // SELECT RETURN DELIVERY OPTION
+  // =====================================================
+
+  async function handleReturnDeliveryOption(
+    shipment: Shipment,
+    option: ReturnDeliveryOption
+  ) {
+    const returnRequest = shipment.returnRequest;
+
+    if (!returnRequest) {
+      return;
+    }
+
+    try {
+      setReturnDeliveryLoading(true);
+
+      setError("");
+
+      const token = localStorage.getItem("token");
+
+      if (!token) {
+        throw new Error(
+          "You are not logged in."
+        );
+      }
+
+      if (!API_URL) {
+        throw new Error(
+          "NEXT_PUBLIC_API_URL is not configured."
+        );
+      }
+
+      // =================================================
+      // API REQUEST
+      // =================================================
+
+      const res = await fetch(
+        `${API_URL}/api/returns/${returnRequest.id}/delivery-option`,
+        {
+          method: "PATCH",
+
+          headers: {
+            "Content-Type": "application/json",
+
+            Authorization: `Bearer ${token}`,
+          },
+
+          body: JSON.stringify({
+            deliveryOption: option,
+          }),
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(
+          data.message ||
+            "Failed to select return delivery option"
+        );
+      }
+
+      // =================================================
+      // RELOAD DATA
+      // =================================================
+
+      await loadShipments();
+    } catch (error) {
+      console.error(
+        "RETURN DELIVERY OPTION ERROR:",
+        error
+      );
+
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Failed to select return delivery option"
+      );
+    } finally {
+      setReturnDeliveryLoading(false);
+    }
+  }
+
+  // =====================================================
   // REQUEST RETURN
   // =====================================================
 
@@ -558,8 +632,7 @@ export default function VendorShipmentsPage() {
 
       setError("");
 
-      const token =
-        localStorage.getItem("token");
+      const token = localStorage.getItem("token");
 
       if (!token) {
         throw new Error(
@@ -577,10 +650,7 @@ export default function VendorShipmentsPage() {
       // SAFETY CHECK
       // =================================================
 
-      if (
-        returnShipment.status !==
-        "DELIVERED"
-      ) {
+      if (returnShipment.status !== "DELIVERED") {
         throw new Error(
           "Only delivered shipments can be returned."
         );
@@ -602,25 +672,21 @@ export default function VendorShipmentsPage() {
           method: "POST",
 
           headers: {
-            "Content-Type":
-              "application/json",
+            "Content-Type": "application/json",
 
             Authorization: `Bearer ${token}`,
           },
 
           body: JSON.stringify({
-            shipmentId:
-              returnShipment.id,
+            shipmentId: returnShipment.id,
 
             reason: returnReason,
 
             description:
-              returnDescription.trim() ||
-              null,
+              returnDescription.trim() || null,
 
             notes:
-              returnNotes.trim() ||
-              null,
+              returnNotes.trim() || null,
           }),
         }
       );
@@ -635,7 +701,7 @@ export default function VendorShipmentsPage() {
       }
 
       // =================================================
-      // CLOSE RETURN MODAL
+      // CLOSE MODAL
       // =================================================
 
       setReturnShipment(null);
@@ -676,17 +742,15 @@ export default function VendorShipmentsPage() {
   async function handleCancelReturn(
     shipment: Shipment
   ) {
-    const returnRequest =
-      shipment.returnRequest;
+    const returnRequest = shipment.returnRequest;
 
     if (!returnRequest) {
       return;
     }
 
-    const confirmed =
-      window.confirm(
-        "Are you sure you want to cancel this return request?"
-      );
+    const confirmed = window.confirm(
+      "Are you sure you want to cancel this return request?"
+    );
 
     if (!confirmed) {
       return;
@@ -697,8 +761,7 @@ export default function VendorShipmentsPage() {
 
       setError("");
 
-      const token =
-        localStorage.getItem("token");
+      const token = localStorage.getItem("token");
 
       if (!token) {
         throw new Error(
@@ -778,71 +841,60 @@ export default function VendorShipmentsPage() {
   // FILTER
   // =====================================================
 
-  const filteredShipments =
-    useMemo(() => {
-      return shipments.filter(
-        (shipment) => {
-          const searchText =
-            search
-              .toLowerCase()
-              .trim();
+  const filteredShipments = useMemo(() => {
+    return shipments.filter((shipment) => {
+      const searchText = search
+        .toLowerCase()
+        .trim();
 
-          const matchesSearch =
-            !searchText ||
-            shipment.trackingNumber
-              .toLowerCase()
-              .includes(searchText) ||
-            shipment.receiverName
-              .toLowerCase()
-              .includes(searchText) ||
-            shipment.receiverPhone
-              .toLowerCase()
-              .includes(searchText) ||
-            shipment.locationRate?.location?.name
-              ?.toLowerCase()
-              .includes(searchText);
+      const matchesSearch =
+        !searchText ||
+        shipment.trackingNumber
+          .toLowerCase()
+          .includes(searchText) ||
+        shipment.receiverName
+          .toLowerCase()
+          .includes(searchText) ||
+        shipment.receiverPhone
+          .toLowerCase()
+          .includes(searchText) ||
+        shipment.locationRate?.location?.name
+          ?.toLowerCase()
+          .includes(searchText);
 
-          const matchesStatus =
-            statusFilter === "ALL" ||
-            shipment.status ===
-              statusFilter;
+      const matchesStatus =
+        statusFilter === "ALL" ||
+        shipment.status === statusFilter;
 
-          return (
-            matchesSearch &&
-            matchesStatus
-          );
-        }
+      return (
+        matchesSearch &&
+        matchesStatus
       );
-    }, [
-      shipments,
-      search,
-      statusFilter,
-    ]);
+    });
+  }, [
+    shipments,
+    search,
+    statusFilter,
+  ]);
 
   // =====================================================
   // STATISTICS
   // =====================================================
 
-  const totalShipments =
-    shipments.length;
+  const totalShipments = shipments.length;
 
-  const createdCount =
-    shipments.filter(
-      (s) => s.status === "CREATED"
-    ).length;
+  const createdCount = shipments.filter(
+    (s) => s.status === "CREATED"
+  ).length;
 
-  const deliveryCount =
-    shipments.filter(
-      (s) =>
-        s.status ===
-        "OUT_FOR_DELIVERY"
-    ).length;
+  const deliveryCount = shipments.filter(
+    (s) =>
+      s.status === "OUT_FOR_DELIVERY"
+  ).length;
 
-  const deliveredCount =
-    shipments.filter(
-      (s) =>
-        s.status === "DELIVERED"
-    ).length;
+  const deliveredCount = shipments.filter(
+    (s) => s.status === "DELIVERED"
+  ).length;
 
   const returnRequestedCount =
     shipments.filter(
@@ -865,12 +917,11 @@ export default function VendorShipmentsPage() {
         )
     ).length;
 
-  const returnedCount =
-    shipments.filter(
-      (s) =>
-        s.returnRequest?.status ===
-        "RETURNED_TO_VENDOR"
-    ).length;
+  const returnedCount = shipments.filter(
+    (s) =>
+      s.returnRequest?.status ===
+      "RETURNED_TO_VENDOR"
+  ).length;
 
   // =====================================================
   // LOADING
@@ -918,6 +969,7 @@ export default function VendorShipmentsPage() {
         >
           Refresh
         </button>
+
       </div>
 
       {/* =================================================
@@ -1009,6 +1061,8 @@ export default function VendorShipmentsPage() {
 
       <div className="mt-4 grid gap-4 sm:grid-cols-3">
 
+        {/* RETURN REQUESTS */}
+
         <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
 
           <p className="text-sm text-gray-500">
@@ -1021,6 +1075,8 @@ export default function VendorShipmentsPage() {
 
         </div>
 
+        {/* RETURNS IN PROGRESS */}
+
         <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
 
           <p className="text-sm text-gray-500">
@@ -1032,6 +1088,8 @@ export default function VendorShipmentsPage() {
           </p>
 
         </div>
+
+        {/* RETURNED */}
 
         <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
 
@@ -1063,9 +1121,7 @@ export default function VendorShipmentsPage() {
               type="text"
               value={search}
               onChange={(e) =>
-                setSearch(
-                  e.target.value
-                )
+                setSearch(e.target.value)
               }
               placeholder="Search tracking number, receiver or destination..."
               className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none transition focus:border-accent"
@@ -1080,9 +1136,7 @@ export default function VendorShipmentsPage() {
             <select
               value={statusFilter}
               onChange={(e) =>
-                setStatusFilter(
-                  e.target.value
-                )
+                setStatusFilter(e.target.value)
               }
               className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-accent"
             >
@@ -1203,8 +1257,7 @@ export default function VendorShipmentsPage() {
 
             <tbody className="divide-y">
 
-              {filteredShipments.length ===
-              0 ? (
+              {filteredShipments.length === 0 ? (
 
                 <tr>
 
@@ -1218,8 +1271,7 @@ export default function VendorShipmentsPage() {
                     </div>
 
                     <p className="mt-1 text-sm text-gray-500">
-                      Try changing your
-                      search or filter.
+                      Try changing your search or filter.
                     </p>
 
                   </td>
@@ -1228,219 +1280,186 @@ export default function VendorShipmentsPage() {
 
               ) : (
 
-                filteredShipments.map(
-                  (shipment) => (
+                filteredShipments.map((shipment) => (
 
-                    <tr
-                      key={shipment.id}
-                      className="transition hover:bg-gray-50"
-                    >
+                  <tr
+                    key={shipment.id}
+                    className="transition hover:bg-gray-50"
+                  >
 
-                      {/* SHIPMENT */}
+                    {/* SHIPMENT */}
 
-                      <td className="px-5 py-4">
+                    <td className="px-5 py-4">
 
-                        <div className="font-semibold">
-                          {
-                            shipment.trackingNumber
-                          }
-                        </div>
+                      <div className="font-semibold">
+                        {shipment.trackingNumber}
+                      </div>
 
-                        <div className="mt-1 text-xs text-gray-500">
-                          {formatDate(
-                            shipment.createdAt
-                          )}
-                        </div>
-
-                        {/* RETURN BADGE */}
-
-                        {shipment.returnRequest && (
-                          <div className="mt-2">
-
-                            <span
-                              className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${getReturnStatusClass(
-                                shipment
-                                  .returnRequest
-                                  .status
-                              )}`}
-                            >
-                              Return:{" "}
-                              {getReturnStatusLabel(
-                                shipment
-                                  .returnRequest
-                                  .status
-                              )}
-                            </span>
-
-                          </div>
+                      <div className="mt-1 text-xs text-gray-500">
+                        {formatDate(
+                          shipment.createdAt
                         )}
+                      </div>
 
-                      </td>
+                      {/* RETURN BADGE */}
 
-                      {/* RECEIVER */}
+                      {shipment.returnRequest && (
+                        <div className="mt-2">
 
-                      <td className="px-5 py-4">
+                          <span
+                            className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${getReturnStatusClass(
+                              shipment.returnRequest.status
+                            )}`}
+                          >
+                            Return:{" "}
+                            {getReturnStatusLabel(
+                              shipment.returnRequest.status
+                            )}
+                          </span>
 
-                        <div className="font-medium">
-                          {
-                            shipment.receiverName
-                          }
                         </div>
+                      )}
 
+                    </td>
+
+                    {/* RECEIVER */}
+
+                    <td className="px-5 py-4">
+
+                      <div className="font-medium">
+                        {shipment.receiverName}
+                      </div>
+
+                      <div className="mt-1 text-xs text-gray-500">
+                        {shipment.receiverPhone}
+                      </div>
+
+                    </td>
+
+                    {/* DESTINATION */}
+
+                    <td className="px-5 py-4">
+
+                      <div className="font-medium">
+                        {shipment.locationRate?.location?.name ||
+                          "N/A"}
+                      </div>
+
+                      <div className="mt-1 text-xs text-gray-500">
+                        {shipment.deliveryZone ||
+                          shipment.locationRate?.location?.zone ||
+                          ""}
+                      </div>
+
+                    </td>
+
+                    {/* DELIVERY */}
+
+                    <td className="px-5 py-4">
+
+                      <span className="rounded-lg bg-gray-100 px-2.5 py-1 text-xs font-medium">
+                        {shipment.locationRate?.deliveryType?.name ||
+                          "N/A"}
+                      </span>
+
+                    </td>
+
+                    {/* WEIGHT */}
+
+                    <td className="px-5 py-4">
+                      {shipment.weight} kg
+                    </td>
+
+                    {/* CHARGE */}
+
+                    <td className="px-5 py-4">
+
+                      <div className="font-semibold">
+                        Rs.{" "}
+                        {Number(
+                          shipment.shippingCharge
+                        ).toLocaleString()}
+                      </div>
+
+                    </td>
+
+                    {/* PAYMENT */}
+
+                    <td className="px-5 py-4">
+
+                      <div className="text-sm font-medium">
+                        {shipment.paymentType === "COD"
+                          ? "COD"
+                          : "Prepaid"}
+                      </div>
+
+                      {shipment.paymentType === "COD" && (
                         <div className="mt-1 text-xs text-gray-500">
-                          {
-                            shipment.receiverPhone
-                          }
-                        </div>
-
-                      </td>
-
-                      {/* DESTINATION */}
-
-                      <td className="px-5 py-4">
-
-                        <div className="font-medium">
-                          {
-                            shipment.locationRate
-                              ?.location
-                              ?.name ||
-                            "N/A"
-                          }
-                        </div>
-
-                        <div className="mt-1 text-xs text-gray-500">
-                          {
-                            shipment.deliveryZone ||
-                            shipment
-                              .locationRate
-                              ?.location
-                              ?.zone ||
-                            ""
-                          }
-                        </div>
-
-                      </td>
-
-                      {/* DELIVERY */}
-
-                      <td className="px-5 py-4">
-
-                        <span className="rounded-lg bg-gray-100 px-2.5 py-1 text-xs font-medium">
-                          {
-                            shipment.locationRate
-                              ?.deliveryType
-                              ?.name ||
-                            "N/A"
-                          }
-                        </span>
-
-                      </td>
-
-                      {/* WEIGHT */}
-
-                      <td className="px-5 py-4">
-
-                        {
-                          shipment.weight
-                        }{" "}
-                        kg
-
-                      </td>
-
-                      {/* CHARGE */}
-
-                      <td className="px-5 py-4">
-
-                        <div className="font-semibold">
                           Rs.{" "}
                           {Number(
-                            shipment.shippingCharge
+                            shipment.codAmount
                           ).toLocaleString()}
                         </div>
+                      )}
 
-                      </td>
+                    </td>
 
-                      {/* PAYMENT */}
+                    {/* STATUS */}
 
-                      <td className="px-5 py-4">
+                    <td className="px-5 py-4">
 
-                        <div className="text-sm font-medium">
-                          {shipment.paymentType ===
-                          "COD"
-                            ? "COD"
-                            : "Prepaid"}
-                        </div>
-
-                        {shipment.paymentType ===
-                          "COD" && (
-                          <div className="mt-1 text-xs text-gray-500">
-                            Rs.{" "}
-                            {Number(
-                              shipment.codAmount
-                            ).toLocaleString()}
-                          </div>
+                      <span
+                        className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(
+                          shipment.status
+                        )}`}
+                      >
+                        {formatStatus(
+                          shipment.status
                         )}
+                      </span>
 
-                      </td>
+                    </td>
 
-                      {/* STATUS */}
+                    {/* ACTION */}
 
-                      <td className="px-5 py-4">
+                    <td className="px-5 py-4">
 
-                        <span
-                          className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(
-                            shipment.status
-                          )}`}
+                      <div className="flex flex-col gap-2">
+
+                        <button
+                          onClick={() =>
+                            setSelectedShipment(
+                              shipment
+                            )
+                          }
+                          className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold transition hover:bg-gray-50"
                         >
-                          {formatStatus(
-                            shipment.status
+                          View
+                        </button>
+
+                        {shipment.status === "DELIVERED" &&
+                          !shipment.returnRequest && (
+
+                            <button
+                              onClick={() =>
+                                setReturnShipment(
+                                  shipment
+                                )
+                              }
+                              className="rounded-lg bg-orange-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-orange-600"
+                            >
+                              Request Return
+                            </button>
+
                           )}
-                        </span>
 
-                      </td>
+                      </div>
 
-                      {/* ACTION */}
+                    </td>
 
-                      <td className="px-5 py-4">
+                  </tr>
 
-                        <div className="flex flex-col gap-2">
-
-                          <button
-                            onClick={() =>
-                              setSelectedShipment(
-                                shipment
-                              )
-                            }
-                            className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold transition hover:bg-gray-50"
-                          >
-                            View
-                          </button>
-
-                          {/* RETURN BUTTON */}
-
-                          {shipment.status ===
-                            "DELIVERED" &&
-                            !shipment.returnRequest && (
-                              <button
-                                onClick={() =>
-                                  setReturnShipment(
-                                    shipment
-                                  )
-                                }
-                                className="rounded-lg bg-orange-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-orange-600"
-                              >
-                                Request Return
-                              </button>
-                            )}
-
-                        </div>
-
-                      </td>
-
-                    </tr>
-
-                  )
-                )
+                ))
 
               )}
 
@@ -1458,8 +1477,7 @@ export default function VendorShipmentsPage() {
 
       <div className="mt-6 space-y-4 lg:hidden">
 
-        {filteredShipments.length ===
-        0 ? (
+        {filteredShipments.length === 0 ? (
 
           <div className="rounded-2xl bg-white p-10 text-center shadow-sm ring-1 ring-black/5">
 
@@ -1471,221 +1489,202 @@ export default function VendorShipmentsPage() {
 
         ) : (
 
-          filteredShipments.map(
-            (shipment) => (
+          filteredShipments.map((shipment) => (
 
-              <div
-                key={shipment.id}
-                className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5"
-              >
+            <div
+              key={shipment.id}
+              className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5"
+            >
 
-                {/* HEADER */}
+              {/* HEADER */}
 
-                <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start justify-between gap-3">
 
-                  <div>
+                <div>
 
-                    <p className="font-bold">
-                      {
-                        shipment.trackingNumber
-                      }
-                    </p>
+                  <p className="font-bold">
+                    {shipment.trackingNumber}
+                  </p>
 
-                    <p className="mt-1 text-xs text-gray-500">
-                      {formatDate(
-                        shipment.createdAt
-                      )}
-                    </p>
-
-                  </div>
-
-                  <span
-                    className={`rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(
-                      shipment.status
-                    )}`}
-                  >
-                    {formatStatus(
-                      shipment.status
+                  <p className="mt-1 text-xs text-gray-500">
+                    {formatDate(
+                      shipment.createdAt
                     )}
-                  </span>
+                  </p>
 
                 </div>
 
-                {/* RETURN STATUS */}
+                <span
+                  className={`rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(
+                    shipment.status
+                  )}`}
+                >
+                  {formatStatus(
+                    shipment.status
+                  )}
+                </span>
 
-                {shipment.returnRequest && (
-                  <div className="mt-4 rounded-xl border border-orange-100 bg-orange-50 p-3">
+              </div>
 
-                    <div className="flex items-center justify-between gap-3">
+              {/* RETURN STATUS */}
 
-                      <div>
+              {shipment.returnRequest && (
 
-                        <p className="text-xs font-medium text-orange-700">
-                          Return Status
-                        </p>
+                <div className="mt-4 rounded-xl border border-orange-100 bg-orange-50 p-3">
 
-                        <p className="mt-1 text-sm font-bold text-orange-800">
-                          {getReturnStatusLabel(
-                            shipment
-                              .returnRequest
-                              .status
-                          )}
-                        </p>
+                  <div className="flex items-center justify-between gap-3">
 
-                      </div>
+                    <div>
 
-                      <span
-                        className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${getReturnStatusClass(
-                          shipment
-                            .returnRequest
-                            .status
-                        )}`}
-                      >
-                        Return
-                      </span>
+                      <p className="text-xs font-medium text-orange-700">
+                        Return Status
+                      </p>
+
+                      <p className="mt-1 text-sm font-bold text-orange-800">
+                        {getReturnStatusLabel(
+                          shipment.returnRequest.status
+                        )}
+                      </p>
 
                     </div>
 
-                  </div>
-                )}
-
-                {/* DETAILS */}
-
-                <div className="mt-5 grid grid-cols-2 gap-4">
-
-                  <div>
-
-                    <p className="text-xs text-gray-500">
-                      Receiver
-                    </p>
-
-                    <p className="mt-1 text-sm font-medium">
-                      {
-                        shipment.receiverName
-                      }
-                    </p>
-
-                  </div>
-
-                  <div>
-
-                    <p className="text-xs text-gray-500">
-                      Destination
-                    </p>
-
-                    <p className="mt-1 text-sm font-medium">
-                      {
-                        shipment.locationRate
-                          ?.location
-                          ?.name ||
-                        "N/A"
-                      }
-                    </p>
-
-                  </div>
-
-                  <div>
-
-                    <p className="text-xs text-gray-500">
-                      Delivery
-                    </p>
-
-                    <p className="mt-1 text-sm font-medium">
-                      {
-                        shipment.locationRate
-                          ?.deliveryType
-                          ?.name ||
-                        "N/A"
-                      }
-                    </p>
-
-                  </div>
-
-                  <div>
-
-                    <p className="text-xs text-gray-500">
-                      Weight
-                    </p>
-
-                    <p className="mt-1 text-sm font-medium">
-                      {
-                        shipment.weight
-                      }{" "}
-                      kg
-                    </p>
-
-                  </div>
-
-                  <div>
-
-                    <p className="text-xs text-gray-500">
-                      Shipping Charge
-                    </p>
-
-                    <p className="mt-1 text-sm font-bold">
-                      Rs.{" "}
-                      {Number(
-                        shipment.shippingCharge
-                      ).toLocaleString()}
-                    </p>
-
-                  </div>
-
-                  <div>
-
-                    <p className="text-xs text-gray-500">
-                      Payment
-                    </p>
-
-                    <p className="mt-1 text-sm font-medium">
-                      {shipment.paymentType ===
-                      "COD"
-                        ? `COD Rs. ${Number(
-                            shipment.codAmount
-                          ).toLocaleString()}`
-                        : "Prepaid"}
-                    </p>
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${getReturnStatusClass(
+                        shipment.returnRequest.status
+                      )}`}
+                    >
+                      Return
+                    </span>
 
                   </div>
 
                 </div>
 
-                {/* BUTTONS */}
+              )}
 
-                <div className="mt-5 grid gap-2">
+              {/* DETAILS */}
 
-                  <button
-                    onClick={() =>
-                      setSelectedShipment(
-                        shipment
-                      )
-                    }
-                    className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm font-semibold transition hover:bg-gray-50"
-                  >
-                    View Shipment
-                  </button>
+              <div className="mt-5 grid grid-cols-2 gap-4">
 
-                  {shipment.status ===
-                    "DELIVERED" &&
-                    !shipment.returnRequest && (
-                      <button
-                        onClick={() =>
-                          setReturnShipment(
-                            shipment
-                          )
-                        }
-                        className="w-full rounded-xl bg-orange-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-orange-600"
-                      >
-                        Request Return
-                      </button>
-                    )}
+                <div>
+
+                  <p className="text-xs text-gray-500">
+                    Receiver
+                  </p>
+
+                  <p className="mt-1 text-sm font-medium">
+                    {shipment.receiverName}
+                  </p>
+
+                </div>
+
+                <div>
+
+                  <p className="text-xs text-gray-500">
+                    Destination
+                  </p>
+
+                  <p className="mt-1 text-sm font-medium">
+                    {shipment.locationRate?.location?.name ||
+                      "N/A"}
+                  </p>
+
+                </div>
+
+                <div>
+
+                  <p className="text-xs text-gray-500">
+                    Delivery
+                  </p>
+
+                  <p className="mt-1 text-sm font-medium">
+                    {shipment.locationRate?.deliveryType?.name ||
+                      "N/A"}
+                  </p>
+
+                </div>
+
+                <div>
+
+                  <p className="text-xs text-gray-500">
+                    Weight
+                  </p>
+
+                  <p className="mt-1 text-sm font-medium">
+                    {shipment.weight} kg
+                  </p>
+
+                </div>
+
+                <div>
+
+                  <p className="text-xs text-gray-500">
+                    Shipping Charge
+                  </p>
+
+                  <p className="mt-1 text-sm font-bold">
+                    Rs.{" "}
+                    {Number(
+                      shipment.shippingCharge
+                    ).toLocaleString()}
+                  </p>
+
+                </div>
+
+                <div>
+
+                  <p className="text-xs text-gray-500">
+                    Payment
+                  </p>
+
+                  <p className="mt-1 text-sm font-medium">
+                    {shipment.paymentType === "COD"
+                      ? `COD Rs. ${Number(
+                          shipment.codAmount
+                        ).toLocaleString()}`
+                      : "Prepaid"}
+                  </p>
 
                 </div>
 
               </div>
 
-            )
-          )
+              {/* BUTTONS */}
+
+              <div className="mt-5 grid gap-2">
+
+                <button
+                  onClick={() =>
+                    setSelectedShipment(
+                      shipment
+                    )
+                  }
+                  className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm font-semibold transition hover:bg-gray-50"
+                >
+                  View Shipment
+                </button>
+
+                {shipment.status === "DELIVERED" &&
+                  !shipment.returnRequest && (
+
+                    <button
+                      onClick={() =>
+                        setReturnShipment(
+                          shipment
+                        )
+                      }
+                      className="w-full rounded-xl bg-orange-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-orange-600"
+                    >
+                      Request Return
+                    </button>
+
+                  )}
+
+              </div>
+
+            </div>
+
+          ))
 
         )}
 
@@ -1724,9 +1723,7 @@ export default function VendorShipmentsPage() {
                 <p className="mt-1 text-sm text-gray-500">
                   Tracking Number:{" "}
                   <span className="font-semibold text-gray-700">
-                    {
-                      selectedShipment.trackingNumber
-                    }
+                    {selectedShipment.trackingNumber}
                   </span>
                 </p>
 
@@ -1734,9 +1731,7 @@ export default function VendorShipmentsPage() {
 
               <button
                 onClick={() =>
-                  setSelectedShipment(
-                    null
-                  )
+                  setSelectedShipment(null)
                 }
                 className="rounded-lg px-3 py-2 text-gray-500 hover:bg-gray-100"
               >
@@ -1749,9 +1744,9 @@ export default function VendorShipmentsPage() {
 
             <div className="space-y-6 p-6">
 
-              {/* =========================================
+              {/* =================================================
                   CURRENT STATUS
-              ========================================= */}
+              ================================================= */}
 
               <div className="rounded-xl bg-gray-50 p-4">
 
@@ -1785,13 +1780,15 @@ export default function VendorShipmentsPage() {
 
               </div>
 
-              {/* =========================================
+              {/* =================================================
                   RETURN STATUS
-              ========================================= */}
+              ================================================= */}
 
               {selectedShipment.returnRequest && (
 
                 <div className="rounded-2xl border border-orange-200 bg-orange-50 p-5">
+
+                  {/* RETURN HEADER */}
 
                   <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
 
@@ -1802,34 +1799,26 @@ export default function VendorShipmentsPage() {
                       </p>
 
                       <h3 className="mt-1 text-lg font-bold text-orange-900">
-                        {
-                          getReturnStatusLabel(
-                            selectedShipment
-                              .returnRequest
-                              .status
-                          )
-                        }
+                        {getReturnStatusLabel(
+                          selectedShipment.returnRequest.status
+                        )}
                       </h3>
 
                     </div>
 
                     <span
                       className={`rounded-full px-3 py-1 text-xs font-semibold ${getReturnStatusClass(
-                        selectedShipment
-                          .returnRequest
-                          .status
+                        selectedShipment.returnRequest.status
                       )}`}
                     >
-                      {
-                        selectedShipment
-                          .returnRequest
-                          .status
-                      }
+                      {selectedShipment.returnRequest.status}
                     </span>
 
                   </div>
 
-                  {/* SAME TRACKING NUMBER */}
+                  {/* =================================================
+                      SAME TRACKING NUMBER
+                  ================================================= */}
 
                   <div className="mt-5 rounded-xl bg-white p-4">
 
@@ -1838,74 +1827,261 @@ export default function VendorShipmentsPage() {
                     </p>
 
                     <p className="mt-1 text-lg font-bold">
-                      {
-                        selectedShipment
-                          .trackingNumber
-                      }
+                      {selectedShipment.trackingNumber}
                     </p>
 
                     <p className="mt-1 text-xs text-gray-500">
-                      The return uses the same
-                      original shipment tracking
-                      number.
+                      The return uses the same original
+                      shipment tracking number.
                     </p>
 
                   </div>
 
-                  {/* RETURN DETAILS */}
+                  {/* =================================================
+                      RETURN DETAILS
+                  ================================================= */}
 
                   <div className="mt-4 grid gap-4 sm:grid-cols-2">
 
                     <Info
                       label="Return Reason"
                       value={getReturnReasonLabel(
-                        selectedShipment
-                          .returnRequest
-                          .reason
+                        selectedShipment.returnRequest.reason
                       )}
                     />
 
                     <Info
                       label="Requested At"
                       value={formatDate(
-                        selectedShipment
-                          .returnRequest
-                          .requestedAt
+                        selectedShipment.returnRequest.requestedAt
                       )}
                     />
 
-                    {selectedShipment
-                      .returnRequest
+                    {selectedShipment.returnRequest
                       .pickedUpAt && (
+
                       <Info
                         label="Picked Up At"
                         value={formatDate(
-                          selectedShipment
-                            .returnRequest
+                          selectedShipment.returnRequest
                             .pickedUpAt
                         )}
                       />
+
                     )}
 
-                    {selectedShipment
-                      .returnRequest
+                    {selectedShipment.returnRequest
                       .completedAt && (
+
                       <Info
                         label="Completed At"
                         value={formatDate(
-                          selectedShipment
-                            .returnRequest
+                          selectedShipment.returnRequest
                             .completedAt
                         )}
                       />
+
                     )}
 
                   </div>
 
-                  {/* DESCRIPTION */}
+                  {/* =================================================
+                      RETURN DELIVERY OPTION
+                  ================================================= */}
 
-                  {selectedShipment
-                    .returnRequest
+                  {selectedShipment.returnRequest.status ===
+                    "IN_WAREHOUSE" && (
+
+                    <div className="mt-5 rounded-2xl border border-blue-200 bg-blue-50 p-5">
+
+                      {/* =================================================
+                          OPTION NOT SELECTED
+                      ================================================= */}
+
+                      {!selectedShipment.returnRequest
+                        .deliveryOption && (
+
+                        <>
+
+                          <p className="text-sm font-semibold text-blue-900">
+                            Your return has reached the warehouse
+                          </p>
+
+                          <p className="mt-1 text-sm text-blue-700">
+                            Choose how you want to receive
+                            your returned package.
+                          </p>
+
+                          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+
+                            {/* =================================================
+                                VENDOR PICKUP
+                            ================================================= */}
+
+                            <button
+                              disabled={
+                                returnDeliveryLoading
+                              }
+                              onClick={() =>
+                                handleReturnDeliveryOption(
+                                  selectedShipment,
+                                  "VENDOR_PICKUP"
+                                )
+                              }
+                              className="rounded-xl border border-blue-200 bg-white p-4 text-left transition hover:border-blue-400 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+
+                              <div className="text-2xl">
+                                📦
+                              </div>
+
+                              <p className="mt-2 font-semibold text-gray-900">
+                                I will pick up from warehouse
+                              </p>
+
+                              <p className="mt-1 text-xs text-gray-500">
+                                I will collect the returned
+                                package myself from the warehouse.
+                              </p>
+
+                            </button>
+
+                            {/* =================================================
+                                DELIVER TO VENDOR
+                            ================================================= */}
+
+                            <button
+                              disabled={
+                                returnDeliveryLoading
+                              }
+                              onClick={() =>
+                                handleReturnDeliveryOption(
+                                  selectedShipment,
+                                  "DELIVER_TO_VENDOR"
+                                )
+                              }
+                              className="rounded-xl border border-orange-200 bg-white p-4 text-left transition hover:border-orange-400 hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+
+                              <div className="text-2xl">
+                                🏠
+                              </div>
+
+                              <p className="mt-2 font-semibold text-gray-900">
+                                Return to my house
+                              </p>
+
+                              <p className="mt-1 text-xs text-gray-500">
+                                Have the returned package
+                                delivered to your registered
+                                vendor address.
+                              </p>
+
+                            </button>
+
+                          </div>
+
+                          {returnDeliveryLoading && (
+
+                            <p className="mt-3 text-center text-xs font-medium text-blue-700">
+                              Saving your delivery option...
+                            </p>
+
+                          )}
+
+                        </>
+
+                      )}
+
+                      {/* =================================================
+                          VENDOR PICKUP SELECTED
+                      ================================================= */}
+
+                      {selectedShipment.returnRequest
+                        .deliveryOption ===
+                        "VENDOR_PICKUP" && (
+
+                        <div className="rounded-xl border border-green-200 bg-green-50 p-4">
+
+                          <div className="flex items-start gap-3">
+
+                            <div className="text-2xl">
+                              📦
+                            </div>
+
+                            <div className="flex-1">
+
+                              <p className="text-sm font-semibold text-green-900">
+                                Vendor Pickup Selected
+                              </p>
+
+                              <p className="mt-1 text-sm text-green-700">
+                                You have chosen to pick up
+                                the returned package from
+                                the warehouse.
+                              </p>
+
+                              <div className="mt-3 inline-flex rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-800">
+                                Delivery Option: Vendor Pickup
+                              </div>
+
+                            </div>
+
+                          </div>
+
+                        </div>
+
+                      )}
+
+                      {/* =================================================
+                          DELIVER TO VENDOR SELECTED
+                      ================================================= */}
+
+                      {selectedShipment.returnRequest
+                        .deliveryOption ===
+                        "DELIVER_TO_VENDOR" && (
+
+                        <div className="rounded-xl border border-orange-200 bg-orange-50 p-4">
+
+                          <div className="flex items-start gap-3">
+
+                            <div className="text-2xl">
+                              🏠
+                            </div>
+
+                            <div className="flex-1">
+
+                              <p className="text-sm font-semibold text-orange-900">
+                                Delivery To Vendor Selected
+                              </p>
+
+                              <p className="mt-1 text-sm text-orange-700">
+                                The returned package will
+                                be delivered to your registered
+                                vendor address.
+                              </p>
+
+                              <div className="mt-3 inline-flex rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold text-orange-800">
+                                Delivery Option: Deliver To Vendor
+                              </div>
+
+                            </div>
+
+                          </div>
+
+                        </div>
+
+                      )}
+
+                    </div>
+
+                  )}
+
+                  {/* =================================================
+                      DESCRIPTION
+                  ================================================= */}
+
+                  {selectedShipment.returnRequest
                     .description && (
 
                     <div className="mt-4">
@@ -1915,18 +2091,16 @@ export default function VendorShipmentsPage() {
                       </p>
 
                       <p className="mt-1 rounded-xl bg-white p-3 text-sm text-gray-700">
-                        {
-                          selectedShipment
-                            .returnRequest
-                            .description
-                        }
+                        {selectedShipment.returnRequest.description}
                       </p>
 
                     </div>
 
                   )}
 
-                  {/* RIDER */}
+                  {/* =================================================
+                      RIDER
+                  ================================================= */}
 
                   <div className="mt-4">
 
@@ -1934,37 +2108,23 @@ export default function VendorShipmentsPage() {
                       Return Rider
                     </p>
 
-                    {selectedShipment
-                      .returnRequest
+                    {selectedShipment.returnRequest
                       .rider ? (
 
                       <div className="mt-2 rounded-xl bg-white p-4">
 
                         <p className="font-semibold">
-                          {
-                            selectedShipment
-                              .returnRequest
-                              .rider
-                              .user
-                              ?.name ||
-                            "Rider"
-                          }
+                          {selectedShipment.returnRequest.rider
+                            .user?.name ||
+                            "Rider"}
                         </p>
 
-                        {selectedShipment
-                          .returnRequest
-                          .rider
-                          .user
-                          ?.phone && (
+                        {selectedShipment.returnRequest.rider
+                          .user?.phone && (
 
                           <p className="mt-1 text-sm text-gray-500">
-                            {
-                              selectedShipment
-                                .returnRequest
-                                .rider
-                                .user
-                                .phone
-                            }
+                            {selectedShipment.returnRequest.rider
+                              .user.phone}
                           </p>
 
                         )}
@@ -1982,15 +2142,15 @@ export default function VendorShipmentsPage() {
 
                   </div>
 
-                  {/* CANCEL */}
+                  {/* =================================================
+                      CANCEL
+                  ================================================= */}
 
                   {[
                     "REQUESTED",
                     "ASSIGNED_TO_RIDER",
                   ].includes(
-                    selectedShipment
-                      .returnRequest
-                      .status
+                    selectedShipment.returnRequest.status
                   ) && (
 
                     <button
@@ -2013,9 +2173,9 @@ export default function VendorShipmentsPage() {
 
               )}
 
-              {/* =========================================
+              {/* =================================================
                   RECEIVER
-              ========================================= */}
+              ================================================= */}
 
               <div>
 
@@ -2054,9 +2214,9 @@ export default function VendorShipmentsPage() {
 
               </div>
 
-              {/* =========================================
+              {/* =================================================
                   DELIVERY
-              ========================================= */}
+              ================================================= */}
 
               <div>
 
@@ -2069,8 +2229,7 @@ export default function VendorShipmentsPage() {
                   <Info
                     label="Destination"
                     value={
-                      selectedShipment
-                        .locationRate
+                      selectedShipment.locationRate
                         ?.location?.name ||
                       "N/A"
                     }
@@ -2079,10 +2238,8 @@ export default function VendorShipmentsPage() {
                   <Info
                     label="Zone"
                     value={
-                      selectedShipment
-                        .deliveryZone ||
-                      selectedShipment
-                        .locationRate
+                      selectedShipment.deliveryZone ||
+                      selectedShipment.locationRate
                         ?.location?.zone ||
                       "N/A"
                     }
@@ -2091,10 +2248,8 @@ export default function VendorShipmentsPage() {
                   <Info
                     label="Delivery Type"
                     value={
-                      selectedShipment
-                        .locationRate
-                        ?.deliveryType
-                        ?.name ||
+                      selectedShipment.locationRate
+                        ?.deliveryType?.name ||
                       "N/A"
                     }
                   />
@@ -2122,9 +2277,9 @@ export default function VendorShipmentsPage() {
 
               </div>
 
-              {/* =========================================
+              {/* =================================================
                   PAYMENT
-              ========================================= */}
+              ================================================= */}
 
               <div>
 
@@ -2160,9 +2315,9 @@ export default function VendorShipmentsPage() {
 
               </div>
 
-              {/* =========================================
+              {/* =================================================
                   ORIGINAL RIDER
-              ========================================= */}
+              ================================================= */}
 
               <div>
 
@@ -2175,24 +2330,14 @@ export default function VendorShipmentsPage() {
                   <div className="rounded-xl bg-gray-50 p-4">
 
                     <p className="font-medium">
-                      {
-                        selectedShipment
-                          .rider
-                          .user?.name ||
-                        "Rider"
-                      }
+                      {selectedShipment.rider.user?.name ||
+                        "Rider"}
                     </p>
 
-                    {selectedShipment
-                      .rider
-                      .user?.phone && (
+                    {selectedShipment.rider.user?.phone && (
 
                       <p className="mt-1 text-sm text-gray-500">
-                        {
-                          selectedShipment
-                            .rider
-                            .user.phone
-                        }
+                        {selectedShipment.rider.user.phone}
                       </p>
 
                     )}
@@ -2202,17 +2347,16 @@ export default function VendorShipmentsPage() {
                 ) : (
 
                   <div className="rounded-xl bg-gray-50 p-4 text-sm text-gray-500">
-                    Rider has not been assigned
-                    yet.
+                    Rider has not been assigned yet.
                   </div>
 
                 )}
 
               </div>
 
-              {/* =========================================
+              {/* =================================================
                   TRACKING
-              ========================================= */}
+              ================================================= */}
 
               <div>
 
@@ -2222,12 +2366,11 @@ export default function VendorShipmentsPage() {
                     Tracking History
                   </h3>
 
-                  {selectedShipment
-                    .returnRequest && (
+                  {selectedShipment.returnRequest && (
 
                     <span className="text-xs font-medium text-orange-600">
-                      Return updates use the
-                      same tracking number
+                      Return updates use the same
+                      tracking number
                     </span>
 
                   )}
@@ -2235,8 +2378,7 @@ export default function VendorShipmentsPage() {
                 </div>
 
                 {selectedShipment.trackings &&
-                selectedShipment.trackings.length >
-                  0 ? (
+                selectedShipment.trackings.length > 0 ? (
 
                   <div className="space-y-4">
 
@@ -2256,12 +2398,11 @@ export default function VendorShipmentsPage() {
                               )}
                             </div>
 
-                            {tracking.status
-                              .startsWith(
-                                "RETURN"
-                              ) ||
-                              tracking.status ===
-                                "OUT_FOR_RETURN" ? (
+                            {tracking.status.startsWith(
+                              "RETURN"
+                            ) ||
+                            tracking.status ===
+                              "OUT_FOR_RETURN" ? (
 
                               <span className="rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-semibold text-orange-700">
                                 RETURN
@@ -2274,9 +2415,7 @@ export default function VendorShipmentsPage() {
                           {tracking.location && (
 
                             <div className="mt-1 text-sm text-gray-500">
-                              {
-                                tracking.location
-                              }
+                              {tracking.location}
                             </div>
 
                           )}
@@ -2284,9 +2423,7 @@ export default function VendorShipmentsPage() {
                           {tracking.message && (
 
                             <div className="mt-1 text-sm text-gray-600">
-                              {
-                                tracking.message
-                              }
+                              {tracking.message}
                             </div>
 
                           )}
@@ -2314,9 +2451,9 @@ export default function VendorShipmentsPage() {
 
               </div>
 
-              {/* =========================================
+              {/* =================================================
                   QR
-              ========================================= */}
+              ================================================= */}
 
               {selectedShipment.qrCode && (
 
@@ -2327,18 +2464,14 @@ export default function VendorShipmentsPage() {
                   </h3>
 
                   <img
-                    src={
-                      selectedShipment.qrCode
-                    }
+                    src={selectedShipment.qrCode}
                     alt="Shipment QR Code"
                     className="mx-auto h-40 w-40 object-contain"
                   />
 
                   <p className="mt-3 text-xs text-gray-500">
                     Tracking Number:{" "}
-                    {
-                      selectedShipment.trackingNumber
-                    }
+                    {selectedShipment.trackingNumber}
                   </p>
 
                 </div>
@@ -2347,15 +2480,15 @@ export default function VendorShipmentsPage() {
 
             </div>
 
-            {/* MODAL FOOTER */}
+            {/* =================================================
+                MODAL FOOTER
+            ================================================= */}
 
             <div className="border-t px-6 py-4">
 
               <button
                 onClick={() =>
-                  setSelectedShipment(
-                    null
-                  )
+                  setSelectedShipment(null)
                 }
                 className="w-full rounded-xl bg-accent px-5 py-3 font-semibold text-white transition hover:bg-accent-dark"
               >
@@ -2402,9 +2535,7 @@ export default function VendorShipmentsPage() {
                 </h2>
 
                 <p className="mt-1 text-sm text-gray-500">
-                  {
-                    returnShipment.trackingNumber
-                  }
+                  {returnShipment.trackingNumber}
                 </p>
 
               </div>
@@ -2434,10 +2565,9 @@ export default function VendorShipmentsPage() {
                 </p>
 
                 <p className="mt-1 text-xs leading-5 text-blue-700">
-                  The return will be collected
-                  from the customer, brought to
-                  the warehouse, and then sent
-                  back to you.
+                  The return will be collected from
+                  the customer, brought to the warehouse,
+                  and then sent back to you.
                 </p>
 
               </div>
@@ -2451,14 +2581,12 @@ export default function VendorShipmentsPage() {
                 </p>
 
                 <p className="mt-1 text-lg font-bold">
-                  {
-                    returnShipment.trackingNumber
-                  }
+                  {returnShipment.trackingNumber}
                 </p>
 
                 <p className="mt-1 text-xs text-gray-500">
-                  This same tracking number will
-                  be used throughout the return.
+                  This same tracking number will be used
+                  throughout the return.
                 </p>
 
               </div>
@@ -2483,6 +2611,8 @@ export default function VendorShipmentsPage() {
 
               </div>
 
+              {/* PICKUP ADDRESS */}
+
               <div>
 
                 <Info
@@ -2506,8 +2636,7 @@ export default function VendorShipmentsPage() {
                   value={returnReason}
                   onChange={(e) =>
                     setReturnReason(
-                      e.target
-                        .value as ReturnReason
+                      e.target.value as ReturnReason
                     )
                   }
                   disabled={returnLoading}
@@ -2582,12 +2711,10 @@ export default function VendorShipmentsPage() {
               <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-4">
 
                 <p className="text-xs leading-5 text-yellow-800">
-                  After submitting, staff/admin
-                  will review the return and
-                  assign a rider. The rider will
-                  collect the package from the
-                  customer and return it to your
-                  company.
+                  After submitting, staff/admin will
+                  review the return and assign a rider.
+                  The rider will collect the package from
+                  the customer and return it to your company.
                 </p>
 
               </div>
@@ -2610,9 +2737,7 @@ export default function VendorShipmentsPage() {
 
               <button
                 disabled={returnLoading}
-                onClick={
-                  handleRequestReturn
-                }
+                onClick={handleRequestReturn}
                 className="flex-1 rounded-xl bg-orange-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {returnLoading
@@ -2657,3 +2782,4 @@ function Info({
     </div>
   );
 }
+

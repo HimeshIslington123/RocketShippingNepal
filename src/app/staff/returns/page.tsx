@@ -1,13 +1,13 @@
 "use client";
 
 import {
+  useCallback,
   useEffect,
   useMemo,
   useState,
 } from "react";
 
 import ReturnTable from "@/components/returns/ReturnTable";
-
 import ReturnModal from "@/components/returns/ReturnModal";
 
 import {
@@ -16,37 +16,24 @@ import {
   Rider,
 } from "@/components/shipments/types";
 
+
+// ============================================================
+// API
+// ============================================================
+
 const API_URL =
-  process.env.NEXT_PUBLIC_API_URL;
+  process.env.NEXT_PUBLIC_API_URL || "";
 
-const RETURN_STATUSES: ReturnStatus[] = [
-  "REQUESTED",
-  "ASSIGNED_TO_RIDER",
-  "PICKED_UP_FROM_CUSTOMER",
-  "IN_WAREHOUSE",
-  "OUT_FOR_RETURN",
-  "RETURNED_TO_VENDOR",
-  "CANCELLED",
-];
 
-function formatStatus(
-  status?: string
-) {
-  if (!status) return "—";
+// ============================================================
+// PAGE
+// ============================================================
 
-  return status
-    .replaceAll("_", " ")
-    .toLowerCase()
-    .replace(/\b\w/g, (letter) =>
-      letter.toUpperCase()
-    );
-}
+export default function ReturnsPage() {
 
-export default function StaffReturnsPage() {
-
-  // ============================================================
+  // ==========================================================
   // RETURNS
-  // ============================================================
+  // ==========================================================
 
   const [returns, setReturns] =
     useState<ReturnRequest[]>([]);
@@ -57,9 +44,10 @@ export default function StaffReturnsPage() {
   const [error, setError] =
     useState("");
 
-  // ============================================================
+
+  // ==========================================================
   // FILTER
-  // ============================================================
+  // ==========================================================
 
   const [search, setSearch] =
     useState("");
@@ -67,18 +55,18 @@ export default function StaffReturnsPage() {
   const [statusFilter, setStatusFilter] =
     useState<string>("ALL");
 
-  // ============================================================
-  // MODAL
-  // ============================================================
+
+  // ==========================================================
+  // SELECTED RETURN
+  // ==========================================================
 
   const [selectedReturn, setSelectedReturn] =
-    useState<ReturnRequest | null>(
-      null
-    );
+    useState<ReturnRequest | null>(null);
 
-  // ============================================================
+
+  // ==========================================================
   // RIDERS
-  // ============================================================
+  // ==========================================================
 
   const [riders, setRiders] =
     useState<Rider[]>([]);
@@ -86,12 +74,18 @@ export default function StaffReturnsPage() {
   const [ridersLoading, setRidersLoading] =
     useState(false);
 
+
+  // ==========================================================
+  // SELECTED RIDER
+  // ==========================================================
+
   const [selectedRiderId, setSelectedRiderId] =
     useState("");
 
-  // ============================================================
-  // ASSIGN
-  // ============================================================
+
+  // ==========================================================
+  // ASSIGN RIDER
+  // ==========================================================
 
   const [assigningRider, setAssigningRider] =
     useState(false);
@@ -102,9 +96,10 @@ export default function StaffReturnsPage() {
   const [assignMessage, setAssignMessage] =
     useState("");
 
-  // ============================================================
+
+  // ==========================================================
   // STATUS
-  // ============================================================
+  // ==========================================================
 
   const [updatingStatus, setUpdatingStatus] =
     useState(false);
@@ -115,162 +110,185 @@ export default function StaffReturnsPage() {
   const [statusMessage, setStatusMessage] =
     useState("");
 
-  // ============================================================
-  // INITIAL LOAD
-  // ============================================================
 
-  useEffect(() => {
-    loadReturns();
-  }, []);
-
-  // ============================================================
+  // ==========================================================
   // LOAD RETURNS
-  // ============================================================
+  // ==========================================================
 
-  async function loadReturns() {
-    try {
+  const loadReturns = useCallback(
+    async () => {
+
       setLoading(true);
-
       setError("");
 
-      const token =
-        localStorage.getItem("token");
+      try {
 
-      if (!token) {
-        throw new Error(
-          "Authentication token not found. Please login again."
-        );
-      }
+        const token =
+          localStorage.getItem(
+            "token"
+          );
 
-      const res = await fetch(
-        `${API_URL}/api/returns/all`,
-        {
-          method: "GET",
 
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type":
-              "application/json",
-          },
+        const response =
+          await fetch(
+            `${API_URL}/api/returns/all`,
+            {
+              method: "GET",
+
+              headers: {
+                Authorization:
+                  `Bearer ${token}`,
+              },
+
+              cache: "no-store",
+            }
+          );
+
+
+        const data =
+          await response.json();
+
+
+        if (!response.ok) {
+          throw new Error(
+            data?.message ||
+              "Failed to load returns"
+          );
         }
-      );
 
-      const data =
-        await res.json().catch(
-          () => null
+
+        const result =
+          Array.isArray(data)
+            ? data
+            : data?.returns ||
+              data?.data ||
+              [];
+
+
+        setReturns(result);
+
+      } catch (error) {
+
+        console.error(
+          "Load returns error:",
+          error
         );
 
-      if (!res.ok) {
-        throw new Error(
-          data?.message ||
-            `Failed to load returns (${res.status})`
+        setError(
+          error instanceof Error
+            ? error.message
+            : "Failed to load returns"
         );
+
+      } finally {
+
+        setLoading(false);
+
       }
 
-      /*
-       * Support:
-       *
-       * { returns: [...] }
-       *
-       * or
-       *
-       * [...]
-       */
+    },
+    []
+  );
 
-      const returnList =
-        Array.isArray(data)
-          ? data
-          : data?.returns || [];
 
-      setReturns(returnList);
-
-    } catch (err) {
-      console.error(
-        "LOAD RETURNS ERROR:",
-        err
-      );
-
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Could not load return requests."
-      );
-
-      setReturns([]);
-
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // ============================================================
+  // ==========================================================
   // LOAD RIDERS
-  // ============================================================
+  // ==========================================================
 
-  async function loadRiders() {
-    try {
+  const loadRiders = useCallback(
+    async () => {
+
       setRidersLoading(true);
 
-      const token =
-        localStorage.getItem("token");
+      try {
 
-      if (!token) {
-        throw new Error(
-          "Authentication token not found."
-        );
-      }
+        const token =
+          localStorage.getItem(
+            "token"
+          );
 
-      const res = await fetch(
-        `${API_URL}/api/rider/`,
-        {
-          method: "GET",
 
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type":
-              "application/json",
-          },
+        const response =
+          await fetch(
+            `${API_URL}/api/rider/`,
+            {
+              method: "GET",
+
+              headers: {
+                Authorization:
+                  `Bearer ${token}`,
+              },
+
+              cache: "no-store",
+            }
+          );
+
+
+        const data =
+          await response.json();
+
+
+        if (!response.ok) {
+          throw new Error(
+            data?.message ||
+              "Failed to load riders"
+          );
         }
-      );
 
-      const data =
-        await res.json().catch(
-          () => null
+
+        const result =
+          Array.isArray(data)
+            ? data
+            : data?.riders ||
+              data?.data ||
+              [];
+
+
+        setRiders(result);
+
+      } catch (error) {
+
+        console.error(
+          "Load riders error:",
+          error
         );
 
-      if (!res.ok) {
-        throw new Error(
-          data?.message ||
-            `Failed to load riders (${res.status})`
+        setAssignError(
+          error instanceof Error
+            ? error.message
+            : "Failed to load riders"
         );
+
+      } finally {
+
+        setRidersLoading(false);
+
       }
 
-      setRiders(
-        Array.isArray(data)
-          ? data
-          : data?.riders || []
-      );
+    },
+    []
+  );
 
-    } catch (err) {
-      console.error(
-        "LOAD RETURN RIDERS ERROR:",
-        err
-      );
 
-      setRiders([]);
+  // ==========================================================
+  // INITIAL LOAD
+  // ==========================================================
 
-    } finally {
-      setRidersLoading(false);
-    }
-  }
+  useEffect(() => {
 
-  // ============================================================
+    loadReturns();
+
+  }, [loadReturns]);
+
+
+  // ==========================================================
   // OPEN RETURN
-  // ============================================================
+  // ==========================================================
 
-  async function openReturn(
+  const openReturn = async (
     returnRequest: ReturnRequest
-  ) {
+  ) => {
+
     setSelectedReturn(
       returnRequest
     );
@@ -283,24 +301,48 @@ export default function StaffReturnsPage() {
     setStatusError("");
     setStatusMessage("");
 
-    /*
-     * Riders are required when
-     * return status is REQUESTED.
-     */
+
+    // ========================================================
+    // ORIGINAL PICKUP RIDER
+    // ========================================================
+
+    const needsInitialRider =
+      returnRequest.status ===
+      "REQUESTED";
+
+
+    // ========================================================
+    // NEW WAREHOUSE -> VENDOR RIDER
+    // ========================================================
+
+    const needsReturnDeliveryRider =
+      returnRequest.status ===
+        "IN_WAREHOUSE" &&
+
+      returnRequest.deliveryOption ===
+        "DELIVER_TO_VENDOR" &&
+
+      !returnRequest.returnDeliveryRiderId;
+
 
     if (
-      returnRequest.status ===
-      "REQUESTED"
+      needsInitialRider ||
+      needsReturnDeliveryRider
     ) {
+
       await loadRiders();
+
     }
-  }
 
-  // ============================================================
-  // CLOSE RETURN
-  // ============================================================
+  };
 
-  function closeReturn() {
+
+  // ==========================================================
+  // CLOSE MODAL
+  // ==========================================================
+
+  const closeReturn = () => {
+
     if (
       assigningRider ||
       updatingStatus
@@ -317,339 +359,591 @@ export default function StaffReturnsPage() {
 
     setStatusError("");
     setStatusMessage("");
-  }
 
-  // ============================================================
+  };
+
+
+  // ==========================================================
   // ASSIGN RIDER
-  // ============================================================
+  // ==========================================================
 
-  async function assignReturnRider() {
-    if (!selectedReturn) {
-      return;
-    }
+  const assignReturnRider =
+    async () => {
 
-    if (
-      selectedReturn.status !==
-      "REQUESTED"
-    ) {
-      setAssignError(
-        "Rider can only be assigned when the return is requested."
-      );
+      if (!selectedReturn) {
+        return;
+      }
 
-      return;
-    }
-
-    if (!selectedRiderId) {
-      setAssignError(
-        "Please select a rider."
-      );
-
-      return;
-    }
-
-    const riderId =
-      Number(selectedRiderId);
-
-    if (!Number.isInteger(riderId)) {
-      setAssignError(
-        "Invalid rider selected."
-      );
-
-      return;
-    }
-
-    try {
-      setAssigningRider(true);
 
       setAssignError("");
       setAssignMessage("");
 
-      const token =
-        localStorage.getItem("token");
 
-      if (!token) {
-        throw new Error(
-          "Authentication token not found."
+      // ======================================================
+      // RIDER VALIDATION
+      // ======================================================
+
+      if (!selectedRiderId) {
+
+        setAssignError(
+          "Please select a rider first."
         );
+
+        return;
       }
 
-      const res = await fetch(
-        `${API_URL}/api/returns/${selectedReturn.id}/assign-rider`,
-        {
-          method: "PATCH",
 
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type":
-              "application/json",
-          },
-
-          body: JSON.stringify({
-            riderId,
-          }),
-        }
-      );
-
-      const data =
-        await res.json().catch(
-          () => null
+      const riderId =
+        Number(
+          selectedRiderId
         );
 
-      if (!res.ok) {
-        throw new Error(
-          data?.message ||
-            `Failed to assign rider (${res.status})`
-        );
-      }
-
-      /*
-       * Backend should return:
-       *
-       * {
-       *   returnRequest: {...}
-       * }
-       *
-       * But support other response shapes.
-       */
-
-      const updatedReturn =
-        data?.returnRequest ||
-        data?.return ||
-        data;
 
       if (
-        updatedReturn &&
-        updatedReturn.id
+        !Number.isInteger(
+          riderId
+        )
       ) {
-        setSelectedReturn(
-          updatedReturn
+
+        setAssignError(
+          "Invalid rider selected."
         );
 
-        setReturns(
-          (current) =>
-            current.map(
-              (item) =>
-                item.id ===
-                updatedReturn.id
-                  ? updatedReturn
-                  : item
-            )
-        );
+        return;
       }
 
-      setSelectedRiderId("");
 
-      setAssignMessage(
-        "Rider assigned successfully. Return moved to Assigned To Rider."
-      );
+      // ======================================================
+      // ASSIGNMENT TYPE
+      // ======================================================
 
-      await loadReturns();
+      const assigningPickupRider =
+        selectedReturn.status ===
+        "REQUESTED";
 
-    } catch (err) {
-      console.error(
-        "ASSIGN RETURN RIDER ERROR:",
-        err
-      );
 
-      setAssignError(
-        err instanceof Error
-          ? err.message
-          : "Failed to assign rider."
-      );
+      const assigningReturnDeliveryRider =
+        selectedReturn.status ===
+          "IN_WAREHOUSE" &&
 
-    } finally {
-      setAssigningRider(false);
-    }
-  }
+        selectedReturn.deliveryOption ===
+          "DELIVER_TO_VENDOR";
 
-  // ============================================================
+
+      if (
+        !assigningPickupRider &&
+        !assigningReturnDeliveryRider
+      ) {
+
+        setAssignError(
+          "A rider cannot be assigned at this stage."
+        );
+
+        return;
+      }
+
+
+      // ======================================================
+      // START
+      // ======================================================
+
+      setAssigningRider(true);
+
+
+      try {
+
+        const token =
+          localStorage.getItem(
+            "token"
+          );
+
+
+        const response =
+          await fetch(
+            `${API_URL}/api/returns/${selectedReturn.id}/assign-rider`,
+            {
+              method: "PATCH",
+
+              headers: {
+                "Content-Type":
+                  "application/json",
+
+                Authorization:
+                  `Bearer ${token}`,
+              },
+
+              body: JSON.stringify({
+                riderId,
+              }),
+            }
+          );
+
+
+        const data =
+          await response.json();
+
+
+        if (!response.ok) {
+
+          throw new Error(
+            data?.message ||
+              "Failed to assign rider"
+          );
+
+        }
+
+
+        // ====================================================
+        // UPDATED RETURN
+        // ====================================================
+
+        const updatedReturn =
+          data?.returnRequest ||
+          data?.return ||
+          data?.data ||
+          data;
+
+
+        if (
+          updatedReturn &&
+          updatedReturn.id
+        ) {
+
+          setSelectedReturn(
+            updatedReturn
+          );
+
+
+          setReturns(
+            (previous) =>
+              previous.map(
+                (item) =>
+                  item.id ===
+                  updatedReturn.id
+                    ? updatedReturn
+                    : item
+              )
+          );
+
+        }
+
+
+        setSelectedRiderId("");
+
+
+        // ====================================================
+        // MESSAGE
+        // ====================================================
+
+        if (
+          assigningPickupRider
+        ) {
+
+          setAssignMessage(
+            "Pickup rider assigned successfully."
+          );
+
+        } else {
+
+          setAssignMessage(
+            "New return delivery rider assigned successfully."
+          );
+
+        }
+
+
+        // ====================================================
+        // REFRESH
+        // ====================================================
+
+        await loadReturns();
+
+      } catch (error) {
+
+        console.error(
+          "Assign rider error:",
+          error
+        );
+
+        setAssignError(
+          error instanceof Error
+            ? error.message
+            : "Failed to assign rider"
+        );
+
+      } finally {
+
+        setAssigningRider(false);
+
+      }
+
+    };
+
+
+  // ==========================================================
   // UPDATE RETURN STATUS
-  // ============================================================
+  // ==========================================================
 
-  async function updateReturnStatus(
-    newStatus: ReturnStatus
-  ) {
-    if (!selectedReturn) {
-      return;
-    }
+  const updateReturnStatus =
+    async (
+      newStatus: ReturnStatus
+    ) => {
 
-    const currentStatus =
-      selectedReturn.status;
+      if (!selectedReturn) {
+        return;
+      }
 
-    /*
-     * Expected flow.
-     */
-
-    const flow: ReturnStatus[] = [
-      "REQUESTED",
-      "ASSIGNED_TO_RIDER",
-      "PICKED_UP_FROM_CUSTOMER",
-      "IN_WAREHOUSE",
-      "OUT_FOR_RETURN",
-      "RETURNED_TO_VENDOR",
-    ];
-
-    const currentIndex =
-      flow.indexOf(currentStatus);
-
-    const expectedNext =
-      currentIndex >= 0 &&
-      currentIndex <
-        flow.length - 1
-        ? flow[currentIndex + 1]
-        : null;
-
-    if (
-      newStatus !==
-      expectedNext
-    ) {
-      setStatusError(
-        `Invalid return transition. Return must move from ${formatStatus(
-          currentStatus
-        )} to ${formatStatus(
-          expectedNext || ""
-        )}.`
-      );
-
-      return;
-    }
-
-    try {
-      setUpdatingStatus(true);
 
       setStatusError("");
       setStatusMessage("");
 
-      const token =
-        localStorage.getItem("token");
 
-      if (!token) {
-        throw new Error(
-          "Authentication token not found."
-        );
-      }
+      const currentStatus =
+        selectedReturn.status;
 
-      const res = await fetch(
-        `${API_URL}/api/returns/${selectedReturn.id}/status`,
-        {
-          method: "PATCH",
 
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type":
-              "application/json",
-          },
-
-          body: JSON.stringify({
-            status: newStatus,
-          }),
-        }
-      );
-
-      const data =
-        await res.json().catch(
-          () => null
-        );
-
-      if (!res.ok) {
-        throw new Error(
-          data?.message ||
-            `Failed to update return status (${res.status})`
-        );
-      }
-
-      const updatedReturn =
-        data?.returnRequest ||
-        data?.return ||
-        data;
+      // ======================================================
+      // REQUESTED
+      // ======================================================
 
       if (
-        updatedReturn &&
-        updatedReturn.id
+        currentStatus ===
+        "REQUESTED"
       ) {
-        setSelectedReturn(
-          updatedReturn
-        );
 
-        setReturns(
-          (current) =>
-            current.map(
-              (item) =>
-                item.id ===
-                updatedReturn.id
-                  ? updatedReturn
-                  : item
-            )
-        );
-      } else {
-        setSelectedReturn(
-          (previous) =>
-            previous
-              ? {
-                  ...previous,
-                  status:
-                    newStatus,
-                }
-              : previous
-        );
+        if (
+          newStatus !==
+          "ASSIGNED_TO_RIDER"
+        ) {
 
-        setReturns(
-          (current) =>
-            current.map(
-              (item) =>
-                item.id ===
-                selectedReturn.id
-                  ? {
-                      ...item,
-                      status:
-                        newStatus,
-                    }
-                  : item
-            )
-        );
+          setStatusError(
+            "Invalid return status transition."
+          );
+
+          return;
+        }
+
+
+        if (
+          !selectedReturn.riderId
+        ) {
+
+          setStatusError(
+            "Please assign the pickup rider first."
+          );
+
+          return;
+        }
+
       }
 
-      setStatusMessage(
-        `Return moved to ${formatStatus(
-          newStatus
-        )} successfully.`
-      );
 
-      await loadReturns();
+      // ======================================================
+      // ASSIGNED
+      // ======================================================
 
-    } catch (err) {
-      console.error(
-        "UPDATE RETURN STATUS ERROR:",
-        err
-      );
+      if (
+        currentStatus ===
+        "ASSIGNED_TO_RIDER"
+      ) {
 
-      setStatusError(
-        err instanceof Error
-          ? err.message
-          : "Failed to update return status."
-      );
+        if (
+          newStatus !==
+          "PICKED_UP_FROM_CUSTOMER"
+        ) {
 
-    } finally {
-      setUpdatingStatus(false);
-    }
-  }
+          setStatusError(
+            "Invalid return status transition."
+          );
 
-  // ============================================================
-  // FILTERED RETURNS
-  // ============================================================
+          return;
+        }
+
+      }
+
+
+      // ======================================================
+      // PICKED UP
+      // ======================================================
+
+      if (
+        currentStatus ===
+        "PICKED_UP_FROM_CUSTOMER"
+      ) {
+
+        if (
+          newStatus !==
+          "IN_WAREHOUSE"
+        ) {
+
+          setStatusError(
+            "Invalid return status transition."
+          );
+
+          return;
+        }
+
+      }
+
+
+      // ======================================================
+      // IN WAREHOUSE
+      // ======================================================
+
+      if (
+        currentStatus ===
+        "IN_WAREHOUSE"
+      ) {
+
+        // ----------------------------------------------------
+        // VENDOR PICKUP
+        // ----------------------------------------------------
+
+        if (
+          selectedReturn.deliveryOption ===
+          "VENDOR_PICKUP"
+        ) {
+
+          if (
+            newStatus !==
+            "RETURNED_TO_VENDOR"
+          ) {
+
+            setStatusError(
+              "Vendor pickup returns must be completed as Returned To Vendor."
+            );
+
+            return;
+          }
+
+        }
+
+
+        // ----------------------------------------------------
+        // DELIVER TO VENDOR
+        // ----------------------------------------------------
+
+        if (
+          selectedReturn.deliveryOption ===
+          "DELIVER_TO_VENDOR"
+        ) {
+
+          if (
+            newStatus !==
+            "OUT_FOR_RETURN"
+          ) {
+
+            setStatusError(
+              "This return must move to Out For Return."
+            );
+
+            return;
+          }
+
+
+          if (
+            !selectedReturn.returnDeliveryRiderId
+          ) {
+
+            setStatusError(
+              "Please assign a new return delivery rider first."
+            );
+
+            return;
+          }
+
+        }
+
+
+        // ----------------------------------------------------
+        // NO OPTION
+        // ----------------------------------------------------
+
+        if (
+          !selectedReturn.deliveryOption
+        ) {
+
+          setStatusError(
+            "Please select a return delivery option first."
+          );
+
+          return;
+        }
+
+      }
+
+
+      // ======================================================
+      // OUT FOR RETURN
+      // ======================================================
+
+      if (
+        currentStatus ===
+        "OUT_FOR_RETURN"
+      ) {
+
+        if (
+          newStatus !==
+          "RETURNED_TO_VENDOR"
+        ) {
+
+          setStatusError(
+            "Invalid return status transition."
+          );
+
+          return;
+        }
+
+
+        if (
+          !selectedReturn.returnDeliveryRiderId
+        ) {
+
+          setStatusError(
+            "Return delivery rider is required."
+          );
+
+          return;
+        }
+
+      }
+
+
+      // ======================================================
+      // SEND REQUEST
+      // ======================================================
+
+      setUpdatingStatus(true);
+
+
+      try {
+
+        const token =
+          localStorage.getItem(
+            "token"
+          );
+
+
+        const response =
+          await fetch(
+            `${API_URL}/api/returns/${selectedReturn.id}/status`,
+            {
+              method: "PATCH",
+
+              headers: {
+                "Content-Type":
+                  "application/json",
+
+                Authorization:
+                  `Bearer ${token}`,
+              },
+
+              body: JSON.stringify({
+                status: newStatus,
+              }),
+            }
+          );
+
+
+        const data =
+          await response.json();
+
+
+        if (!response.ok) {
+
+          throw new Error(
+            data?.message ||
+              "Failed to update return status"
+          );
+
+        }
+
+
+        // ====================================================
+        // UPDATED RETURN
+        // ====================================================
+
+        const updatedReturn =
+          data?.returnRequest ||
+          data?.return ||
+          data?.data ||
+          data;
+
+
+        if (
+          updatedReturn &&
+          updatedReturn.id
+        ) {
+
+          setSelectedReturn(
+            updatedReturn
+          );
+
+
+          setReturns(
+            (previous) =>
+              previous.map(
+                (item) =>
+                  item.id ===
+                  updatedReturn.id
+                    ? updatedReturn
+                    : item
+              )
+          );
+
+        }
+
+
+        setStatusMessage(
+          `Return status updated to ${formatStatus(
+            newStatus
+          )}.`
+        );
+
+
+        await loadReturns();
+
+      } catch (error) {
+
+        console.error(
+          "Update return status error:",
+          error
+        );
+
+        setStatusError(
+          error instanceof Error
+            ? error.message
+            : "Failed to update return status"
+        );
+
+      } finally {
+
+        setUpdatingStatus(false);
+
+      }
+
+    };
+
+
+  // ==========================================================
+  // FILTER RETURNS
+  // ==========================================================
 
   const filteredReturns =
     useMemo(() => {
-      const query =
+
+      const searchValue =
         search
           .trim()
           .toLowerCase();
 
+
       return returns.filter(
         (item) => {
 
-          const shipment =
-            item.shipment;
+          // --------------------------------------------------
+          // STATUS
+          // --------------------------------------------------
 
           const matchesStatus =
             statusFilter ===
@@ -657,266 +951,264 @@ export default function StaffReturnsPage() {
             item.status ===
               statusFilter;
 
+
           if (!matchesStatus) {
             return false;
           }
 
-          if (!query) {
+
+          // --------------------------------------------------
+          // SEARCH
+          // --------------------------------------------------
+
+          if (!searchValue) {
             return true;
           }
 
-          const values = [
-            shipment?.trackingNumber,
 
-            shipment?.receiverName,
+          const tracking =
+            item.shipment
+              ?.trackingNumber
+              ?.toLowerCase() || "";
 
-            shipment?.receiverPhone,
 
-            shipment?.vendor
-              ?.companyName,
+          const vendor =
+            item.shipment
+              ?.vendor?.name
+              ?.toLowerCase() || "";
 
-            item.reason,
 
-            item.status,
+          const customer =
+            item.shipment
+              ?.customer?.name
+              ?.toLowerCase() || "";
 
-            item.rider?.user?.name,
 
-            item.rider?.phone,
-          ];
+          const reason =
+            item.reason
+              ?.toLowerCase() || "";
 
-          return values.some(
-            (value) =>
-              String(
-                value || ""
-              )
-                .toLowerCase()
-                .includes(query)
+
+          return (
+            tracking.includes(
+              searchValue
+            ) ||
+
+            vendor.includes(
+              searchValue
+            ) ||
+
+            customer.includes(
+              searchValue
+            ) ||
+
+            reason.includes(
+              searchValue
+            )
           );
+
         }
       );
+
     }, [
       returns,
       search,
       statusFilter,
     ]);
 
-  // ============================================================
+
+  // ==========================================================
   // SUMMARY
-  // ============================================================
+  // ==========================================================
 
-  const summary = useMemo(
-    () => ({
-      total: returns.length,
+  const totalReturns =
+    returns.length;
 
-      requested: returns.filter(
-        (item) =>
-          item.status ===
-          "REQUESTED"
-      ).length,
 
-      assigned: returns.filter(
-        (item) =>
-          item.status ===
-          "ASSIGNED_TO_RIDER"
-      ).length,
+  const requestedReturns =
+    returns.filter(
+      (item) =>
+        item.status ===
+        "REQUESTED"
+    ).length;
 
-      pickup: returns.filter(
-        (item) =>
-          item.status ===
-          "PICKED_UP_FROM_CUSTOMER"
-      ).length,
 
-      warehouse: returns.filter(
-        (item) =>
-          item.status ===
-          "IN_WAREHOUSE"
-      ).length,
+  const warehouseReturns =
+    returns.filter(
+      (item) =>
+        item.status ===
+        "IN_WAREHOUSE"
+    ).length;
 
-      outForReturn: returns.filter(
-        (item) =>
-          item.status ===
-          "OUT_FOR_RETURN"
-      ).length,
 
-      completed: returns.filter(
-        (item) =>
-          item.status ===
-          "RETURNED_TO_VENDOR"
-      ).length,
-    }),
-    [returns]
-  );
+  const completedReturns =
+    returns.filter(
+      (item) =>
+        item.status ===
+        "RETURNED_TO_VENDOR"
+    ).length;
 
-  // ============================================================
-  // RENDER
-  // ============================================================
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 text-black sm:p-6 lg:p-8">
+    <div className="space-y-6 p-6">
 
-      {/* ======================================================
-          HEADER
-      ======================================================= */}
 
-      <div className="mx-auto max-w-7xl">
+      {/* ====================================================== */}
+      {/* HEADER */}
+      {/* ====================================================== */}
 
-        <div className="mb-6">
+      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
 
-          <h1 className="text-2xl font-black">
+        <div>
+
+          <h1 className="text-2xl font-bold text-gray-900">
             Return Management
           </h1>
 
           <p className="mt-1 text-sm text-gray-500">
-            Process vendor returns using the
-            original shipment tracking number.
+            Manage customer returns and vendor deliveries.
           </p>
 
         </div>
 
-        {/* ====================================================
-            SUMMARY
-        ===================================================== */}
 
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4 xl:grid-cols-7">
+        <button
+          onClick={loadReturns}
+          disabled={loading}
+          className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+        >
+          {loading
+            ? "Refreshing..."
+            : "Refresh"}
+        </button>
 
-          <SummaryCard
-            label="Total"
-            value={summary.total}
+      </div>
+
+
+      {/* ====================================================== */}
+      {/* SUMMARY */}
+      {/* ====================================================== */}
+
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+
+        <SummaryCard
+          title="Total Returns"
+          value={totalReturns}
+        />
+
+        <SummaryCard
+          title="Requested"
+          value={requestedReturns}
+        />
+
+        <SummaryCard
+          title="In Warehouse"
+          value={warehouseReturns}
+        />
+
+        <SummaryCard
+          title="Completed"
+          value={completedReturns}
+        />
+
+      </div>
+
+
+      {/* ====================================================== */}
+      {/* FILTER */}
+      {/* ====================================================== */}
+
+      <div className="rounded-xl border bg-white p-4">
+
+        <div className="grid gap-4 md:grid-cols-2">
+
+          {/* SEARCH */}
+
+          <input
+            type="text"
+            value={search}
+            onChange={(event) =>
+              setSearch(
+                event.target.value
+              )
+            }
+            placeholder="Search tracking, vendor, customer..."
+            className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm outline-none focus:border-blue-500"
           />
 
-          <SummaryCard
-            label="Requested"
-            value={
-              summary.requested
+
+          {/* STATUS */}
+
+          <select
+            value={statusFilter}
+            onChange={(event) =>
+              setStatusFilter(
+                event.target.value
+              )
             }
-          />
+            className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm outline-none focus:border-blue-500"
+          >
 
-          <SummaryCard
-            label="Assigned"
-            value={
-              summary.assigned
-            }
-          />
+            <option value="ALL">
+              All Statuses
+            </option>
 
-          <SummaryCard
-            label="Picked Up"
-            value={
-              summary.pickup
-            }
-          />
+            <option value="REQUESTED">
+              Requested
+            </option>
 
-          <SummaryCard
-            label="Warehouse"
-            value={
-              summary.warehouse
-            }
-          />
+            <option value="ASSIGNED_TO_RIDER">
+              Assigned To Rider
+            </option>
 
-          <SummaryCard
-            label="Out For Return"
-            value={
-              summary.outForReturn
-            }
-          />
+            <option value="PICKED_UP_FROM_CUSTOMER">
+              Picked Up From Customer
+            </option>
 
-          <SummaryCard
-            label="Completed"
-            value={
-              summary.completed
-            }
-          />
+            <option value="IN_WAREHOUSE">
+              In Warehouse
+            </option>
 
-        </div>
+            <option value="OUT_FOR_RETURN">
+              Out For Return
+            </option>
 
-        {/* ====================================================
-            FILTERS
-        ===================================================== */}
+            <option value="RETURNED_TO_VENDOR">
+              Returned To Vendor
+            </option>
 
-        <div className="mt-6 flex flex-col gap-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5 md:flex-row">
+            <option value="CANCELLED">
+              Cancelled
+            </option>
 
-          <div className="flex-1">
-
-            <input
-              type="text"
-              value={search}
-              onChange={(event) =>
-                setSearch(
-                  event.target.value
-                )
-              }
-              placeholder="Search tracking, vendor, customer, rider..."
-              className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
-            />
-
-          </div>
-
-          <div>
-
-            <select
-              value={
-                statusFilter
-              }
-              onChange={(event) =>
-                setStatusFilter(
-                  event.target.value
-                )
-              }
-              className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-medium outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 md:w-64"
-            >
-
-              <option value="ALL">
-                All Return Statuses
-              </option>
-
-              {RETURN_STATUSES.map(
-                (status) => (
-                  <option
-                    key={status}
-                    value={status}
-                  >
-                    {formatStatus(
-                      status
-                    )}
-                  </option>
-                )
-              )}
-
-            </select>
-
-          </div>
-
-        </div>
-
-        {/* ====================================================
-            TABLE
-        ===================================================== */}
-
-        <div className="mt-6">
-
-          <ReturnTable
-            returns={
-              filteredReturns
-            }
-            loading={loading}
-            error={error}
-            onRefresh={
-              loadReturns
-            }
-            onOpenReturn={
-              openReturn
-            }
-          />
+          </select>
 
         </div>
 
       </div>
 
-      {/* ======================================================
-          MODAL
-      ======================================================= */}
+
+      {/* ====================================================== */}
+      {/* TABLE */}
+      {/* ====================================================== */}
+
+      <ReturnTable
+        returns={filteredReturns}
+        loading={loading}
+        error={error}
+        onRefresh={loadReturns}
+        onOpenReturn={openReturn}
+      />
+
+
+      {/* ====================================================== */}
+      {/* MODAL */}
+      {/* ====================================================== */}
 
       {selectedReturn && (
+
         <ReturnModal
+
           returnRequest={
             selectedReturn
           }
@@ -970,31 +1262,60 @@ export default function StaffReturnsPage() {
           onClose={
             closeReturn
           }
+
         />
+
       )}
 
     </div>
   );
 }
 
+
+// ============================================================
+// SUMMARY CARD
+// ============================================================
+
 function SummaryCard({
-  label,
+  title,
   value,
 }: {
-  label: string;
+  title: string;
   value: number;
 }) {
-  return (
-    <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
 
-      <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-        {label}
+  return (
+    <div className="rounded-xl border bg-white  p-5">
+
+      <p className="text-sm text-gray-500">
+        {title}
       </p>
 
-      <p className="mt-2 text-2xl font-black">
+      <p className="mt-2 text-2xl font-bold text-black">
         {value}
       </p>
 
     </div>
   );
+}
+
+
+// ============================================================
+// FORMAT STATUS
+// ============================================================
+
+function formatStatus(
+  status?: string | null
+) {
+
+  if (!status) {
+    return "-";
+  }
+
+  return status
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (letter) =>
+      letter.toUpperCase()
+    );
 }

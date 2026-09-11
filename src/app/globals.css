@@ -1,30 +1,60 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0b0b0c;
-  --foreground: #f5f4f1;
-  --surface: #f4f3ef;
-  --accent: #ff5a1f;
-  --accent-dark: #d9481a;
-  --muted: #8b8b8d;
-  --line: rgba(255, 255, 255, 0.12);
+  --background: #ffffff;
+  --foreground: #0b1729;
+
+  --surface: #f5f6f8;
+  --surface-dark: #0b1729;
+
+  --accent: #e23c2e;
+  --accent-dark: #c92f22;
+
+  --green: #1e8449;
+  --green-light: #3cb878;
+
+  --muted: #6b7280;
+  --line: #e5e7eb;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+
   --color-surface: var(--surface);
+  --color-surface-dark: var(--surface-dark);
+
   --color-accent: var(--accent);
   --color-accent-dark: var(--accent-dark);
+
+  --color-green: var(--green);
+  --color-green-light: var(--green-light);
+
   --color-muted: var(--muted);
   --color-line: var(--line);
+
   --font-display: var(--font-display);
   --font-body: var(--font-body);
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
+  margin: 0;
   background: var(--background);
   color: var(--foreground);
+  font-family: var(--font-body), sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
 }
 
 .text-balance {

@@ -235,52 +235,65 @@ export default function AdminOverviewPage() {
   // FETCH DASHBOARD
   // ====================================================
 
-  useEffect(() => {
-    let cancelled = false;
+ useEffect(() => {
+  let cancelled = false;
 
-    async function fetchDashboard() {
-      try {
-        setLoading(true);
+  async function fetchDashboard() {
+    // 1. Check cached data first
+    const cached = sessionStorage.getItem("admin-dashboard");
 
-        const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/vendor/admin`
-        );
+    if (cached) {
+      setData(JSON.parse(cached));
+      setLoading(false);
 
-        if (!res.ok) {
-          const body = await res.text().catch(() => "");
-
-          throw new Error(
-            `Request failed: ${res.status} ${body}`
-          );
-        }
-
-        const json: DashboardData = await res.json();
-
-        if (!cancelled) {
-          setData(json);
-          setError(null);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(
-            err instanceof Error
-              ? err.message
-              : "Failed to load dashboard"
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
+      // Optional: don't make API request at all
+      return;
     }
 
-    fetchDashboard();
+    try {
+      setLoading(true);
 
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/vendor/admin`
+      );
+
+      if (!res.ok) {
+        throw new Error(`Request failed: ${res.status}`);
+      }
+
+      const json: DashboardData = await res.json();
+
+      if (!cancelled) {
+        setData(json);
+        setError(null);
+
+        // 2. Save dashboard data
+        sessionStorage.setItem(
+          "admin-dashboard",
+          JSON.stringify(json)
+        );
+      }
+    } catch (err) {
+      if (!cancelled) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Failed to load dashboard"
+        );
+      }
+    } finally {
+      if (!cancelled) {
+        setLoading(false);
+      }
+    }
+  }
+
+  fetchDashboard();
+
+  return () => {
+    cancelled = true;
+  };
+}, []);
 
   // ====================================================
   // LOADING

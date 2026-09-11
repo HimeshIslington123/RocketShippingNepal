@@ -1,65 +1,3 @@
-export type Vendor = {
-  id: number;
-  companyName: string;
-  contactId: string;
-  location: string;
-  userId: number;
-};
-
-export type Location = {
-  id: number;
-  name: string;
-  zone?: string | null;
-};
-
-export type DeliveryType = {
-  id: number;
-  name: string;
-};
-
-export type LocationRate = {
-  id: number;
-  price: number;
-  location: Location;
-  deliveryType: DeliveryType;
-};
-
-export type Rider = {
-  id: number;
-
-  phone: string;
-
-  latitude?: number | null;
-
-  longitude?: number | null;
-
-  vehicleNumber?: string | null;
-
-  isAvailable?: boolean;
-
-  userId: number;
-
-  user?: {
-    id: number;
-    name: string;
-    email: string;
-  };
-};
-
-export type Tracking = {
-  id: string;
-
-  status: string;
-
-  createdAt: string;
-
-  location?: string | null;
-
-  message?: string | null;
-
-  createdBy?: string | null;
-};
-
 export type ReturnStatus =
   | "REQUESTED"
   | "ASSIGNED_TO_RIDER"
@@ -70,14 +8,38 @@ export type ReturnStatus =
   | "CANCELLED";
 
 export type ReturnReason =
-  | "CUSTOMER_CHANGED_MIND"
-  | "WRONG_PRODUCT"
-  | "DAMAGED_PRODUCT"
-  | "DEFECTIVE_PRODUCT"
+  | "DAMAGED"
+  | "WRONG_ITEM"
   | "WRONG_SIZE"
-  | "WRONG_COLOR"
-  | "PRODUCT_NOT_AS_DESCRIBED"
+  | "DEFECTIVE"
+  | "CUSTOMER_CHANGED_MIND"
   | "OTHER";
+
+export type ReturnDeliveryOption =
+  | "VENDOR_PICKUP"
+  | "DELIVER_TO_VENDOR";
+
+export type Rider = {
+  id: number;
+
+  phone?: string | null;
+
+  isAvailable?: boolean;
+
+  user?: {
+    id?: number;
+    name?: string | null;
+    email?: string | null;
+  } | null;
+};
+
+export type ReturnTracking = {
+  id: string;
+  status: string;
+  location?: string | null;
+  message?: string | null;
+  createdAt: string;
+};
 
 export type ReturnRequest = {
   id: string;
@@ -90,87 +52,61 @@ export type ReturnRequest = {
 
   description?: string | null;
 
+  // ORIGINAL PICKUP RIDER
   riderId?: number | null;
+  rider?: Rider | null;
 
-  returnCharge?: number | null;
+  // NEW WAREHOUSE -> VENDOR RIDER
+  returnDeliveryRiderId?: number | null;
+  returnDeliveryRider?: Rider | null;
 
-  requestedAt: string;
+  deliveryOption?: ReturnDeliveryOption | null;
+
+  requestedAt?: string | null;
 
   pickedUpAt?: string | null;
 
   completedAt?: string | null;
 
-  notes?: string | null;
+  createdAt?: string | null;
 
-  createdAt: string;
+  updatedAt?: string | null;
 
-  updatedAt: string;
+  shipment: {
+    id: string;
 
-  rider?: Rider | null;
+    trackingNumber: string;
 
-  shipment?: Shipment | null;
-};
+    status: string;
 
-export type Shipment = {
-  id: string;
+    origin?: string | null;
 
-  trackingNumber: string;
+    zone?: string | null;
 
-  qrCode?: string | null;
+    deliveryType?: string | null;
 
-  receiverName: string;
+    weight?: number | null;
 
-  receiverPhone: string;
+    shippingCharge?: number | null;
 
-  receiverAddress: string;
+    packageType?: string | null;
 
-  packageType: string;
+    paymentType?: string | null;
 
-  weight: number;
+    vendor?: {
+      id?: number;
+      name?: string | null;
+      location?: string | null;
+      address?: string | null;
+    } | null;
 
-  paymentType: "PREPAID" | "COD";
+    customer?: {
+      id?: number;
+      name?: string | null;
+      phone?: string | null;
+      address?: string | null;
+    } | null;
 
-  codAmount: number;
-
-  shippingCharge: number;
-
-  notes?: string | null;
-
-  vendorId?: number | null;
-
-  status: string;
-
-  origin?: string;
-
-  deliveryZone?: string | null;
-
-  locationRateId?: number;
-
-  createdAt: string;
-
-  updatedAt?: string;
-
-  vendor?: Vendor;
-
-  createdByStaff?: {
-    id: number;
-
-    user?: {
-      id: number;
-
-      name: string;
-
-      email: string;
-    };
+    trackings?: ReturnTracking[];
   };
-
-  locationRate?: LocationRate | null;
-
-  rider?: Rider | null;
-
-  riderId?: number | null;
-
-  trackings?: Tracking[];
-
-  returnRequest?: ReturnRequest | null;
 };

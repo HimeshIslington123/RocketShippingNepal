@@ -1,227 +1,139 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState } from "react";
-
 
 type Testimonial = {
   quote: string;
   name: string;
   role: string;
+  company: string;
   avatar: string;
 };
 
 const testimonials: Testimonial[] = [
   {
     quote:
-      "We've worked with several logistics providers before, but Movetrans stands out for their efficiency and attention to detail. They handle our shipments with great care and always keep us informed at every stage.",
-    name: "HYPATHIA ALEX",
-    role: "Project Lead",
-    avatar: "https://picsum.photos/seed/hypathia-alex/96/96",
+      "Rocket Shipping has made our regular cargo deliveries much easier. The process is simple, reliable, and our packages arrive safely.",
+    name: "Anish Budathoki",
+    role: "Operations Manager",
+    company: "bhotahiti.com",
+    avatar: "https://picsum.photos/seed/anish-budathoki/96/96",
   },
   {
     quote:
-      "Movetrans has been a reliable partner for our logistics operations. Their team consistently ensures that our shipments arrive safely and on schedule, and their communication throughout the process has always been clear and professional.",
-    name: "MICHAEL CARTER",
-    role: "Logistics Manager",
-    avatar: "https://picsum.photos/seed/michael-carter/96/96",
+      "We regularly send products through Rocket Shipping and have had a very smooth experience. Their service and communication are excellent.",
+    name: "Om Malla",
+    role: "Business Manager",
+    company: "udhyogbazar.com",
+    avatar: "https://picsum.photos/seed/om-malla/96/96",
   },
   {
     quote:
-      "Movetrans helped us streamline our shipping process and improve delivery timelines. Their professional approach and strong logistics network make them a partner we can truly rely on.",
-    name: "EMMA RODRIGUEZ",
-    role: "Procurement Director",
-    avatar: "https://picsum.photos/seed/emma-rodriguez/96/96",
+      "Rocket Shipping has been a dependable logistics partner for our business. Their team handles our shipments professionally and on time.",
+    name: "Ankit Shrestha",
+    role: "Founder",
+    company: "Narrative Machine",
+    avatar: "https://picsum.photos/seed/ankit-shrestha/96/96",
   },
   {
     quote:
-      "We've worked with several logistics providers before, but Movetrans stands out for their efficiency and attention to detail. They handle our shipments with great care and always keep us informed at every stage.",
-    name: "HYPATHIA ALEX",
-    role: "Project Lead",
-    avatar: "https://picsum.photos/seed/hypathia-alex/96/96",
+      "From pickup to delivery, the whole process is convenient and well managed. We feel confident sending our products with Rocket Shipping.",
+    name: "Khushi Maharjan",
+    role: "Business Owner",
+    company: "Aachar Ghar",
+    avatar: "https://picsum.photos/seed/khushi-maharjan/96/96",
   },
   {
     quote:
-      "Movetrans has been a reliable partner for our logistics operations. Their team consistently ensures that our shipments arrive safely and on schedule, and their communication throughout the process has always been clear and professional.",
-    name: "MICHAEL CARTER",
-    role: "Logistics Manager",
-    avatar: "https://picsum.photos/seed/michael-carter/96/96",
+      "Their delivery service has helped us manage customer orders more efficiently. The team is responsive and the service is dependable.",
+    name: "Sujan Shakya",
+    role: "Operations Lead",
+    company: "BrandKTM",
+    avatar: "https://picsum.photos/seed/sujan-shakya/96/96",
   },
   {
     quote:
-      "Movetrans helped us streamline our shipping process and improve delivery timelines. Their professional approach and strong logistics network make them a partner we can truly rely on.",
-    name: "EMMA RODRIGUEZ",
-    role: "Procurement Director",
-    avatar: "https://picsum.photos/seed/emma-rodriguez/96/96",
+      "We appreciate the professional service and reliable delivery. Rocket Shipping has made shipping products to our customers much easier.",
+    name: "Pratiksha Joshi",
+    role: "Founder",
+    company: "Streetside",
+    avatar: "https://picsum.photos/seed/pratiksha-joshi/96/96",
   },
 ];
 
-/** 1 card at a time on mobile, 3 side-by-side from `md:` up. */
-function useCardsPerView() {
-  const [cardsPerView, setCardsPerView] = useState(1);
-
-  useEffect(() => {
-    const mql = window.matchMedia("(min-width: 768px)");
-    const update = () => setCardsPerView(mql.matches ? 3 : 1);
-    update();
-    mql.addEventListener("change", update);
-    return () => mql.removeEventListener("change", update);
-  }, []);
-
-  return cardsPerView;
-}
-
 export default function Testimonials() {
-  const cardsPerView = useCardsPerView();
-  const [start, setStart] = useState(0);
-  const maxStart = Math.max(testimonials.length - cardsPerView, 0);
-
-  // clamp start if viewport change shrinks the visible window
-  useEffect(() => {
-    setStart((s) => Math.min(s, maxStart));
-  }, [maxStart]);
-
-  const canPrev = start > 0;
-  const canNext = start < maxStart;
-
-  const visible = testimonials
-    .map((t, i) => ({ ...t, _key: i }))
-    .slice(start, start + cardsPerView);
-
   return (
-    <section className="bg-background text-foreground px-6 py-20 md:px-16 lg:px-24">
-      <div className="mx-auto max-w-7xl">
-        {/* Header row */}
-        <div className="mb-16 flex items-start justify-between gap-6">
-          <div>
-            <p className="mb-4 text-xs font-medium tracking-[0.25em] text-muted">
-              TESTIMONIAL
-            </p>
-            <h2 className="max-w-2xl text-4xl font-medium leading-tight text-balance sm:text-5xl lg:text-[3.25rem]">
-              What Our Clients Say About Our Logistics Solutions
-            </h2>
+    <section className="w-full bg-white py-20 sm:py-24">
+      <div className="mx-auto max-w-[1400px] px-6 sm:px-10 lg:px-16 xl:px-20">
+
+        {/* Header */}
+        <div className="mx-auto max-w-3xl text-center">
+          <div className="mb-4 flex items-center justify-center gap-3">
+            <span className="h-[2px] w-8 bg-[#E23C2E]" />
+
+            <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#E23C2E]">
+              Client Stories
+            </span>
+
+            <span className="h-[2px] w-8 bg-[#E23C2E]" />
           </div>
 
-          {/* Carousel controls */}
-          <div className="hidden shrink-0 gap-3 sm:flex">
-            <button
-              type="button"
-              onClick={() => canPrev && setStart((s) => Math.max(s - 1, 0))}
-              disabled={!canPrev}
-              aria-label="Previous testimonials"
-              className="flex h-11 w-11 items-center justify-center rounded-full border border-line bg-white/5 text-foreground transition-colors enabled:hover:bg-accent enabled:hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
-            >
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M15 18l-6-6 6-6" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              onClick={() => canNext && setStart((s) => Math.min(s + 1, maxStart))}
-              disabled={!canNext}
-              aria-label="Next testimonials"
-              className="flex h-11 w-11 items-center justify-center rounded-full border border-line bg-white/5 text-foreground transition-colors enabled:hover:bg-accent enabled:hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
-            >
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M9 18l6-6-6-6" />
-              </svg>
-            </button>
-          </div>
+          <h2 className="text-3xl font-bold tracking-tight text-[#0b1729] sm:text-4xl lg:text-5xl">
+            Trusted by businesses
+          </h2>
+
+          <p className="mt-5 text-sm leading-7 text-black/55 sm:text-base">
+            Businesses across Nepal trust Rocket Shipping to move their
+            products safely, reliably, and on time.
+          </p>
         </div>
 
-        {/* Cards */}
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-          {visible.map((t) => (
-            <div
-              key={t._key}
-              className="flex min-h-[420px] flex-col justify-between rounded-2xl border border-line bg-white/[0.03] p-8"
+        {/* Testimonials */}
+        <div className="mt-14 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+          {testimonials.map((testimonial) => (
+            <article
+              key={testimonial.company}
+              className="flex h-full flex-col rounded-2xl border border-black/10 bg-white p-6 transition-colors duration-200 hover:border-[#E23C2E]/40"
             >
-              <p className="text-lg leading-relaxed text-foreground/90">
-                &ldquo;{t.quote}&rdquo;
+              {/* Quote */}
+              <div className="text-4xl font-serif leading-none text-[#E23C2E]">
+                “
+              </div>
+
+              <p className="mt-3 flex-1 text-sm leading-7 text-black/65">
+                {testimonial.quote}
               </p>
 
-              <div className="mt-10 flex items-center justify-between">
-                <div className="leading-tight">
-                  <p className="text-sm font-semibold tracking-wide">
-                    {t.name}
-                  </p>
-                  <p className="mt-1 text-sm text-muted">{t.role}</p>
-                </div>
-                <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-md">
+              {/* Person */}
+              <div className="mt-7 flex items-center gap-3 border-t border-black/10 pt-5">
+                <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full bg-gray-100">
                   <Image
-                    src={t.avatar}
-                    alt={t.name}
+                    src={testimonial.avatar}
+                    alt={testimonial.name}
                     fill
-                    sizes="56px"
+                    sizes="48px"
                     className="object-cover"
                   />
                 </div>
+
+                <div className="min-w-0">
+                  <h3 className="truncate text-sm font-bold text-[#0b1729]">
+                    {testimonial.name}
+                  </h3>
+
+                  <p className="mt-0.5 text-xs text-black/50">
+                    {testimonial.role}
+                  </p>
+
+                  <p className="mt-0.5 text-xs font-semibold text-[#E23C2E]">
+                    {testimonial.company}
+                  </p>
+                </div>
               </div>
-            </div>
+            </article>
           ))}
         </div>
 
-        {/* Mobile controls */}
-        <div className="mt-8 flex justify-center gap-3 sm:hidden">
-          <button
-            type="button"
-            onClick={() => canPrev && setStart((s) => Math.max(s - 1, 0))}
-            disabled={!canPrev}
-            aria-label="Previous testimonials"
-            className="flex h-11 w-11 items-center justify-center rounded-full border border-line bg-white/5 text-foreground disabled:cursor-not-allowed disabled:opacity-30"
-          >
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M15 18l-6-6 6-6" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            onClick={() => canNext && setStart((s) => Math.min(s + 1, maxStart))}
-            disabled={!canNext}
-            aria-label="Next testimonials"
-            className="flex h-11 w-11 items-center justify-center rounded-full border border-line bg-white/5 text-foreground disabled:cursor-not-allowed disabled:opacity-30"
-          >
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M9 18l6-6-6-6" />
-            </svg>
-          </button>
-        </div>
       </div>
     </section>
   );

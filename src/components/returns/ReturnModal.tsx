@@ -1,4 +1,3 @@
-
 "use client";
 
 import {
@@ -16,9 +15,7 @@ type ReturnModalProps = {
 
   selectedRiderId: string;
 
-  setSelectedRiderId: (
-    value: string
-  ) => void;
+  setSelectedRiderId: (value: string) => void;
 
   assigningRider: boolean;
 
@@ -34,16 +31,15 @@ type ReturnModalProps = {
 
   onAssignRider: () => void;
 
-  onUpdateStatus: (
-    status: ReturnStatus
-  ) => void;
+  onUpdateStatus: (status: ReturnStatus) => void;
 
   onClose: () => void;
 };
 
-/* ============================================================
-   RETURN FLOW
-============================================================ */
+
+// ============================================================
+// RETURN FLOW
+// ============================================================
 
 const RETURN_FLOW: ReturnStatus[] = [
   "REQUESTED",
@@ -54,16 +50,16 @@ const RETURN_FLOW: ReturnStatus[] = [
   "RETURNED_TO_VENDOR",
 ];
 
-/* ============================================================
-   RETURN TRACKING STATUS MAP
-============================================================ */
+
+// ============================================================
+// RETURN TRACKING STATUS
+// ============================================================
 
 const RETURN_TRACKING_STATUS: Record<
   ReturnStatus,
   string | null
 > = {
-  REQUESTED:
-    "RETURN_REQUESTED",
+  REQUESTED: "RETURN_REQUESTED",
 
   ASSIGNED_TO_RIDER:
     "RETURN_ASSIGNED_TO_RIDER",
@@ -83,44 +79,46 @@ const RETURN_TRACKING_STATUS: Record<
   CANCELLED: null,
 };
 
-/* ============================================================
-   STATUS STYLES
-============================================================ */
 
-const STATUS_STYLES: Record<
-  string,
-  string
-> = {
-  REQUESTED:
-    "bg-yellow-50 text-yellow-700 ring-yellow-600/20",
+// ============================================================
+// STATUS STYLE
+// ============================================================
 
-  ASSIGNED_TO_RIDER:
-    "bg-blue-50 text-blue-700 ring-blue-600/20",
+function getStatusStyle(status: ReturnStatus) {
+  switch (status) {
+    case "REQUESTED":
+      return "bg-yellow-100 text-yellow-800";
 
-  PICKED_UP_FROM_CUSTOMER:
-    "bg-purple-50 text-purple-700 ring-purple-600/20",
+    case "ASSIGNED_TO_RIDER":
+      return "bg-blue-100 text-blue-800";
 
-  IN_WAREHOUSE:
-    "bg-amber-50 text-amber-700 ring-amber-600/20",
+    case "PICKED_UP_FROM_CUSTOMER":
+      return "bg-purple-100 text-purple-800";
 
-  OUT_FOR_RETURN:
-    "bg-orange-50 text-orange-700 ring-orange-600/20",
+    case "IN_WAREHOUSE":
+      return "bg-amber-100 text-amber-800";
 
-  RETURNED_TO_VENDOR:
-    "bg-green-50 text-green-700 ring-green-600/20",
+    case "OUT_FOR_RETURN":
+      return "bg-orange-100 text-orange-800";
 
-  CANCELLED:
-    "bg-red-50 text-red-700 ring-red-600/20",
-};
+    case "RETURNED_TO_VENDOR":
+      return "bg-green-100 text-green-800";
 
-/* ============================================================
-   FORMAT STATUS
-============================================================ */
+    case "CANCELLED":
+      return "bg-red-100 text-red-800";
 
-function formatStatus(
-  status?: string
-) {
-  if (!status) return "—";
+    default:
+      return "bg-gray-100 text-gray-800";
+  }
+}
+
+
+// ============================================================
+// FORMAT STATUS
+// ============================================================
+
+function formatStatus(status?: string | null) {
+  if (!status) return "-";
 
   return status
     .replaceAll("_", " ")
@@ -130,14 +128,13 @@ function formatStatus(
     );
 }
 
-/* ============================================================
-   FORMAT REASON
-============================================================ */
 
-function formatReason(
-  reason?: string
-) {
-  if (!reason) return "—";
+// ============================================================
+// FORMAT REASON
+// ============================================================
+
+function formatReason(reason?: string | null) {
+  if (!reason) return "-";
 
   return reason
     .replaceAll("_", " ")
@@ -147,68 +144,24 @@ function formatReason(
     );
 }
 
-/* ============================================================
-   FORMAT DATE
-============================================================ */
 
-function formatDate(
-  iso?: string
-) {
-  if (!iso) return "—";
+// ============================================================
+// FORMAT DATE
+// ============================================================
 
-  return new Date(
-    iso
-  ).toLocaleString("en-US", {
+function formatDate(date?: string | null) {
+  if (!date) return "-";
+
+  return new Date(date).toLocaleString("en-US", {
     dateStyle: "medium",
     timeStyle: "short",
   });
 }
 
-/* ============================================================
-   STATUS STYLE
-============================================================ */
 
-function getStatusStyle(
-  status?: string
-) {
-  return (
-    STATUS_STYLES[
-      status || ""
-    ] ||
-    "bg-gray-50 text-gray-700 ring-gray-600/20"
-  );
-}
-
-/* ============================================================
-   GET NEXT STATUS
-============================================================ */
-
-function getNextStatus(
-  status?: ReturnStatus
-) {
-  if (!status) {
-    return null;
-  }
-
-  const index =
-    RETURN_FLOW.indexOf(status);
-
-  if (
-    index < 0 ||
-    index >=
-      RETURN_FLOW.length - 1
-  ) {
-    return null;
-  }
-
-  return RETURN_FLOW[
-    index + 1
-  ];
-}
-
-/* ============================================================
-   COMPONENT
-============================================================ */
+// ============================================================
+// MAIN COMPONENT
+// ============================================================
 
 export default function ReturnModal({
   returnRequest,
@@ -230,140 +183,113 @@ export default function ReturnModal({
     return null;
   }
 
-  const shipment =
-    returnRequest.shipment;
+  const shipment = returnRequest.shipment;
 
-  const nextStatus =
-    getNextStatus(
-      returnRequest.status
-    );
 
-  /* ==========================================================
-     AVAILABLE RIDERS
-  ========================================================== */
+  // ============================================================
+  // CURRENT STAGE
+  // ============================================================
 
-  const availableRiders =
-    riders.filter(
-      (rider) =>
-        rider.isAvailable !== false
-    );
+  const isWarehouse =
+    returnRequest.status === "IN_WAREHOUSE";
 
-  /* ==========================================================
-     CURRENT RETURN INDEX
-  ========================================================== */
 
-  const completedIndex =
-    RETURN_FLOW.indexOf(
-      returnRequest.status
-    );
+  // ============================================================
+  // DELIVERY OPTIONS
+  // ============================================================
 
-  /* ==========================================================
-     IMPORTANT:
+  const isVendorPickup =
+    isWarehouse &&
+    returnRequest.deliveryOption === "VENDOR_PICKUP";
 
-     ONLY RETURN TRACKING EVENTS ARE USED FOR THE
-     RETURN TIMELINE.
 
-     Normal shipment events such as:
+  const isVendorDelivery =
+    isWarehouse &&
+    returnRequest.deliveryOption === "DELIVER_TO_VENDOR";
 
-       IN_WAREHOUSE
-       ASSIGNED_TO_RIDER
-       OUT_FOR_DELIVERY
-       DELIVERED
 
-     ARE NOT USED HERE.
+  // ============================================================
+  // AVAILABLE RIDERS
+  // ============================================================
 
-     Instead we use:
+  const availableRiders = riders.filter(
+    (rider) => rider.isAvailable !== false
+  );
 
-       RETURN_REQUESTED
-       RETURN_ASSIGNED_TO_RIDER
-       RETURN_PICKED_UP_FROM_CUSTOMER
-       RETURN_IN_WAREHOUSE
-       OUT_FOR_RETURN
-       RETURNED_TO_VENDOR
-  ========================================================== */
+
+  // ============================================================
+  // NEXT STATUS
+  // ============================================================
+
+  let nextStatus: ReturnStatus | null = null;
+
+  if (returnRequest.status === "REQUESTED") {
+    nextStatus = "ASSIGNED_TO_RIDER";
+  }
+
+  if (
+    returnRequest.status === "ASSIGNED_TO_RIDER"
+  ) {
+    nextStatus = "PICKED_UP_FROM_CUSTOMER";
+  }
+
+  if (
+    returnRequest.status ===
+    "PICKED_UP_FROM_CUSTOMER"
+  ) {
+    nextStatus = "IN_WAREHOUSE";
+  }
+
+  if (isVendorPickup) {
+    nextStatus = "RETURNED_TO_VENDOR";
+  }
+
+  if (isVendorDelivery) {
+    nextStatus = "OUT_FOR_RETURN";
+  }
+
+  if (
+    returnRequest.status === "OUT_FOR_RETURN"
+  ) {
+    nextStatus = "RETURNED_TO_VENDOR";
+  }
+
+
+  // ============================================================
+  // TRACKING
+  // ============================================================
 
   const returnTrackings =
-    shipment?.trackings?.filter(
-      (tracking) =>
-        [
-          "RETURN_REQUESTED",
-          "RETURN_ASSIGNED_TO_RIDER",
-          "RETURN_PICKED_UP_FROM_CUSTOMER",
-          "RETURN_IN_WAREHOUSE",
-          "OUT_FOR_RETURN",
-          "RETURNED_TO_VENDOR",
-        ].includes(
-          tracking.status
-        )
+    shipment?.trackings?.filter((tracking) =>
+      [
+        "RETURN_REQUESTED",
+        "RETURN_ASSIGNED_TO_RIDER",
+        "RETURN_PICKED_UP_FROM_CUSTOMER",
+        "RETURN_IN_WAREHOUSE",
+        "OUT_FOR_RETURN",
+        "RETURNED_TO_VENDOR",
+      ].includes(tracking.status)
     ) ?? [];
 
-  /* ==========================================================
-     FIND RETURN TRACKING EVENT
-  ========================================================== */
-
-  const getReturnTracking = (
-    status: ReturnStatus
-  ) => {
-    const trackingStatus =
-      RETURN_TRACKING_STATUS[
-        status
-      ];
-
-    if (!trackingStatus) {
-      return undefined;
-    }
-
-    return returnTrackings.find(
-      (tracking) =>
-        tracking.status ===
-        trackingStatus
-    );
-  };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 text-black"
-      onClick={onClose}
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center text-black bg-black/50 p-4">
+      <div className="flex max-h-[95vh] w-full max-w-7xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
 
-      <div
-        className="max-h-[94vh] w-full max-w-5xl overflow-y-auto rounded-2xl bg-white shadow-2xl"
-        onClick={(event) =>
-          event.stopPropagation()
-        }
-      >
+        {/* ================================================== */}
+        {/* HEADER */}
+        {/* ================================================== */}
 
-        {/* =====================================================
-            HEADER
-        ====================================================== */}
-
-        <div className="flex items-start justify-between border-b px-6 py-5">
+        <div className="flex items-center justify-between border-b px-6 py-4">
 
           <div>
-
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+            <h2 className="text-xl font-bold text-gray-900">
               Return Tracking
-            </p>
-
-            {/* SAME ORIGINAL TRACKING NUMBER */}
-
-            <h2 className="mt-1 text-xl font-black">
-              {
-                shipment?.trackingNumber ||
-                "—"
-              }
             </h2>
 
-            <span
-              className={`mt-3 inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset ${getStatusStyle(
-                returnRequest.status
-              )}`}
-            >
-              {formatStatus(
-                returnRequest.status
-              )}
-            </span>
-
+            <p className="mt-1 text-sm text-gray-500">
+              {shipment?.trackingNumber}
+            </p>
           </div>
 
           <button
@@ -372,644 +298,674 @@ export default function ReturnModal({
               assigningRider ||
               updatingStatus
             }
-            className="rounded-full p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+            className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 disabled:opacity-50"
           >
             ✕
           </button>
 
         </div>
 
-        {/* =====================================================
-            CONTENT
-        ====================================================== */}
 
-        <div className="grid gap-6 p-6 md:grid-cols-3">
+        {/* ================================================== */}
+        {/* BODY */}
+        {/* ================================================== */}
 
-          {/* ===================================================
-              LEFT SIDE
-          ==================================================== */}
+        <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:grid-cols-3">
 
-          <div className="space-y-7 md:col-span-2">
+          {/* ================================================== */}
+          {/* LEFT */}
+          {/* ================================================== */}
 
-            {/* =================================================
-                ORIGINAL SHIPMENT
-            ================================================== */}
+          <div className="space-y-6 border-r p-6 lg:col-span-2">
 
-            <section>
+            {/* ================================================== */}
+            {/* CURRENT STATUS */}
+            {/* ================================================== */}
 
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                Original Shipment
+            <div>
+              <p className="text-sm font-medium text-gray-500">
+                Current Shipment Status
               </p>
 
-              <div className="mt-4 rounded-xl border">
+              <div className="mt-2">
+                <span
+                  className={`inline-flex rounded-full px-3 py-1 text-sm font-semibold ${getStatusStyle(
+                    returnRequest.status
+                  )}`}
+                >
+                  {formatStatus(returnRequest.status)}
+                </span>
+              </div>
+            </div>
 
-                <div className="grid grid-cols-2 divide-x divide-y">
 
-                  <InfoItem
-                    label="Tracking Number"
-                    value={
-                      shipment?.trackingNumber ||
-                      "—"
-                    }
-                  />
+            {/* ================================================== */}
+            {/* RETURN PROCESS */}
+            {/* ================================================== */}
 
-                  <InfoItem
-                    label="Original Shipment Status"
-                    value={
-                      shipment?.status ||
-                      "—"
-                    }
-                  />
+            <div>
 
-                  <InfoItem
-                    label="Vendor"
-                    value={
-                      shipment?.vendor
-                        ?.companyName ||
-                      "—"
-                    }
-                  />
+              <h3 className="mb-4 text-lg font-bold">
+                RETURN PROCESS
+              </h3>
 
-                  <InfoItem
-                    label="Vendor Location"
-                    value={
-                      shipment?.vendor
-                        ?.location ||
-                      "—"
-                    }
-                  />
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
 
-                  <InfoItem
-                    label="Customer"
-                    value={
-                      shipment?.receiverName ||
-                      "—"
-                    }
-                  />
+                {RETURN_FLOW.map((status) => {
 
-                  <InfoItem
-                    label="Customer Phone"
-                    value={
-                      shipment?.receiverPhone ||
-                      "—"
-                    }
-                  />
+                  const currentIndex =
+                    RETURN_FLOW.indexOf(
+                      returnRequest.status
+                    );
 
-                  <div className="col-span-2 px-4 py-4">
+                  const statusIndex =
+                    RETURN_FLOW.indexOf(status);
 
-                    <p className="text-xs text-gray-400">
-                      Customer Address
-                    </p>
+                  const completed =
+                    statusIndex <= currentIndex;
 
-                    <p className="mt-1 text-sm font-medium">
-                      {
-                        shipment?.receiverAddress ||
-                        "—"
-                      }
-                    </p>
+                  return (
+                    <div
+                      key={status}
+                      className={`rounded-xl border p-4 ${
+                        completed
+                          ? "border-blue-200 bg-blue-50"
+                          : "bg-gray-50"
+                      }`}
+                    >
+                      <p className="text-xs font-medium text-gray-500">
+                        {statusIndex + 1}
+                      </p>
 
-                  </div>
+                      <p className="mt-1 text-sm font-semibold">
+                        {formatStatus(status)}
+                      </p>
 
-                </div>
+                      <p className="mt-1 text-xs text-gray-500">
+                        {status}
+                      </p>
+                    </div>
+                  );
+                })}
 
               </div>
+            </div>
 
-            </section>
 
-            {/* =================================================
-                RETURN DETAILS
-            ================================================== */}
+            {/* ================================================== */}
+            {/* SHIPMENT DETAILS */}
+            {/* ================================================== */}
 
-            <section>
+            <div className="rounded-xl border p-5">
 
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                Return Details
-              </p>
+              <h3 className="mb-4 text-lg font-bold">
+                Shipment Details
+              </h3>
 
-              <div className="mt-4 rounded-xl border">
+              <div className="grid gap-4 md:grid-cols-2">
 
-                <div className="grid grid-cols-2 divide-x divide-y">
+                <Info
+                  label="Tracking Number"
+                  value={shipment?.trackingNumber}
+                />
 
-                  <InfoItem
-                    label="Reason"
-                    value={formatReason(
-                      returnRequest.reason
-                    )}
-                  />
+                <Info
+                  label="Status"
+                  value={formatStatus(returnRequest.status)}
+                />
 
-                  <InfoItem
-                    label="Requested"
-                    value={formatDate(
-                      returnRequest.requestedAt
-                    )}
-                  />
+                <Info
+                  label="Return Reason"
+                  value={formatReason(returnRequest.reason)}
+                />
 
-                  <InfoItem
-                    label="Picked Up"
-                    value={formatDate(
-                      returnRequest.pickedUpAt ||
-                        undefined
-                    )}
-                  />
-
-                  <InfoItem
-                    label="Completed"
-                    value={formatDate(
-                      returnRequest.completedAt ||
-                        undefined
-                    )}
-                  />
-
-                  <div className="col-span-2 px-4 py-4">
-
-                    <p className="text-xs text-gray-400">
-                      Description
-                    </p>
-
-                    <p className="mt-1 text-sm font-medium">
-                      {
-                        returnRequest.description ||
-                        "No description provided."
-                      }
-                    </p>
-
-                  </div>
-
-                  <div className="col-span-2 px-4 py-4">
-
-                    <p className="text-xs text-gray-400">
-                      Notes
-                    </p>
-
-                    <p className="mt-1 text-sm font-medium">
-                      {
-                        returnRequest.notes ||
-                        "No notes."
-                      }
-                    </p>
-
-                  </div>
-
-                </div>
-
-              </div>
-
-            </section>
-
-            {/* =================================================
-                RETURN TIMELINE
-            ================================================== */}
-
-            <section>
-
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                Return Timeline
-              </p>
-
-              <div className="mt-4 rounded-xl border p-5">
-
-                <div className="space-y-5">
-
-                  {RETURN_FLOW.map(
-                    (
-                      step,
-                      index
-                    ) => {
-
-                      /* ========================================
-                         FIND ONLY THE RETURN TRACKING EVENT
-
-                         Example:
-
-                         Step:
-                           IN_WAREHOUSE
-
-                         Search:
-                           RETURN_IN_WAREHOUSE
-
-                         NOT:
-                           IN_WAREHOUSE
-                      ======================================== */
-
-                      const tracking =
-                        getReturnTracking(
-                          step
-                        );
-
-                      /* ========================================
-                         STEP IS COMPLETED ONLY WHEN ITS
-                         RETURN TRACKING EVENT EXISTS
-
-                         This prevents the old shipment
-                         IN_WAREHOUSE event from appearing
-                         in the return timeline.
-                      ======================================== */
-
-                      const done =
-                        !!tracking;
-
-                      const current =
-                        step ===
-                        returnRequest.status;
-
-                      return (
-                        <div
-                          key={step}
-                          className="flex gap-4"
-                        >
-
-                          {/* ==================================
-                              TIMELINE ICON
-                          =================================== */}
-
-                          <div className="flex flex-col items-center">
-
-                            <div
-                              className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold ${
-                                done
-                                  ? "bg-green-100 text-green-700"
-                                  : current
-                                  ? "bg-accent/10 text-accent"
-                                  : "bg-gray-100 text-gray-400"
-                              }`}
-                            >
-                              {done
-                                ? "✓"
-                                : "○"}
-                            </div>
-
-                            {index <
-                              RETURN_FLOW.length -
-                                1 && (
-                              <div
-                                className={`mt-1 h-8 w-px ${
-                                  done
-                                    ? "bg-green-200"
-                                    : "bg-gray-200"
-                                }`}
-                              />
-                            )}
-
-                          </div>
-
-                          {/* ==================================
-                              TIMELINE CONTENT
-                          =================================== */}
-
-                          <div>
-
-                            <p
-                              className={`text-sm font-semibold ${
-                                current
-                                  ? "text-accent"
-                                  : done
-                                  ? "text-gray-900"
-                                  : "text-gray-400"
-                              }`}
-                            >
-                              {formatStatus(
-                                step
-                              )}
-                            </p>
-
-                            {/* =================================
-                                ONLY SHOW DATE/MESSAGE WHEN
-                                THE RETURN EVENT EXISTS
-                            ================================== */}
-
-                            {tracking && (
-                              <>
-                                <p className="mt-1 text-xs text-gray-400">
-                                  {formatDate(
-                                    tracking.createdAt
-                                  )}
-
-                                  {tracking.location
-                                    ? ` · ${tracking.location}`
-                                    : ""}
-                                </p>
-
-                                {tracking.message && (
-                                  <p className="mt-1 text-xs text-gray-500">
-                                    {
-                                      tracking.message
-                                    }
-                                  </p>
-                                )}
-                              </>
-                            )}
-
-                          </div>
-
-                        </div>
-                      );
-                    }
+                <Info
+                  label="Requested At"
+                  value={formatDate(
+                    returnRequest.requestedAt
                   )}
+                />
 
-                </div>
+                <Info
+                  label="Picked Up At"
+                  value={formatDate(
+                    returnRequest.pickedUpAt
+                  )}
+                />
 
               </div>
 
-            </section>
+            </div>
 
-            {/* =================================================
-                COMPLETE TRACKING HISTORY
-                IMPORTANT:
-                KEEP ALL EVENTS HERE
-            ================================================== */}
 
-            {shipment?.trackings &&
-              shipment.trackings.length >
-                0 && (
-                <section>
+            {/* ================================================== */}
+            {/* DELIVERY TO VENDOR */}
+            {/* ================================================== */}
 
-                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                    Tracking History
-                  </p>
+            {isVendorDelivery && (
+              <div className="rounded-xl border border-blue-200 bg-blue-50 p-5">
 
-                  <div className="mt-4 space-y-2">
+                <div className="flex items-start gap-3">
 
-                    {shipment.trackings.map(
-                      (tracking) => (
-                        <div
-                          key={tracking.id}
-                          className="rounded-xl bg-gray-50 p-4"
-                        >
+                  <div className="text-2xl">
+                    🏠
+                  </div>
 
-                          <div className="flex items-center justify-between gap-3">
+                  <div>
 
-                            <p className="text-sm font-semibold">
-                              {formatStatus(
-                                tracking.status
-                              )}
-                            </p>
+                    <h3 className="font-bold text-blue-900">
+                      Delivery To Vendor Selected
+                    </h3>
 
-                            <p className="text-xs text-gray-400">
-                              {formatDate(
-                                tracking.createdAt
-                              )}
-                            </p>
+                    <p className="mt-1 text-sm text-blue-800">
+                      The returned package will be delivered
+                      to the registered vendor address.
+                    </p>
 
-                          </div>
+                    <p className="mt-2 text-sm font-semibold text-blue-900">
+                      Delivery Option: Deliver To Vendor
+                    </p>
 
-                          {tracking.location && (
-                            <p className="mt-1 text-xs text-gray-500">
-                              Location:{" "}
-                              {
-                                tracking.location
-                              }
-                            </p>
-                          )}
-
-                          {tracking.message && (
-                            <p className="mt-1 text-xs text-gray-500">
-                              {
-                                tracking.message
-                              }
-                            </p>
-                          )}
-
-                        </div>
-                      )
+                    {shipment?.vendor?.location && (
+                      <p className="mt-2 text-sm text-blue-800">
+                        Vendor Location:{" "}
+                        <strong>
+                          {shipment.vendor.location}
+                        </strong>
+                      </p>
                     )}
 
                   </div>
 
-                </section>
-              )}
+                </div>
+
+              </div>
+            )}
+
+
+            {/* ================================================== */}
+            {/* VENDOR PICKUP */}
+            {/* ================================================== */}
+
+            {isVendorPickup && (
+              <div className="rounded-xl border border-green-200 bg-green-50 p-5">
+
+                <h3 className="font-bold text-green-900">
+                  Vendor Pickup Selected
+                </h3>
+
+                <p className="mt-1 text-sm text-green-800">
+                  The vendor will collect the returned
+                  package from the warehouse.
+                </p>
+
+              </div>
+            )}
+
+
+            {/* ================================================== */}
+            {/* DESCRIPTION */}
+            {/* ================================================== */}
+
+            {returnRequest.description && (
+              <div className="rounded-xl border p-5">
+
+                <h3 className="mb-2 font-bold">
+                  Description
+                </h3>
+
+                <p className="text-sm text-gray-600">
+                  {returnRequest.description}
+                </p>
+
+              </div>
+            )}
+
+
+            {/* ================================================== */}
+            {/* RECEIVER */}
+            {/* ================================================== */}
+
+            <div className="rounded-xl border p-5">
+
+              <h3 className="mb-4 text-lg font-bold">
+                Receiver Information
+              </h3>
+
+              <div className="grid gap-4 md:grid-cols-3">
+
+                <Info
+                  label="Name"
+                  value={
+                    shipment?.customer?.name
+                  }
+                />
+
+                <Info
+                  label="Phone"
+                  value={
+                    shipment?.customer?.phone
+                  }
+                />
+
+                <Info
+                  label="Address"
+                  value={
+                    shipment?.customer?.address
+                  }
+                />
+
+              </div>
+
+            </div>
+
+
+            {/* ================================================== */}
+            {/* DELIVERY INFORMATION */}
+            {/* ================================================== */}
+
+            <div className="rounded-xl border p-5">
+
+              <h3 className="mb-4 text-lg font-bold">
+                Delivery Information
+              </h3>
+
+              <div className="grid gap-4 md:grid-cols-3">
+
+                <Info
+                  label="Destination"
+                  value={
+                    shipment?.vendor?.location
+                  }
+                />
+
+                <Info
+                  label="Zone"
+                  value={
+                    shipment?.zone
+                  }
+                />
+
+                <Info
+                  label="Delivery Type"
+                  value={
+                    shipment?.deliveryType
+                  }
+                />
+
+                <Info
+                  label="Weight"
+                  value={
+                    shipment?.weight
+                      ? `${shipment.weight} kg`
+                      : "-"
+                  }
+                />
+
+                <Info
+                  label="Shipping Charge"
+                  value={
+                    shipment?.shippingCharge != null
+                      ? `Rs. ${shipment.shippingCharge}`
+                      : "-"
+                  }
+                />
+
+                <Info
+                  label="Package Type"
+                  value={
+                    shipment?.packageType
+                  }
+                />
+
+              </div>
+
+            </div>
+
+
+            {/* ================================================== */}
+            {/* PAYMENT */}
+            {/* ================================================== */}
+
+            <div className="rounded-xl border p-5">
+
+              <h3 className="mb-4 text-lg font-bold">
+                Payment
+              </h3>
+
+              <Info
+                label="Payment Type"
+                value={
+                  shipment?.paymentType
+                }
+              />
+
+            </div>
+
+
+            {/* ================================================== */}
+            {/* TRACKING HISTORY */}
+            {/* ================================================== */}
+
+            <div className="rounded-xl border p-5">
+
+              <h3 className="mb-1 text-lg font-bold">
+                Tracking History
+              </h3>
+
+              <p className="mb-5 text-sm text-gray-500">
+                Return updates use the same tracking number
+              </p>
+
+              <div className="space-y-5">
+
+                {returnTrackings.length === 0 ? (
+                  <p className="text-sm text-gray-500">
+                    No return tracking history available.
+                  </p>
+                ) : (
+                  returnTrackings.map(
+                    (tracking) => (
+                      <div
+                        key={tracking.id}
+                        className="relative border-l-2 border-gray-200 pl-5"
+                      >
+
+                        <div className="absolute -left-[7px] top-1 h-3 w-3 rounded-full bg-blue-600" />
+
+                        <div className="flex flex-wrap items-center gap-2">
+
+                          <h4 className="font-semibold">
+                            {formatStatus(
+                              tracking.status
+                            )}
+                          </h4>
+
+                          <span className="rounded-full bg-gray-100 px-2 py-1 text-xs">
+                            RETURN
+                          </span>
+
+                        </div>
+
+                        {tracking.location && (
+                          <p className="mt-1 text-sm text-gray-600">
+                            {tracking.location}
+                          </p>
+                        )}
+
+                        {tracking.message && (
+                          <p className="mt-1 text-sm text-gray-700">
+                            {tracking.message}
+                          </p>
+                        )}
+
+                        <p className="mt-1 text-xs text-gray-400">
+                          {formatDate(
+                            tracking.createdAt
+                          )}
+                        </p>
+
+                      </div>
+                    )
+                  )
+                )}
+
+              </div>
+
+            </div>
 
           </div>
 
-          {/* ===================================================
-              RIGHT SIDE
-          ==================================================== */}
 
-          <div className="space-y-4">
+          {/* ================================================== */}
+          {/* RIGHT SIDE */}
+          {/* ================================================== */}
 
-            {/* =================================================
-                CURRENT RIDER
-            ================================================== */}
+          <div className="space-y-5 bg-gray-50 p-6">
 
-            {returnRequest.rider && (
-              <div className="rounded-xl border p-4">
+            {/* ================================================== */}
+            {/* ORIGINAL PICKUP RIDER */}
+            {/* ================================================== */}
 
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                  Return Rider
-                </p>
+            <div className="rounded-xl border bg-white p-5">
 
-                <div className="mt-4 space-y-3">
+              <h3 className="font-bold">
+                Original Return Rider
+              </h3>
 
-                  <InfoRow
-                    label="Name"
-                    value={
-                      returnRequest.rider
-                        .user?.name ||
-                      `Rider #${returnRequest.rider.id}`
-                    }
-                  />
+              <p className="mt-1 text-sm text-gray-500">
+                Rider assigned to pick up the return
+                from the customer.
+              </p>
 
-                  <InfoRow
-                    label="Phone"
-                    value={
-                      returnRequest.rider
-                        .phone ||
-                      "—"
-                    }
-                  />
+              {returnRequest.rider ? (
+                <div className="mt-4 rounded-lg bg-gray-50 p-4">
 
-                  <InfoRow
-                    label="Vehicle"
-                    value={
-                      returnRequest.rider
-                        .vehicleNumber ||
-                      "—"
-                    }
-                  />
+                  <p className="font-semibold">
+                    {returnRequest.rider.user?.name ||
+                      `Rider #${returnRequest.rider.id}`}
+                  </p>
 
-                </div>
-
-              </div>
-            )}
-
-            {/* =================================================
-                ASSIGN RIDER
-            ================================================== */}
-
-            {returnRequest.status ===
-              "REQUESTED" && (
-              <div className="rounded-xl border p-4">
-
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                  Assign Rider
-                </p>
-
-                <p className="mt-1 text-xs text-gray-400">
-                  Rider will pick up the package
-                  from the customer.
-                </p>
-
-                <select
-                  value={
-                    selectedRiderId
-                  }
-                  onChange={(event) =>
-                    setSelectedRiderId(
-                      event.target.value
-                    )
-                  }
-                  disabled={
-                    ridersLoading ||
-                    assigningRider
-                  }
-                  className="mt-4 w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 disabled:bg-gray-100"
-                >
-
-                  <option value="">
-                    {ridersLoading
-                      ? "Loading riders..."
-                      : "Select rider"}
-                  </option>
-
-                  {availableRiders.map(
-                    (rider) => (
-                      <option
-                        key={rider.id}
-                        value={rider.id}
-                      >
-                        {
-                          rider.user?.name ||
-                          `Rider #${rider.id}`
-                        }
-                        {" — "}
-                        {
-                          rider.phone
-                        }
-                      </option>
-                    )
+                  {returnRequest.rider.phone && (
+                    <p className="mt-1 text-sm text-gray-500">
+                      {returnRequest.rider.phone}
+                    </p>
                   )}
 
-                </select>
+                </div>
+              ) : (
+                <p className="mt-4 text-sm text-gray-500">
+                  Rider has not been assigned yet.
+                </p>
+              )}
 
-                <button
-                  onClick={
-                    onAssignRider
-                  }
-                  disabled={
-                    !selectedRiderId ||
-                    assigningRider ||
-                    ridersLoading
-                  }
-                  className="mt-3 w-full rounded-xl bg-accent px-4 py-3 text-sm font-semibold text-white hover:bg-accent-dark disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {assigningRider
-                    ? "Assigning..."
-                    : "Assign Rider"}
-                </button>
+            </div>
 
-                {assignMessage && (
-                  <div className="mt-3 rounded-lg bg-green-50 p-3">
-                    <p className="text-xs font-medium text-green-700">
-                      {assignMessage}
+
+            {/* ================================================== */}
+            {/* NEW RETURN DELIVERY RIDER */}
+            {/* ================================================== */}
+
+            {isVendorDelivery && (
+              <div className="rounded-xl border border-blue-200 bg-white p-5">
+
+                <h3 className="font-bold text-gray-900">
+                  Return Delivery Rider
+                </h3>
+
+                <p className="mt-1 text-sm text-gray-500">
+                  This is a separate rider who will take
+                  the package from the warehouse to the
+                  vendor.
+                </p>
+
+
+                {/* -------------------------------------------- */}
+                {/* ALREADY ASSIGNED */}
+                {/* -------------------------------------------- */}
+
+                {returnRequest.returnDeliveryRider && (
+                  <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-4">
+
+                    <p className="text-xs font-medium uppercase text-green-700">
+                      Assigned Return Delivery Rider
                     </p>
+
+                    <p className="mt-1 font-semibold text-green-900">
+                      {returnRequest.returnDeliveryRider.user?.name ||
+                        `Rider #${returnRequest.returnDeliveryRider.id}`}
+                    </p>
+
+                    {returnRequest.returnDeliveryRider.phone && (
+                      <p className="mt-1 text-sm text-green-700">
+                        {returnRequest.returnDeliveryRider.phone}
+                      </p>
+                    )}
+
                   </div>
                 )}
 
-                {assignError && (
-                  <div className="mt-3 rounded-lg bg-red-50 p-3">
-                    <p className="text-xs font-medium text-red-700">
-                      {assignError}
-                    </p>
-                  </div>
+
+                {/* -------------------------------------------- */}
+                {/* NEW RIDER DROPDOWN */}
+                {/* -------------------------------------------- */}
+
+                {!returnRequest.returnDeliveryRiderId && (
+                  <RiderAssignment
+                    riders={availableRiders}
+                    ridersLoading={ridersLoading}
+                    selectedRiderId={
+                      selectedRiderId
+                    }
+                    setSelectedRiderId={
+                      setSelectedRiderId
+                    }
+                    assigningRider={
+                      assigningRider
+                    }
+                    onAssignRider={
+                      onAssignRider
+                    }
+                    title="Assign Return Delivery Rider"
+                    description="Select a new rider to deliver the package from the warehouse to the vendor."
+                  />
                 )}
 
               </div>
             )}
 
-            {/* =================================================
-                NEXT STATUS
-            ================================================== */}
 
-            {nextStatus &&
-              returnRequest.status !==
-                "REQUESTED" && (
-                <div className="rounded-xl border p-4">
+            {/* ================================================== */}
+            {/* VENDOR PICKUP MESSAGE */}
+            {/* ================================================== */}
 
-                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                    Next Return Step
-                  </p>
+            {isVendorPickup && (
+              <div className="rounded-xl border border-green-200 bg-white p-5">
 
-                  <p className="mt-2 text-sm font-bold">
-                    {formatStatus(
-                      nextStatus
-                    )}
-                  </p>
+                <h3 className="font-bold">
+                  Vendor Pickup
+                </h3>
 
-                  <p className="mt-1 text-xs text-gray-400">
-                    This will add a tracking
-                    event using the same
-                    shipment tracking number.
-                  </p>
-
-                  <button
-                    onClick={() =>
-                      onUpdateStatus(
-                        nextStatus
-                      )
-                    }
-                    disabled={
-                      updatingStatus
-                    }
-                    className="mt-4 w-full rounded-xl bg-accent px-4 py-3 text-sm font-semibold text-white hover:bg-accent-dark disabled:opacity-50"
-                  >
-                    {updatingStatus
-                      ? "Updating..."
-                      : `Mark ${formatStatus(
-                          nextStatus
-                        )}`}
-                  </button>
-
-                </div>
-              )}
-
-            {/* =================================================
-                STATUS MESSAGE
-            ================================================== */}
-
-            {statusMessage && (
-              <div className="rounded-xl bg-green-50 p-4">
-
-                <p className="text-xs font-medium text-green-700">
-                  {statusMessage}
+                <p className="mt-1 text-sm text-gray-600">
+                  No return delivery rider is required.
+                  The vendor will collect the package
+                  from the warehouse.
                 </p>
 
+              </div>
+            )}
+
+
+            {/* ================================================== */}
+            {/* ASSIGN MESSAGE */}
+            {/* ================================================== */}
+
+            {assignMessage && (
+              <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700">
+                {assignMessage}
+              </div>
+            )}
+
+            {assignError && (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                {assignError}
+              </div>
+            )}
+
+
+            {/* ================================================== */}
+            {/* NEXT STEP */}
+            {/* ================================================== */}
+
+            {nextStatus && (
+              <div className="rounded-xl border bg-white p-5">
+
+                <h3 className="font-bold">
+                  Next Step
+                </h3>
+
+                <p className="mt-1 text-sm text-gray-500">
+                  Move the return to:
+                </p>
+
+                <p className="mt-2 font-semibold">
+                  {formatStatus(nextStatus)}
+                </p>
+
+
+                <button
+                  onClick={() =>
+                    onUpdateStatus(
+                      nextStatus!
+                    )
+                  }
+                  disabled={
+                    updatingStatus ||
+                    (
+                      isVendorDelivery &&
+                      !returnRequest.returnDeliveryRiderId
+                    ) ||
+                    (
+                      returnRequest.status ===
+                        "REQUESTED" &&
+                      !returnRequest.riderId
+                    )
+                  }
+                  className="mt-4 w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {updatingStatus
+                    ? "Updating..."
+                    : `Mark ${formatStatus(
+                        nextStatus
+                      )}`}
+                </button>
+
+
+                {isVendorDelivery &&
+                  !returnRequest.returnDeliveryRiderId && (
+                    <p className="mt-2 text-xs text-amber-600">
+                      Assign a return delivery rider
+                      before moving the package to
+                      Out For Return.
+                    </p>
+                  )}
+
+              </div>
+            )}
+
+
+            {/* ================================================== */}
+            {/* STATUS MESSAGE */}
+            {/* ================================================== */}
+
+            {statusMessage && (
+              <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700">
+                {statusMessage}
               </div>
             )}
 
             {statusError && (
-              <div className="rounded-xl bg-red-50 p-4">
-
-                <p className="text-xs font-medium text-red-700">
-                  {statusError}
-                </p>
-
+              <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                {statusError}
               </div>
             )}
 
-            {/* =================================================
-                FINAL
-            ================================================== */}
+
+            {/* ================================================== */}
+            {/* COMPLETED */}
+            {/* ================================================== */}
 
             {returnRequest.status ===
               "RETURNED_TO_VENDOR" && (
-              <div className="rounded-xl border border-green-200 bg-green-50 p-4">
+              <div className="rounded-xl border border-green-200 bg-green-50 p-5">
 
-                <p className="text-sm font-bold text-green-800">
-                  Return completed
-                </p>
+                <h3 className="font-bold text-green-900">
+                  Return Completed
+                </h3>
 
-                <p className="mt-1 text-xs text-green-700">
-                  Package has been returned
-                  to the vendor.
+                <p className="mt-1 text-sm text-green-700">
+                  The returned package has been
+                  delivered to the vendor.
                 </p>
 
               </div>
@@ -1020,60 +976,138 @@ export default function ReturnModal({
         </div>
 
       </div>
-
     </div>
   );
 }
 
-/* ============================================================
-   INFO ITEM
-============================================================ */
 
-function InfoItem({
+// ============================================================
+// INFO COMPONENT
+// ============================================================
+
+function Info({
   label,
   value,
 }: {
   label: string;
-  value: string;
+  value?: string | number | null;
 }) {
   return (
-    <div className="px-4 py-4">
-
-      <p className="text-xs text-gray-400">
+    <div>
+      <p className="text-xs font-medium uppercase text-gray-400">
         {label}
       </p>
 
-      <p className="mt-1 break-words text-sm font-medium">
-        {value}
+      <p className="mt-1 text-sm font-semibold text-gray-800">
+        {value || "-"}
       </p>
-
     </div>
   );
 }
 
-/* ============================================================
-   INFO ROW
-============================================================ */
 
-function InfoRow({
-  label,
-  value,
+// ============================================================
+// RIDER ASSIGNMENT
+// ============================================================
+
+function RiderAssignment({
+  riders,
+  ridersLoading,
+  selectedRiderId,
+  setSelectedRiderId,
+  assigningRider,
+  onAssignRider,
+  title,
+  description,
 }: {
-  label: string;
-  value: string;
+  riders: Rider[];
+
+  ridersLoading: boolean;
+
+  selectedRiderId: string;
+
+  setSelectedRiderId: (
+    value: string
+  ) => void;
+
+  assigningRider: boolean;
+
+  onAssignRider: () => void;
+
+  title: string;
+
+  description: string;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4">
+    <div className="mt-5 rounded-xl border bg-gray-50 p-4">
 
-      <span className="text-xs text-gray-400">
-        {label}
-      </span>
+      <h4 className="font-semibold">
+        {title}
+      </h4>
 
-      <span className="text-right text-sm font-medium">
-        {value}
-      </span>
+      <p className="mt-1 text-xs text-gray-500">
+        {description}
+      </p>
+
+
+      {/* ====================================================== */}
+      {/* DROPDOWN */}
+      {/* ====================================================== */}
+
+      <select
+        value={selectedRiderId}
+        onChange={(event) =>
+          setSelectedRiderId(
+            event.target.value
+          )
+        }
+        disabled={
+          ridersLoading ||
+          assigningRider
+        }
+        className="mt-4 w-full rounded-lg border border-gray-300 bg-white px-3 py-3 text-sm outline-none focus:border-blue-500"
+      >
+
+        <option value="">
+          {ridersLoading
+            ? "Loading riders..."
+            : "Select new rider"}
+        </option>
+
+        {riders.map((rider) => (
+          <option
+            key={rider.id}
+            value={rider.id}
+          >
+            {rider.user?.name ||
+              `Rider #${rider.id}`}
+            {rider.phone
+              ? ` — ${rider.phone}`
+              : ""}
+          </option>
+        ))}
+
+      </select>
+
+
+      {/* ====================================================== */}
+      {/* BUTTON */}
+      {/* ====================================================== */}
+
+      <button
+        onClick={onAssignRider}
+        disabled={
+          !selectedRiderId ||
+          assigningRider ||
+          ridersLoading
+        }
+        className="mt-3 w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {assigningRider
+          ? "Assigning..."
+          : "Assign Rider"}
+      </button>
 
     </div>
   );
 }
-

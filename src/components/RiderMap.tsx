@@ -78,58 +78,51 @@ export default function RiderMap({
     <div className="relative h-[450px] w-full overflow-hidden rounded-2xl border border-gray-200 shadow-lg">
 
       <MapContainer
-        center={[latitude, longitude]}
-        zoom={16}
-        scrollWheelZoom={true}
-        zoomControl={true}
-        className="h-full w-full"
-      >
+  center={[latitude, longitude]}
+  zoom={16}
+  scrollWheelZoom={true}
+  zoomControl={true}
+  className="h-full w-full"
+>
+  <TileLayer
+    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    maxZoom={19}
+  />
 
-        {/* LIGHT MAP */}
-        <TileLayer
-          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-          attribution="&copy; OpenStreetMap contributors &copy; CARTO"
-          subdomains="abcd"
-          maxZoom={20}
-        />
+  <Circle
+    center={[latitude, longitude]}
+    radius={80}
+    pathOptions={{
+      color: "#2563eb",
+      fillColor: "#2563eb",
+      fillOpacity: 0.10,
+      weight: 1,
+    }}
+  />
 
-        {/* LOCATION ACCURACY CIRCLE */}
-        <Circle
-          center={[latitude, longitude]}
-          radius={80}
-          pathOptions={{
-            color: "#2563eb",
-            fillColor: "#2563eb",
-            fillOpacity: 0.10,
-            weight: 1,
-          }}
-        />
+  <Marker
+    position={[latitude, longitude]}
+    icon={riderIcon}
+  >
+    <Tooltip
+      direction="top"
+      offset={[0, -20]}
+      opacity={1}
+      sticky
+    >
+      <div className="px-1 py-1">
+        <div className="font-semibold">
+          🚴 Rider
+        </div>
 
-        {/* RIDER */}
-        <Marker
-          position={[latitude, longitude]}
-          icon={riderIcon}
-        >
-          {/* HOVER LOCATION */}
-          <Tooltip
-            direction="top"
-            offset={[0, -20]}
-            opacity={1}
-            sticky
-          >
-            <div className="px-1 py-1">
-              <div className="font-semibold">
-                🚴 Rider
-              </div>
-
-              <div className="mt-1 text-sm">
-                📍 {locationName}
-              </div>
-            </div>
-          </Tooltip>
-        </Marker>
-
-      </MapContainer>
+        <div className="mt-1 text-sm">
+          📍 {locationName}
+        </div>
+      </div>
+    </Tooltip>
+  </Marker>
+</MapContainer>
 
       {/* ONLINE STATUS */}
       <div className="absolute left-4 top-4 z-[1000] rounded-xl bg-white px-4 py-3 shadow-md border border-gray-200">

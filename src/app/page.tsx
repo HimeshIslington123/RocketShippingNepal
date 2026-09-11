@@ -7,19 +7,26 @@ import HeroSection from "@/components/HeroSection";
 import WhyChooseUs from "@/components/whyto";
 import Testimonials from "@/components/Text";
 import ShipmentTracking from "@/components/shippinghome";
+import Services from "@/components/Serivice";
+import WhyRocketShipping from "@/components/why";
+import CtaBanner from "@/components/cta";
 export default function Home() {
   return (
     <>
       <Navbar />
       <main>
 <ShipmentTracking></ShipmentTracking>
-        <Partners />
+<Services></Services>
+<WhyRocketShipping></WhyRocketShipping>
 
-        <About />
+       {/*  <Partners />
 
-   <WhyChooseUs></WhyChooseUs>
+        <About /> */}
+
+   {/* <WhyChooseUs></WhyChooseUs> */}
 <Testimonials></Testimonials>
       </main>
+
       <Footer />
     </>
   );

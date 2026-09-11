@@ -1,25 +1,24 @@
 import type { Metadata } from "next";
-import { Big_Shoulders, Inter,Google_Sans_Flex } from "next/font/google";
+import { Google_Sans_Flex, Inter } from "next/font/google";
 import "./globals.css";
 
-
-
-const bigShoulders = Google_Sans_Flex({
+const googleSans = Google_Sans_Flex({
   subsets: ["latin"],
-  weight: ["500", "600", "700"],
+  weight: ["400", "500", "600", "700"],
   variable: "--font-display",
 });
+
 const inter = Inter({
-  variable: "--font-body",
   subsets: ["latin"],
-  weight: ["400", "500", "600"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-body",
 });
 
 export const metadata: Metadata = {
-  title: "Rocket Shipping",
+  title: "Rocket Shipping | Cargo & Logistics Nepal",
   description:
-    "",
-     icons: {
+    "Rocket Shipping provides reliable cargo, courier, door-to-door delivery, bulk transport and international shipping services across Nepal.",
+  icons: {
     icon: "/icon.png",
   },
 };
@@ -32,9 +31,9 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${bigShoulders.variable} ${inter.variable} h-full antialiased`}
+      className={`${googleSans.variable} ${inter.variable} antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-[#0b0b0c] text-white font-body">
+      <body className="min-h-screen bg-white font-body text-[#0b1729]">
         {children}
       </body>
     </html>
