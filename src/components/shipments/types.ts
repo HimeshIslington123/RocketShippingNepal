@@ -19,6 +19,10 @@ export type ReturnDeliveryOption =
   | "VENDOR_PICKUP"
   | "DELIVER_TO_VENDOR";
 
+/* =========================
+   RIDER
+========================= */
+
 export type Rider = {
   id: number;
 
@@ -33,6 +37,10 @@ export type Rider = {
   } | null;
 };
 
+/* =========================
+   TRACKING
+========================= */
+
 export type ReturnTracking = {
   id: string;
   status: string;
@@ -40,6 +48,98 @@ export type ReturnTracking = {
   message?: string | null;
   createdAt: string;
 };
+
+/* =========================
+   NORMAL SHIPMENT
+========================= */
+
+export type Shipment = {
+  id: string;
+
+  trackingNumber: string;
+
+  status: string;
+
+  origin?: string | null;
+
+  zone?: string | null;
+
+  deliveryType?: string | null;
+
+  weight?: number | null;
+
+  shippingCharge?: number | null;
+
+  packageType?: string | null;
+
+  paymentType?: string | null;
+
+  codAmount?: number | null;
+
+  createdAt?: string | null;
+
+  /* =========================
+     RECEIVER
+  ========================= */
+
+  receiverName?: string | null;
+
+  receiverPhone?: string | null;
+
+  receiverAddress?: string | null;
+
+  /* =========================
+     RIDER
+  ========================= */
+
+  riderId?: number | null;
+
+  rider?: Rider | null;
+
+  /* =========================
+     VENDOR
+  ========================= */
+
+  vendor?: {
+    id?: number;
+
+    name?: string | null;
+
+    companyName?: string | null;
+
+    location?: string | null;
+
+    address?: string | null;
+  } | null;
+
+  /* =========================
+     LOCATION RATE
+  ========================= */
+
+  locationRate?: {
+    location?: {
+      id?: number;
+
+      name?: string | null;
+    } | null;
+
+    deliveryType?: {
+      id?: number;
+
+      name?: string | null;
+    } | null;
+  } | null;
+
+  /* =========================
+     TRACKINGS
+  ========================= */
+
+  trackings?: ReturnTracking[];
+};
+
+/* =========================
+   RETURN REQUEST
+========================= */
 
 export type ReturnRequest = {
   id: string;
@@ -52,15 +152,31 @@ export type ReturnRequest = {
 
   description?: string | null;
 
-  // ORIGINAL PICKUP RIDER
+  /* =========================
+     ORIGINAL PICKUP RIDER
+  ========================= */
+
   riderId?: number | null;
+
   rider?: Rider | null;
 
-  // NEW WAREHOUSE -> VENDOR RIDER
+  /* =========================
+     WAREHOUSE -> VENDOR RIDER
+  ========================= */
+
   returnDeliveryRiderId?: number | null;
+
   returnDeliveryRider?: Rider | null;
 
+  /* =========================
+     DELIVERY OPTION
+  ========================= */
+
   deliveryOption?: ReturnDeliveryOption | null;
+
+  /* =========================
+     DATES
+  ========================= */
 
   requestedAt?: string | null;
 
@@ -71,6 +187,10 @@ export type ReturnRequest = {
   createdAt?: string | null;
 
   updatedAt?: string | null;
+
+  /* =========================
+     SHIPMENT
+  ========================= */
 
   shipment: {
     id: string;
@@ -93,19 +213,39 @@ export type ReturnRequest = {
 
     paymentType?: string | null;
 
+    /* =========================
+       VENDOR
+    ========================= */
+
     vendor?: {
       id?: number;
+
       name?: string | null;
+
+      companyName?: string | null;
+
       location?: string | null;
+
       address?: string | null;
     } | null;
 
+    /* =========================
+       CUSTOMER
+    ========================= */
+
     customer?: {
       id?: number;
+
       name?: string | null;
+
       phone?: string | null;
+
       address?: string | null;
     } | null;
+
+    /* =========================
+       TRACKINGS
+    ========================= */
 
     trackings?: ReturnTracking[];
   };
