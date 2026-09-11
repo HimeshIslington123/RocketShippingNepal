@@ -7,14 +7,12 @@ export default function HeroSection() {
       {/* Background Image */}
       <div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-        style={{
-          backgroundImage:
-            "url('https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?q=80&w=2400&auto=format&fit=crop')",
-        }}
+       style={{
+  backgroundImage: "url('/NEPAL.png')",
+}}
       />
 
-      {/* Main dark overlay */}
-      <div className="absolute inset-0 bg-[#071221]/65" />
+     
 
       {/* Left dark gradient for text readability */}
       <div className="absolute inset-0 bg-gradient-to-r from-[#071221]/95 via-[#071221]/70 to-transparent" />
@@ -55,9 +53,9 @@ export default function HeroSection() {
                 xl:text-[76px]
               "
             >
-              नेपालबाट संसारसम्म,
+             ब्यापारको सामान देश भरि , अब सस्तोमा
               <br />
-              तपाईंको सामान हाम्रो जिम्मेवारी।
+          
             </h1>
 
             {/* Description */}
