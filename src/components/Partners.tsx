@@ -96,7 +96,7 @@ export default function Partners() {
                 src={partner.src}
                 alt={partner.alt}
                 fill
-                sizes="160px"
+                sizes="400px"
                 className="
                   object-contain
                   transition-transform duration-300
