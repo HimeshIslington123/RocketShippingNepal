@@ -41,114 +41,81 @@ const SERVICES = [
 
 export default function Services() {
   return (
-    <section className="bg-[#f5f6f8] px-6 py-20 sm:px-10 lg:px-16 lg:py-24 xl:px-20">
-      <div className="mx-auto max-w-[1400px]">
+    <section className="w-full bg-white py-20 sm:py-24">
+      <div className="mx-auto max-w-[1400px] px-6 sm:px-10 lg:px-16 xl:px-20">
 
         {/* Header */}
-        <div className="max-w-2xl">
+        <div className="mx-auto max-w-2xl text-center">
+          <div className="mb-4 flex items-center justify-center gap-3">
+            <span className="h-[2px] w-8 bg-[#E23C2E]" />
+            <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#E23C2E]">
+              Logistics solutions
+            </span>
+            <span className="h-[2px] w-8 bg-[#E23C2E]" />
+          </div>
 
-          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#E23C2E]">
-            Logistics solutions
-          </p>
-
-          <h2 className="mt-3 text-3xl font-bold tracking-tight text-[#0b1729] sm:text-4xl">
+          <h2 className="text-3xl font-bold tracking-tight text-[#0b1729] sm:text-4xl lg:text-5xl">
             Shipping made simple.
           </h2>
 
-          <p className="mt-4 max-w-xl text-sm leading-6 text-gray-500 sm:text-base">
+          <p className="mt-5 text-sm leading-7 text-black/55 sm:text-base">
             Dependable logistics solutions for individuals, businesses and
             growing commerce across Nepal and beyond.
           </p>
-
         </div>
 
         {/* Services */}
-        <div className="mt-12 grid grid-cols-1 gap-px overflow-hidden rounded-2xl border border-gray-200 bg-gray-200 sm:grid-cols-2 lg:grid-cols-4">
-
-          {SERVICES.map(
-            ({ icon: Icon, title, description, linkText }) => (
+        <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          {SERVICES.map(({ icon: Icon, title, description, linkText }) => (
+            <article
+              key={title}
+              className="
+                group flex h-full flex-col rounded-2xl border border-black/10
+                bg-white p-6 transition-colors duration-200
+                hover:border-[#E23C2E]/40
+              "
+            >
+              {/* Icon */}
               <div
-                key={title}
                 className="
-                  group
-                  flex
-                  min-h-[300px]
-                  flex-col
-                  bg-white
-                  p-7
-                  transition-colors
-                  duration-300
-                  hover:bg-[#fafafa]
+                  flex h-11 w-11 items-center justify-center rounded-lg
+                  bg-[#E23C2E]/10 text-[#E23C2E]
+                  transition-all duration-300
+                  group-hover:bg-[#E23C2E] group-hover:text-white
                 "
               >
-
-                {/* Icon */}
-                <div
-                  className="
-                    flex
-                    h-11
-                    w-11
-                    items-center
-                    justify-center
-                    rounded-lg
-                    bg-[#E23C2E]/10
-                    text-[#E23C2E]
-                    transition-all
-                    duration-300
-                    group-hover:bg-[#E23C2E]
-                    group-hover:text-white
-                  "
-                >
-                  <Icon size={19} strokeWidth={2} />
-                </div>
-
-                {/* Content */}
-                <div className="mt-6">
-
-                  <h3 className="text-base font-bold text-[#0b1729]">
-                    {title}
-                  </h3>
-
-                  <p className="mt-3 text-sm leading-6 text-gray-500">
-                    {description}
-                  </p>
-
-                </div>
-
-                {/* Link */}
-                <div className="mt-auto pt-7">
-
-                  <a
-                    href="#"
-                    className="
-                      inline-flex
-                      items-center
-                      gap-2
-                      text-xs
-                      font-bold
-                      text-[#0b1729]
-                      transition-colors
-                      group-hover:text-[#E23C2E]
-                    "
-                  >
-                    {linkText}
-
-                    <ArrowUpRight
-                      size={14}
-                      className="
-                        transition-transform
-                        duration-200
-                        group-hover:translate-x-0.5
-                        group-hover:-translate-y-0.5
-                      "
-                    />
-                  </a>
-
-                </div>
+                <Icon size={19} strokeWidth={2} />
               </div>
-            )
-          )}
 
+              {/* Content */}
+              <h3 className="mt-5 text-base font-bold text-[#0b1729]">
+                {title}
+              </h3>
+
+              <p className="mt-2.5 flex-1 text-sm leading-6 text-black/55">
+                {description}
+              </p>
+
+              {/* Link */}
+              <a
+                href="#"
+                className="
+                  mt-6 inline-flex items-center gap-2 text-xs font-bold
+                  text-[#0b1729] transition-colors
+                  group-hover:text-[#E23C2E]
+                "
+              >
+                {linkText}
+                <ArrowUpRight
+                  size={14}
+                  className="
+                    transition-transform duration-200
+                    group-hover:translate-x-0.5 group-hover:-translate-y-0.5
+                  "
+                />
+              </a>
+            </article>
+          ))}
         </div>
       </div>
     </section>
