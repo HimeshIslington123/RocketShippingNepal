@@ -21,7 +21,7 @@ export default function Home() {
 <Services></Services>
 <WhyChooseRocketShipping></WhyChooseRocketShipping>
 <ShippingProcess></ShippingProcess>
-
+<Partners></Partners>
       
 <Testimonials></Testimonials>
       </main>

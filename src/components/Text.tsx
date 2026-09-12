@@ -81,10 +81,7 @@ return ( <section className="w-full bg-white py-12 sm:py-16"> <div className="mx
         Trusted by businesses
       </h2>
 
-      <p className="mt-4 text-sm leading-7 text-black/55 sm:text-base">
-        Businesses across Nepal trust Rocket Shipping to move their
-        products safely, reliably, and on time.
-      </p>
+    
     </div>
 
     {/* Testimonials */}
