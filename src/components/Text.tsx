@@ -133,7 +133,7 @@ export default function Testimonials() {
           </div>
 
           <h2 className="text-3xl font-bold tracking-tight text-[#0b1729] sm:text-4xl lg:text-5xl">
-            Trusted by businesses
+        What Our Clients Say
           </h2>
         </div>
 

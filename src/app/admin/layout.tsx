@@ -46,6 +46,7 @@ const ADMIN_NAV: NavLink[] = [
     label: "Return details",
     icon: ArrowLeft,
   },
+  
 ];
 
 export default function AdminLayout({
@@ -88,8 +89,8 @@ export default function AdminLayout({
       roleTag="SUPER ADMIN"
       userName="Admin"
       primaryAction={{
-        label: "Add Vendor",
-        href: "/admin/vendors/new",
+        label: "Create shipping",
+        href: "/admin/shipping",
       }}
     >
       {children}

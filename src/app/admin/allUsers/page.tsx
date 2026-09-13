@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -18,6 +17,8 @@ interface User {
   createdAt: string;
 }
 
+type RoleFilter = "ALL" | "RIDER" | "STAFF" | "VENDOR";
+
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -26,6 +27,13 @@ export default function UsersPage() {
   const [actionLoading, setActionLoading] = useState<number | null>(
     null
   );
+
+  // ======================================================
+  // ROLE FILTER
+  // ======================================================
+
+  const [roleFilter, setRoleFilter] =
+    useState<RoleFilter>("ALL");
 
   // ======================================================
   // GET TOKEN
@@ -96,7 +104,9 @@ export default function UsersPage() {
   // ======================================================
 
   const handleFreeze = async (user: User) => {
-    const action = user.isActive ? "freeze" : "unfreeze";
+    const action = user.isActive
+      ? "freeze"
+      : "unfreeze";
 
     const confirmed = window.confirm(
       user.isActive
@@ -115,7 +125,9 @@ export default function UsersPage() {
       const token = getToken();
 
       if (!token) {
-        throw new Error("Authentication token not found");
+        throw new Error(
+          "Authentication token not found"
+        );
       }
 
       const res = await fetch(
@@ -164,6 +176,35 @@ export default function UsersPage() {
       setActionLoading(null);
     }
   };
+
+  // ======================================================
+  // FILTER USERS
+  // ======================================================
+
+  const filteredUsers =
+    roleFilter === "ALL"
+      ? users
+      : users.filter(
+          (user) => user.role === roleFilter
+        );
+
+  // ======================================================
+  // ROLE COUNTS
+  // ======================================================
+
+  const allCount = users.length;
+
+  const riderCount = users.filter(
+    (user) => user.role === "RIDER"
+  ).length;
+
+  const staffCount = users.filter(
+    (user) => user.role === "STAFF"
+  ).length;
+
+  const vendorCount = users.filter(
+    (user) => user.role === "VENDOR"
+  ).length;
 
   // ======================================================
   // ROLE STYLE
@@ -217,7 +258,9 @@ export default function UsersPage() {
 
   return (
     <div className="mx-auto max-w-6xl text-black">
-      {/* HEADER */}
+      {/* ==================================================
+          HEADER
+      ================================================== */}
 
       <div>
         <h1 className="font-display text-2xl font-extrabold text-ink">
@@ -229,7 +272,67 @@ export default function UsersPage() {
         </p>
       </div>
 
-      {/* ERROR */}
+      {/* ==================================================
+          FILTERS
+      ================================================== */}
+
+      <div className="mt-5 flex flex-wrap gap-2">
+        {/* ALL USERS */}
+
+        <button
+          onClick={() => setRoleFilter("ALL")}
+          className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+            roleFilter === "ALL"
+              ? "bg-accent text-white"
+              : "bg-white text-ink/60 ring-1 ring-black/5 hover:bg-gray-50"
+          }`}
+        >
+          All Users ({allCount})
+        </button>
+
+        {/* RIDERS */}
+
+        <button
+          onClick={() => setRoleFilter("RIDER")}
+          className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+            roleFilter === "RIDER"
+              ? "bg-accent text-white"
+              : "bg-white text-ink/60 ring-1 ring-black/5 hover:bg-gray-50"
+          }`}
+        >
+          Riders ({riderCount})
+        </button>
+
+        {/* STAFF */}
+
+        <button
+          onClick={() => setRoleFilter("STAFF")}
+          className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+            roleFilter === "STAFF"
+              ? "bg-accent text-white"
+              : "bg-white text-ink/60 ring-1 ring-black/5 hover:bg-gray-50"
+          }`}
+        >
+          Staff ({staffCount})
+        </button>
+
+        {/* VENDORS */}
+
+        <button
+          onClick={() => setRoleFilter("VENDOR")}
+          className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+            roleFilter === "VENDOR"
+              ? "bg-accent text-white"
+              : "bg-white text-ink/60 ring-1 ring-black/5 hover:bg-gray-50"
+          }`}
+        >
+          Vendors ({vendorCount})
+        </button>
+      </div>
+
+      {/* ==================================================
+          ERROR
+      ================================================== */}
 
       {error && (
         <div className="mt-5 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-600">
@@ -247,10 +350,14 @@ export default function UsersPage() {
         </div>
       )}
 
-      {/* TABLE */}
+      {/* ==================================================
+          TABLE
+      ================================================== */}
 
       <div className="mt-6 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-black/5">
-        {/* DESKTOP */}
+        {/* ==================================================
+            DESKTOP
+        ================================================== */}
 
         <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-left">
@@ -275,17 +382,22 @@ export default function UsersPage() {
             </thead>
 
             <tbody>
-              {users.length === 0 ? (
+              {filteredUsers.length === 0 ? (
                 <tr>
                   <td
                     colSpan={4}
                     className="px-6 py-12 text-center text-sm text-ink/40"
                   >
-                    No users found.
+                    No{" "}
+                    {roleFilter === "ALL"
+                      ? "users"
+                      : roleFilter.toLowerCase() +
+                        "s"}{" "}
+                    found.
                   </td>
                 </tr>
               ) : (
-                users.map((user) => {
+                filteredUsers.map((user) => {
                   const isLoading =
                     actionLoading === user.id;
 
@@ -373,15 +485,22 @@ export default function UsersPage() {
           </table>
         </div>
 
-        {/* MOBILE */}
+        {/* ==================================================
+            MOBILE
+        ================================================== */}
 
         <div className="space-y-3 p-4 md:hidden">
-          {users.length === 0 ? (
+          {filteredUsers.length === 0 ? (
             <div className="py-12 text-center text-sm text-ink/40">
-              No users found.
+              No{" "}
+              {roleFilter === "ALL"
+                ? "users"
+                : roleFilter.toLowerCase() +
+                  "s"}{" "}
+              found.
             </div>
           ) : (
-            users.map((user) => {
+            filteredUsers.map((user) => {
               const isLoading =
                 actionLoading === user.id;
 
@@ -402,6 +521,8 @@ export default function UsersPage() {
                         {user.email}
                       </p>
                     </div>
+
+                    {/* ROLE */}
 
                     <span
                       className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${getRoleStyle(
@@ -462,4 +583,3 @@ export default function UsersPage() {
     </div>
   );
 }
-

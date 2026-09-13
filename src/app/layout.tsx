@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Google_Sans_Flex, Inter } from "next/font/google";
 import "./globals.css";
+import WhatsAppButton from "@/components/WhatsAppButton";
 
 const googleSans = Google_Sans_Flex({
   subsets: ["latin"],
@@ -35,6 +36,9 @@ export default function RootLayout({
     >
       <body className="min-h-screen bg-white font-body text-[#0b1729]">
         {children}
+
+        {/* Floating WhatsApp */}
+        <WhatsAppButton />
       </body>
     </html>
   );

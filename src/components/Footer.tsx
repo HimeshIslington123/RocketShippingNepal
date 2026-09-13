@@ -10,16 +10,14 @@ export default function Footer() {
   return (
     <footer className="bg-[#0b1729] text-white">
       <div className="mx-auto max-w-[1400px] px-6 py-16 sm:px-10 lg:px-16 xl:px-20">
-
         {/* ================= MAIN FOOTER ================= */}
         <div className="grid grid-cols-1 gap-12 border-b border-white/10 pb-14 md:grid-cols-2 lg:grid-cols-4">
-
           {/* ================= BRAND ================= */}
           <div className="lg:col-span-1">
-
             {/* Logo */}
             <a
               href="/"
+              aria-label="Rocket Shipping Home"
               className="inline-flex items-center"
             >
               <Image
@@ -36,20 +34,15 @@ export default function Footer() {
               Reliable cargo and logistics solutions connecting businesses
               and people across Nepal and the world.
             </p>
-
-           
-
           </div>
 
           {/* ================= COMPANY ================= */}
           <div>
-
             <h3 className="text-xs font-bold uppercase tracking-[0.15em] text-white/35">
               Company
             </h3>
 
             <ul className="mt-5 space-y-3 text-sm text-white/55">
-
               <li>
                 <a
                   href="/"
@@ -61,7 +54,7 @@ export default function Footer() {
 
               <li>
                 <a
-                  href="/about"
+                  href="/aboutus"
                   className="transition-colors hover:text-white"
                 >
                   About Us
@@ -79,26 +72,31 @@ export default function Footer() {
 
               <li>
                 <a
-                  href="/contact"
+                  href="/pricing"
                   className="transition-colors hover:text-white"
                 >
-                  Contact
+                  Pricing
                 </a>
               </li>
 
+              <li>
+                <a
+                  href="/contactus"
+                  className="transition-colors hover:text-white"
+                >
+                  Contact Us
+                </a>
+              </li>
             </ul>
-
           </div>
 
           {/* ================= SERVICES ================= */}
           <div>
-
             <h3 className="text-xs font-bold uppercase tracking-[0.15em] text-white/35">
               Services
             </h3>
 
             <ul className="mt-5 space-y-3 text-sm text-white/55">
-
               <li>
                 <a
                   href="/services"
@@ -134,23 +132,18 @@ export default function Footer() {
                   International Shipping
                 </a>
               </li>
-
             </ul>
-
           </div>
 
           {/* ================= CONTACT ================= */}
           <div>
-
             <h3 className="text-xs font-bold uppercase tracking-[0.15em] text-white/35">
               Contact
             </h3>
 
             <div className="mt-5 space-y-4">
-
               {/* Location */}
               <div className="flex gap-3">
-
                 <MapPin
                   size={16}
                   strokeWidth={2}
@@ -162,12 +155,10 @@ export default function Footer() {
                   <br />
                   Kathmandu, Nepal
                 </p>
-
               </div>
 
               {/* Phone */}
               <div className="flex items-center gap-3">
-
                 <Phone
                   size={15}
                   strokeWidth={2}
@@ -175,17 +166,15 @@ export default function Footer() {
                 />
 
                 <a
-                  href="tel:9717046687"
+                  href="tel:9851053926"
                   className="text-sm text-white/55 transition-colors hover:text-white"
                 >
-                  971-7046687
+                  985-1053926
                 </a>
-
               </div>
 
               {/* Email */}
               <div className="flex items-center gap-3">
-
                 <Mail
                   size={15}
                   strokeWidth={2}
@@ -198,18 +187,13 @@ export default function Footer() {
                 >
                   support@rocketshipping.com.np
                 </a>
-
               </div>
-
             </div>
-
           </div>
-
         </div>
 
         {/* ================= BOTTOM ================= */}
         <div className="flex flex-col gap-5 pt-7 text-xs text-white/30 sm:flex-row sm:items-center sm:justify-between">
-
           {/* Copyright */}
           <p>
             © {new Date().getFullYear()} Rocket Shipping. All rights reserved.
@@ -217,7 +201,7 @@ export default function Footer() {
 
           {/* Links */}
           <div className="flex flex-wrap gap-5">
-
+            {/*
             <a
               href="/privacy"
               className="transition-colors hover:text-white/70"
@@ -231,6 +215,7 @@ export default function Footer() {
             >
               Terms of Service
             </a>
+            */}
 
             <a
               href="/track"
@@ -243,11 +228,8 @@ export default function Footer() {
                 strokeWidth={2}
               />
             </a>
-
           </div>
-
         </div>
-
       </div>
     </footer>
   );
