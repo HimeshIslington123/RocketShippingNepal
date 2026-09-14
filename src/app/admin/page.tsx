@@ -1,7 +1,7 @@
-
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Building2,
   Users,
@@ -19,26 +19,39 @@ import {
   Layers,
   Boxes,
   ArrowUpRight,
+  RefreshCw,
+  ChevronRight,
+  Activity,
+  CircleDollarSign,
   type LucideIcon,
 } from "lucide-react";
 
-// ======================================================
+// ============================================================
 // TYPES
-// ======================================================
+// ============================================================
+
+type ShipmentStatus =
+  | "CREATED"
+  | "IN_WAREHOUSE"
+  | "ASSIGNED_TO_RIDER"
+  | "OUT_FOR_DELIVERY"
+  | "DELIVERED"
+  | "RETURNED"
+  | "CANCELLED";
 
 interface RecentShipment {
   id: string;
   trackingNumber: string;
-  receiverName: string;
-  receiverPhone: string;
-  receiverAddress: string;
-  packageType: string;
-  weight: number;
-  paymentType: string;
-  codAmount: number;
-  shippingCharge: number;
+  receiverName: string | null;
+  receiverPhone: string | null;
+  receiverAddress: string | null;
+  packageType: string | null;
+  weight: number | null;
+  paymentType: string | null;
+  codAmount: number | null;
+  shippingCharge: number | null;
   status: ShipmentStatus;
-  createdAt: string;
+  createdAt: string | null;
 
   vendor: {
     id: number;
@@ -54,15 +67,6 @@ interface RecentShipment {
     };
   } | null;
 }
-
-type ShipmentStatus =
-  | "CREATED"
-  | "IN_WAREHOUSE"
-  | "ASSIGNED_TO_RIDER"
-  | "OUT_FOR_DELIVERY"
-  | "DELIVERED"
-  | "RETURNED"
-  | "CANCELLED";
 
 interface DashboardData {
   users: {
@@ -114,15 +118,48 @@ interface DashboardData {
   recentShipments: RecentShipment[];
 }
 
-// ======================================================
-// HELPERS
-// ======================================================
+// ============================================================
+// CONSTANTS
+// ============================================================
 
-function formatNPR(amount: number | null | undefined) {
-  return `NPR ${Number(amount ?? 0).toLocaleString("en-IN")}`;
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL || "";
+
+const CACHE_KEY =
+  "admin-dashboard-v2";
+
+const CACHE_TIME_KEY =
+  "admin-dashboard-v2-time";
+
+// Cache remains valid for 5 minutes.
+// Navigation does not refetch.
+// User can manually refresh whenever needed.
+const CACHE_DURATION =
+  5 * 60 * 1000;
+
+// ============================================================
+// MODULE REQUEST DEDUPLICATION
+// ============================================================
+
+let dashboardRequest:
+  | Promise<DashboardData>
+  | null = null;
+
+// ============================================================
+// HELPERS
+// ============================================================
+
+function formatNPR(
+  amount: number | null | undefined
+) {
+  return `NPR ${Number(
+    amount ?? 0
+  ).toLocaleString("en-IN")}`;
 }
 
-function formatStatus(status: ShipmentStatus) {
+function formatStatus(
+  status: ShipmentStatus
+) {
   switch (status) {
     case "CREATED":
       return "Created";
@@ -150,7 +187,9 @@ function formatStatus(status: ShipmentStatus) {
   }
 }
 
-function getStatusStyle(status: ShipmentStatus) {
+function getStatusStyle(
+  status: ShipmentStatus
+) {
   switch (status) {
     case "CREATED":
       return "bg-blue-50 text-blue-600";
@@ -178,9 +217,298 @@ function getStatusStyle(status: ShipmentStatus) {
   }
 }
 
-// ======================================================
+// ============================================================
+// API FETCH
+// ============================================================
+
+async function fetchDashboard(): Promise<DashboardData> {
+  if (!API_URL) {
+    throw new Error(
+      "NEXT_PUBLIC_API_URL is not configured."
+    );
+  }
+
+  // ----------------------------------------------------------
+  // IMPORTANT:
+  // If React StrictMode calls this twice,
+  // both calls use the same Promise.
+  // ----------------------------------------------------------
+
+  if (dashboardRequest) {
+    return dashboardRequest;
+  }
+
+  dashboardRequest = fetch(
+    `${API_URL}/api/vendor/admin`,
+    {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    }
+  )
+    .then(async (res) => {
+      const json = await res.json().catch(
+        () => null
+      );
+
+      if (!res.ok) {
+        throw new Error(
+          json?.message ||
+            `Request failed: ${res.status}`
+        );
+      }
+
+      return json as DashboardData;
+    })
+    .finally(() => {
+      dashboardRequest = null;
+    });
+
+  return dashboardRequest;
+}
+
+// ============================================================
+// CACHE HELPERS
+// ============================================================
+
+function getCachedDashboard():
+  | DashboardData
+  | null {
+  try {
+    const cached =
+      sessionStorage.getItem(CACHE_KEY);
+
+    const cachedTime =
+      sessionStorage.getItem(
+        CACHE_TIME_KEY
+      );
+
+    if (!cached || !cachedTime) {
+      return null;
+    }
+
+    const age =
+      Date.now() - Number(cachedTime);
+
+    if (age > CACHE_DURATION) {
+      sessionStorage.removeItem(
+        CACHE_KEY
+      );
+
+      sessionStorage.removeItem(
+        CACHE_TIME_KEY
+      );
+
+      return null;
+    }
+
+    return JSON.parse(
+      cached
+    ) as DashboardData;
+  } catch {
+    return null;
+  }
+}
+
+function saveDashboardCache(
+  data: DashboardData
+) {
+  try {
+    sessionStorage.setItem(
+      CACHE_KEY,
+      JSON.stringify(data)
+    );
+
+    sessionStorage.setItem(
+      CACHE_TIME_KEY,
+      String(Date.now())
+    );
+  } catch {
+    // Ignore storage errors.
+  }
+}
+
+function clearDashboardCache() {
+  try {
+    sessionStorage.removeItem(
+      CACHE_KEY
+    );
+
+    sessionStorage.removeItem(
+      CACHE_TIME_KEY
+    );
+  } catch {
+    // Ignore storage errors.
+  }
+}
+
+// ============================================================
+// SHIMMER
+// ============================================================
+
+function SkeletonBlock({
+  className = "",
+}: {
+  className?: string;
+}) {
+  return (
+    <div
+      className={`skeleton-shimmer rounded-xl ${className}`}
+    />
+  );
+}
+
+// ============================================================
+// FULL PAGE SKELETON
+// ============================================================
+
+function DashboardSkeleton() {
+  return (
+    <div className="mx-auto max-w-6xl">
+      {/* Header */}
+
+      <div className="flex items-center justify-between">
+        <div>
+          <SkeletonBlock className="h-7 w-52" />
+
+          <SkeletonBlock className="mt-3 h-4 w-72" />
+        </div>
+
+        <SkeletonBlock className="h-10 w-28 rounded-xl" />
+      </div>
+
+      {/* Top stats */}
+
+      <div className="mt-7 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {Array.from({
+          length: 4,
+        }).map((_, index) => (
+          <div
+            key={index}
+            className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5"
+          >
+            <div className="flex justify-between">
+              <SkeletonBlock className="h-10 w-10 rounded-xl" />
+
+              <SkeletonBlock className="h-4 w-16" />
+            </div>
+
+            <SkeletonBlock className="mt-5 h-4 w-28" />
+
+            <SkeletonBlock className="mt-2 h-8 w-20" />
+          </div>
+        ))}
+      </div>
+
+      {/* Shipment overview */}
+
+      <div className="mt-6 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5 md:p-6">
+        <SkeletonBlock className="h-6 w-48" />
+
+        <SkeletonBlock className="mt-3 h-4 w-80" />
+
+        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {Array.from({
+            length: 8,
+          }).map((_, index) => (
+            <div
+              key={index}
+              className="rounded-xl bg-gray-50/70 p-4"
+            >
+              <SkeletonBlock className="h-5 w-5" />
+
+              <SkeletonBlock className="mt-4 h-3 w-20" />
+
+              <SkeletonBlock className="mt-2 h-7 w-12" />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Finance / pickup */}
+
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5 md:p-6">
+          <SkeletonBlock className="h-6 w-28" />
+
+          <SkeletonBlock className="mt-3 h-4 w-64" />
+
+          <div className="mt-6 space-y-3">
+            {Array.from({
+              length: 5,
+            }).map((_, index) => (
+              <SkeletonBlock
+                key={index}
+                className="h-[70px] w-full"
+              />
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5 md:p-6">
+          <SkeletonBlock className="h-6 w-28" />
+
+          <SkeletonBlock className="mt-3 h-4 w-64" />
+
+          <div className="mt-6 grid grid-cols-2 gap-3">
+            {Array.from({
+              length: 5,
+            }).map((_, index) => (
+              <SkeletonBlock
+                key={index}
+                className="h-24"
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* System */}
+
+      <div className="mt-6 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5 md:p-6">
+        <SkeletonBlock className="h-6 w-40" />
+
+        <SkeletonBlock className="mt-3 h-4 w-72" />
+
+        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {Array.from({
+            length: 4,
+          }).map((_, index) => (
+            <SkeletonBlock
+              key={index}
+              className="h-20"
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Recent */}
+
+      <div className="mt-6 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5 md:p-6">
+        <SkeletonBlock className="h-6 w-44" />
+
+        <SkeletonBlock className="mt-3 h-4 w-72" />
+
+        <div className="mt-6 space-y-3">
+          {Array.from({
+            length: 3,
+          }).map((_, index) => (
+            <SkeletonBlock
+              key={index}
+              className="h-16"
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
 // STAT CARD
-// ======================================================
+// ============================================================
 
 interface StatCardProps {
   label: string;
@@ -188,6 +516,7 @@ interface StatCardProps {
   description?: string;
   icon: LucideIcon;
   iconStyle: string;
+  onClick?: () => void;
 }
 
 function StatCard({
@@ -196,14 +525,29 @@ function StatCard({
   description,
   icon: Icon,
   iconStyle,
+  onClick,
 }: StatCardProps) {
+  const clickable = Boolean(onClick);
+
   return (
-    <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!clickable}
+      className={`w-full rounded-2xl bg-white p-5 text-left shadow-sm ring-1 ring-black/5 transition ${
+        clickable
+          ? "cursor-pointer hover:-translate-y-0.5 hover:shadow-md"
+          : "cursor-default"
+      }`}
+    >
       <div className="flex items-start justify-between">
         <span
           className={`flex h-10 w-10 items-center justify-center rounded-xl ${iconStyle}`}
         >
-          <Icon className="h-5 w-5" strokeWidth={2} />
+          <Icon
+            className="h-5 w-5"
+            strokeWidth={2}
+          />
         </span>
 
         {description && (
@@ -213,748 +557,1187 @@ function StatCard({
         )}
       </div>
 
-      <p className="mt-4 text-sm text-ink/50">{label}</p>
-
-      <p className="font-display mt-1 text-2xl font-extrabold text-ink">
-        {value}
+      <p className="mt-4 text-sm text-ink/50">
+        {label}
       </p>
-    </div>
+
+      <div className="mt-1 flex items-center justify-between">
+        <p className="font-display text-2xl font-extrabold text-ink">
+          {value}
+        </p>
+
+        {clickable && (
+          <ChevronRight className="h-4 w-4 text-ink/20 transition-transform group-hover:translate-x-1" />
+        )}
+      </div>
+    </button>
   );
 }
 
-// ======================================================
+// ============================================================
+// SMALL SECTION LINK
+// ============================================================
+
+function SectionLink({
+  children,
+  onClick,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group flex items-center gap-1 text-xs font-semibold text-ink/40 transition hover:text-[#E23C2E]"
+    >
+      {children}
+
+      <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+    </button>
+  );
+}
+
+// ============================================================
 // PAGE
-// ======================================================
+// ============================================================
 
 export default function AdminOverviewPage() {
-  const [data, setData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
 
-  // ====================================================
-  // FETCH DASHBOARD
-  // ====================================================
+  const cachedInitialData =
+    useMemo(
+      () => getCachedDashboard(),
+      []
+    );
 
- useEffect(() => {
-  let cancelled = false;
+  const [data, setData] =
+    useState<DashboardData | null>(
+      cachedInitialData
+    );
 
-  async function fetchDashboard() {
-    // 1. Check cached data first
-    const cached = sessionStorage.getItem("admin-dashboard");
+  const [loading, setLoading] =
+    useState(
+      cachedInitialData === null
+    );
 
-    if (cached) {
-      setData(JSON.parse(cached));
-      setLoading(false);
+  const [refreshing, setRefreshing] =
+    useState(false);
 
-      // Optional: don't make API request at all
-      return;
-    }
+  const [error, setError] =
+    useState<string | null>(null);
 
-    try {
-      setLoading(true);
+  // ==========================================================
+  // RELOAD DASHBOARD
+  // ==========================================================
 
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/vendor/admin`
-      );
+  const reloadDashboard = useCallback(
+    async (
+      force = false
+    ) => {
+      // ------------------------------------------------------
+      // NORMAL LOAD
+      // ------------------------------------------------------
 
-      if (!res.ok) {
-        throw new Error(`Request failed: ${res.status}`);
+      if (!force) {
+        const cached =
+          getCachedDashboard();
+
+        if (cached) {
+          setData(cached);
+          setLoading(false);
+          setError(null);
+
+          return;
+        }
       }
 
-      const json: DashboardData = await res.json();
+      // ------------------------------------------------------
+      // FORCE REFRESH
+      // ------------------------------------------------------
 
-      if (!cancelled) {
-        setData(json);
-        setError(null);
+      if (force) {
+        setRefreshing(true);
 
-        // 2. Save dashboard data
-        sessionStorage.setItem(
-          "admin-dashboard",
-          JSON.stringify(json)
+        // Remove old cache so next normal navigation
+        // doesn't show stale data.
+        clearDashboardCache();
+      } else {
+        setLoading(true);
+      }
+
+      try {
+        const freshData =
+          await fetchDashboard();
+
+        saveDashboardCache(
+          freshData
         );
-      }
-    } catch (err) {
-      if (!cancelled) {
+
+        setData(freshData);
+        setError(null);
+      } catch (err) {
+        console.error(
+          "ADMIN DASHBOARD FETCH ERROR:",
+          err
+        );
+
         setError(
           err instanceof Error
             ? err.message
             : "Failed to load dashboard"
         );
-      }
-    } finally {
-      if (!cancelled) {
+      } finally {
         setLoading(false);
+        setRefreshing(false);
       }
-    }
-  }
+    },
+    []
+  );
 
-  fetchDashboard();
+  // ==========================================================
+  // INITIAL LOAD
+  // ==========================================================
 
-  return () => {
-    cancelled = true;
+  useEffect(() => {
+    reloadDashboard(false);
+  }, [reloadDashboard]);
+
+  // ==========================================================
+  // NAVIGATION HELPERS
+  // ==========================================================
+
+  const goToVendors = () => {
+    router.push(
+      "/admin/vendorDetails"
+    );
   };
-}, []);
 
-  // ====================================================
+  const goToUsers = () => {
+    router.push(
+      "/admin/allUsers"
+    );
+  };
+   const gotorider = () => {
+    router.push(
+      "/admin/riderDetails"
+    );
+  };
+
+  const goToShipments = () => {
+    router.push(
+      "/admin/shippingDetails"
+    );
+  };
+
+  const goToPickup = () => {
+    router.push(
+      "/admin/pickup"
+    );
+  };
+
+  const goToLocation = () => {
+    router.push("/admin/location");
+  };
+
+  // ==========================================================
   // LOADING
-  // ====================================================
+  // ==========================================================
 
-  if (loading) {
+  if (
+    loading &&
+    !data
+  ) {
     return (
-      <div className="mx-auto max-w-6xl">
-        <div>
-          <div className="h-7 w-48 animate-pulse rounded bg-black/5" />
-          <div className="mt-2 h-4 w-72 animate-pulse rounded bg-black/5" />
-        </div>
+      <>
+        <style jsx global>{`
+          @keyframes dashboard-shimmer {
+            0% {
+              background-position: 200% 0;
+            }
 
-        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {Array.from({ length: 8 }).map((_, index) => (
-            <div
-              key={index}
-              className="h-[140px] animate-pulse rounded-2xl bg-white shadow-sm ring-1 ring-black/5"
-            />
-          ))}
-        </div>
-      </div>
+            100% {
+              background-position: -200% 0;
+            }
+          }
+
+          .skeleton-shimmer {
+            background: linear-gradient(
+              90deg,
+              #e8eaed 0%,
+              #f8f9fa 45%,
+              #ffffff 50%,
+              #f8f9fa 55%,
+              #e8eaed 100%
+            );
+
+            background-size: 200% 100%;
+
+            animation:
+              dashboard-shimmer
+              1.45s
+              ease-in-out
+              infinite;
+          }
+        `}</style>
+
+        <DashboardSkeleton />
+      </>
     );
   }
 
-  // ====================================================
+  // ==========================================================
   // ERROR
-  // ====================================================
+  // ==========================================================
 
-  if (error || !data) {
+  if (
+    error &&
+    !data
+  ) {
     return (
-      <div className="mx-auto max-w-6xl">
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-600">
-          Failed to load dashboard.
-          <p className="mt-1 text-red-500/80">
-            {error || "No dashboard data available."}
-          </p>
+      <>
+        <style jsx global>{`
+          @keyframes dashboard-shimmer {
+            0% {
+              background-position: 200% 0;
+            }
+
+            100% {
+              background-position: -200% 0;
+            }
+          }
+
+          .skeleton-shimmer {
+            background: linear-gradient(
+              90deg,
+              #e8eaed 0%,
+              #f8f9fa 45%,
+              #ffffff 50%,
+              #f8f9fa 55%,
+              #e8eaed 100%
+            );
+
+            background-size: 200% 100%;
+
+            animation:
+              dashboard-shimmer
+              1.45s
+              ease-in-out
+              infinite;
+          }
+        `}</style>
+
+        <div className="mx-auto max-w-6xl">
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="font-semibold text-red-700">
+                  Dashboard could not be loaded
+                </h2>
+
+                <p className="mt-1 text-sm text-red-600/80">
+                  {error}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  reloadDashboard(true)
+                }
+                className="inline-flex items-center gap-2 rounded-xl bg-[#E23C2E] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#CE3122]"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Retry
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
-  // ====================================================
-  // PAGE
-  // ====================================================
+  if (!data) {
+    return null;
+  }
+
+  // ==========================================================
+  // MAIN PAGE
+  // ==========================================================
 
   return (
-    <div className="mx-auto max-w-6xl text-black">
-      {/* ==================================================
-          HEADER
-      ================================================== */}
+    <>
+      <style jsx global>{`
+        @keyframes dashboard-shimmer {
+          0% {
+            background-position: 200% 0;
+          }
 
-      <div>
-        <h1 className="font-display text-2xl font-extrabold text-ink">
-          Admin Overview
-        </h1>
+          100% {
+            background-position: -200% 0;
+          }
+        }
 
-        <p className="mt-1 text-sm text-ink/50">
-          Overview of your delivery platform.
-        </p>
-      </div>
+        .skeleton-shimmer {
+          background: linear-gradient(
+            90deg,
+            #e8eaed 0%,
+            #f8f9fa 45%,
+            #ffffff 50%,
+            #f8f9fa 55%,
+            #e8eaed 100%
+          );
 
-      {/* ==================================================
-          TOP STATS
-      ================================================== */}
+          background-size: 200% 100%;
 
-      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          label="Total Vendors"
-          value={data.users.vendors}
-          description="Vendors"
-          icon={Building2}
-          iconStyle="bg-blue-50 text-blue-600"
-        />
+          animation:
+            dashboard-shimmer
+            1.45s
+            ease-in-out
+            infinite;
+        }
+      `}</style>
 
-        <StatCard
-          label="Total Staff"
-          value={data.users.staff}
-          description="Staff"
-          icon={Users}
-          iconStyle="bg-indigo-50 text-indigo-600"
-        />
+      <div className="mx-auto max-w-6xl text-black">
+        {/* ==================================================
+            HEADER
+        ================================================== */}
 
-        <StatCard
-          label="Total Riders"
-          value={data.users.riders}
-          description={`${data.users.activeRiders} available`}
-          icon={Bike}
-          iconStyle="bg-emerald-50 text-emerald-600"
-        />
-
-        <StatCard
-          label="Total Shipments"
-          value={data.shipments.total}
-          description="All time"
-          icon={Package}
-          iconStyle="bg-orange-50 text-orange-600"
-        />
-      </div>
-
-      {/* ==================================================
-          SHIPMENT OVERVIEW
-      ================================================== */}
-
-      <div className="mt-6 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5 md:p-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="font-display text-lg font-bold text-ink">
-              Shipment Overview
-            </h2>
+            <div className="flex items-center gap-2">
+              <Activity className="h-5 w-5 text-[#E23C2E]" />
 
-            <p className="mt-1 text-sm text-ink/45">
-              Current shipment status across the platform.
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#E23C2E]">
+                Control Center
+              </p>
+            </div>
+
+            <h1 className="font-display mt-2 text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">
+              Admin Overview
+            </h1>
+
+            <p className="mt-1 text-sm text-ink/50">
+              A quick look at your delivery operation.
             </p>
           </div>
 
-          <Package className="hidden h-5 w-5 text-ink/20 sm:block" />
+          <button
+            type="button"
+            onClick={() =>
+              reloadDashboard(true)
+            }
+            disabled={refreshing}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-black/10 bg-white px-4 text-sm font-semibold text-ink shadow-sm transition hover:border-black/20 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <RefreshCw
+              className={`h-4 w-4 ${
+                refreshing
+                  ? "animate-spin"
+                  : ""
+              }`}
+            />
+
+            {refreshing
+              ? "Refreshing"
+              : "Refresh"}
+          </button>
         </div>
 
-        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {/* CREATED */}
+        {/* ==================================================
+            REFRESH INDICATOR
+        ================================================== */}
 
-          <div className="rounded-xl bg-blue-50/60 p-4">
-            <Clock className="h-5 w-5 text-blue-600" />
+        {refreshing && (
+          <div className="mt-4 flex items-center gap-2 text-xs font-medium text-ink/40">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#E23C2E]" />
 
-            <p className="mt-3 text-xs text-ink/50">
-              Created
-            </p>
-
-            <p className="font-display mt-1 text-xl font-extrabold text-ink">
-              {data.shipments.created}
-            </p>
+            Updating dashboard data...
           </div>
+        )}
 
-          {/* WAREHOUSE */}
+        {/* ==================================================
+            TOP STATS
+        ================================================== */}
 
-          <div className="rounded-xl bg-amber-50/60 p-4">
-            <Warehouse className="h-5 w-5 text-amber-600" />
+        <div className="mt-7 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            label="Total Vendors"
+            value={data.users.vendors}
+            description="Vendors"
+            icon={Building2}
+            iconStyle="bg-blue-50 text-blue-600"
+            onClick={goToVendors}
+          />
 
-            <p className="mt-3 text-xs text-ink/50">
-              In Warehouse
-            </p>
+          <StatCard
+            label="Total Staff"
+            value={data.users.staff}
+            description="Staff"
+            icon={Users}
+            iconStyle="bg-indigo-50 text-indigo-600"
+            onClick={goToUsers}
+          />
 
-            <p className="font-display mt-1 text-xl font-extrabold text-ink">
-              {data.shipments.inWarehouse}
-            </p>
-          </div>
+          <StatCard
+            label="Total Riders"
+            value={data.users.riders}
+            description={`${data.users.activeRiders} available`}
+            icon={Bike}
+            iconStyle="bg-emerald-50 text-emerald-600"
+            onClick={gotorider}
+          />
 
-          {/* ASSIGNED */}
-
-          <div className="rounded-xl bg-indigo-50/60 p-4">
-            <Bike className="h-5 w-5 text-indigo-600" />
-
-            <p className="mt-3 text-xs text-ink/50">
-              Assigned to Rider
-            </p>
-
-            <p className="font-display mt-1 text-xl font-extrabold text-ink">
-              {data.shipments.assignedToRider}
-            </p>
-          </div>
-
-          {/* OUT FOR DELIVERY */}
-
-          <div className="rounded-xl bg-orange-50/60 p-4">
-            <Truck className="h-5 w-5 text-orange-600" />
-
-            <p className="mt-3 text-xs text-ink/50">
-              Out for Delivery
-            </p>
-
-            <p className="font-display mt-1 text-xl font-extrabold text-ink">
-              {data.shipments.outForDelivery}
-            </p>
-          </div>
-
-          {/* DELIVERED */}
-
-          <div className="rounded-xl bg-emerald-50/60 p-4">
-            <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-
-            <p className="mt-3 text-xs text-ink/50">
-              Delivered
-            </p>
-
-            <p className="font-display mt-1 text-xl font-extrabold text-ink">
-              {data.shipments.delivered}
-            </p>
-          </div>
-
-          {/* RETURNED */}
-
-          <div className="rounded-xl bg-purple-50/60 p-4">
-            <RotateCcw className="h-5 w-5 text-purple-600" />
-
-            <p className="mt-3 text-xs text-ink/50">
-              Returned
-            </p>
-
-            <p className="font-display mt-1 text-xl font-extrabold text-ink">
-              {data.shipments.returned}
-            </p>
-          </div>
-
-          {/* CANCELLED */}
-
-          <div className="rounded-xl bg-red-50/60 p-4">
-            <XCircle className="h-5 w-5 text-red-600" />
-
-            <p className="mt-3 text-xs text-ink/50">
-              Cancelled
-            </p>
-
-            <p className="font-display mt-1 text-xl font-extrabold text-ink">
-              {data.shipments.cancelled}
-            </p>
-          </div>
+          <StatCard
+            label="Total Shipments"
+            value={data.shipments.total}
+            description="All shipments"
+            icon={Package}
+            iconStyle="bg-orange-50 text-orange-600"
+            onClick={goToShipments}
+          />
         </div>
-      </div>
 
-      {/* ==================================================
-          FINANCE + PICKUPS
-      ================================================== */}
+        {/* ==================================================
+            SHIPMENT OVERVIEW
+        ================================================== */}
 
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* FINANCE */}
-
-        <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5 md:p-6">
-          <div className="flex items-center justify-between">
+        <div className="mt-6 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5 md:p-6">
+          <div className="flex items-start justify-between gap-4">
             <div>
               <h2 className="font-display text-lg font-bold text-ink">
-                Finance
+                Shipment Overview
               </h2>
 
               <p className="mt-1 text-sm text-ink/45">
-                Platform financial overview.
+                Current status across the platform.
               </p>
             </div>
 
-            <Wallet className="h-5 w-5 text-ink/20" />
+            <SectionLink
+              onClick={goToShipments}
+            >
+              View shipments
+            </SectionLink>
           </div>
 
-          <div className="mt-5 space-y-3">
-            {/* REVENUE */}
+          <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {/* CREATED */}
 
-            <div className="flex items-center justify-between rounded-xl bg-emerald-50/60 p-4">
-              <div className="flex items-center gap-3">
-                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600">
-                  <ArrowUpRight className="h-4 w-4" />
-                </span>
+            <button
+              type="button"
+              onClick={goToShipments}
+              className="group rounded-xl bg-blue-50/60 p-4 text-left transition hover:-translate-y-0.5 hover:bg-blue-50"
+            >
+              <Clock className="h-5 w-5 text-blue-600" />
 
-                <div>
-                  <p className="text-sm font-semibold text-ink">
-                    Revenue
-                  </p>
-
-                  <p className="text-xs text-ink/40">
-                    Shipping charges
-                  </p>
-                </div>
-              </div>
-
-              <p className="font-semibold text-emerald-600">
-                {formatNPR(data.finance.totalRevenue)}
-              </p>
-            </div>
-
-            {/* COD COLLECTED */}
-
-            <div className="flex items-center justify-between rounded-xl border border-black/5 p-4">
-              <div className="flex items-center gap-3">
-                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
-                  <Banknote className="h-4 w-4" />
-                </span>
-
-                <div>
-                  <p className="text-sm font-semibold text-ink">
-                    COD Collected
-                  </p>
-
-                  <p className="text-xs text-ink/40">
-                    Delivered orders
-                  </p>
-                </div>
-              </div>
-
-              <p className="font-semibold text-ink">
-                {formatNPR(data.finance.codCollected)}
-              </p>
-            </div>
-
-            {/* COD PENDING */}
-
-            <div className="flex items-center justify-between rounded-xl border border-black/5 p-4">
-              <div>
-                <p className="text-sm font-semibold text-ink">
-                  COD Pending
-                </p>
-
-                <p className="text-xs text-ink/40">
-                  Yet to be collected
-                </p>
-              </div>
-
-              <p className="font-semibold text-amber-600">
-                {formatNPR(data.finance.codPending)}
-              </p>
-            </div>
-
-            {/* SHIPPING PENDING */}
-
-            <div className="flex items-center justify-between rounded-xl border border-black/5 p-4">
-              <div>
-                <p className="text-sm font-semibold text-ink">
-                  Shipping Charges Pending
-                </p>
-
-                <p className="text-xs text-ink/40">
-                  Not yet collected
-                </p>
-              </div>
-
-              <p className="font-semibold text-amber-600">
-                {formatNPR(
-                  data.finance.shippingChargesPending
-                )}
-              </p>
-            </div>
-
-            {/* AVERAGE */}
-
-            <div className="flex items-center justify-between border-t border-black/5 pt-4">
-              <p className="text-sm text-ink/50">
-                Average shipping charge
+              <p className="mt-3 text-xs text-ink/50">
+                Created
               </p>
 
-              <p className="font-semibold text-ink">
-                {formatNPR(
-                  data.finance.averageShippingCharge
-                )}
+              <p className="font-display mt-1 text-xl font-extrabold text-ink">
+                {data.shipments.created}
               </p>
-            </div>
-          </div>
-        </div>
+            </button>
 
-        {/* PICKUPS */}
+            {/* WAREHOUSE */}
 
-        <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5 md:p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="font-display text-lg font-bold text-ink">
-                Pickups
-              </h2>
+            <button
+              type="button"
+              onClick={goToShipments}
+              className="group rounded-xl bg-amber-50/60 p-4 text-left transition hover:-translate-y-0.5 hover:bg-amber-50"
+            >
+              <Warehouse className="h-5 w-5 text-amber-600" />
 
-              <p className="mt-1 text-sm text-ink/45">
-                Current pickup activity.
-              </p>
-            </div>
-
-            <Truck className="h-5 w-5 text-ink/20" />
-          </div>
-
-          <div className="mt-5 grid grid-cols-2 gap-3">
-            <div className="rounded-xl bg-blue-50/60 p-4">
-              <p className="text-xs text-ink/50">
-                Total
+              <p className="mt-3 text-xs text-ink/50">
+                In Warehouse
               </p>
 
-              <p className="font-display mt-1 text-2xl font-extrabold text-ink">
-                {data.pickups.total}
+              <p className="font-display mt-1 text-xl font-extrabold text-ink">
+                {data.shipments.inWarehouse}
               </p>
-            </div>
+            </button>
 
-            <div className="rounded-xl bg-amber-50/60 p-4">
-              <p className="text-xs text-ink/50">
-                Requested
-              </p>
+            {/* ASSIGNED */}
 
-              <p className="font-display mt-1 text-2xl font-extrabold text-amber-600">
-                {data.pickups.requested}
-              </p>
-            </div>
+            <button
+              type="button"
+              onClick={goToShipments}
+              className="group rounded-xl bg-indigo-50/60 p-4 text-left transition hover:-translate-y-0.5 hover:bg-indigo-50"
+            >
+              <Bike className="h-5 w-5 text-indigo-600" />
 
-            <div className="rounded-xl bg-indigo-50/60 p-4">
-              <p className="text-xs text-ink/50">
+              <p className="mt-3 text-xs text-ink/50">
                 Assigned
               </p>
 
-              <p className="font-display mt-1 text-2xl font-extrabold text-indigo-600">
-                {data.pickups.assigned}
+              <p className="font-display mt-1 text-xl font-extrabold text-ink">
+                {data.shipments.assignedToRider}
               </p>
-            </div>
+            </button>
 
-            <div className="rounded-xl bg-emerald-50/60 p-4">
-              <p className="text-xs text-ink/50">
-                Completed
+            {/* OUT FOR DELIVERY */}
+
+            <button
+              type="button"
+              onClick={goToShipments}
+              className="group rounded-xl bg-orange-50/60 p-4 text-left transition hover:-translate-y-0.5 hover:bg-orange-50"
+            >
+              <Truck className="h-5 w-5 text-orange-600" />
+
+              <p className="mt-3 text-xs text-ink/50">
+                Out for Delivery
               </p>
 
-              <p className="font-display mt-1 text-2xl font-extrabold text-emerald-600">
-                {data.pickups.completed}
+              <p className="font-display mt-1 text-xl font-extrabold text-ink">
+                {data.shipments.outForDelivery}
               </p>
-            </div>
-          </div>
+            </button>
 
-          <div className="mt-3 flex items-center justify-between rounded-xl bg-red-50/60 p-4">
-            <div className="flex items-center gap-2">
-              <XCircle className="h-4 w-4 text-red-500" />
+            {/* DELIVERED */}
 
-              <span className="text-sm font-medium text-ink">
+            <button
+              type="button"
+              onClick={goToShipments}
+              className="group rounded-xl bg-emerald-50/60 p-4 text-left transition hover:-translate-y-0.5 hover:bg-emerald-50"
+            >
+              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+
+              <p className="mt-3 text-xs text-ink/50">
+                Delivered
+              </p>
+
+              <p className="font-display mt-1 text-xl font-extrabold text-ink">
+                {data.shipments.delivered}
+              </p>
+            </button>
+
+            {/* RETURNED */}
+
+            <button
+              type="button"
+              onClick={goToShipments}
+              className="group rounded-xl bg-purple-50/60 p-4 text-left transition hover:-translate-y-0.5 hover:bg-purple-50"
+            >
+              <RotateCcw className="h-5 w-5 text-purple-600" />
+
+              <p className="mt-3 text-xs text-ink/50">
+                Returned
+              </p>
+
+              <p className="font-display mt-1 text-xl font-extrabold text-ink">
+                {data.shipments.returned}
+              </p>
+            </button>
+
+            {/* CANCELLED */}
+
+            <button
+              type="button"
+              onClick={goToShipments}
+              className="group rounded-xl bg-red-50/60 p-4 text-left transition hover:-translate-y-0.5 hover:bg-red-50"
+            >
+              <XCircle className="h-5 w-5 text-red-600" />
+
+              <p className="mt-3 text-xs text-ink/50">
                 Cancelled
-              </span>
-            </div>
+              </p>
 
-            <span className="font-bold text-red-600">
-              {data.pickups.cancelled}
-            </span>
+              <p className="font-display mt-1 text-xl font-extrabold text-ink">
+                {data.shipments.cancelled}
+              </p>
+            </button>
+
+            {/* TOTAL */}
+
+            <button
+              type="button"
+              onClick={goToShipments}
+              className="group rounded-xl bg-gray-50 p-4 text-left transition hover:-translate-y-0.5 hover:bg-gray-100"
+            >
+              <Package className="h-5 w-5 text-ink/50" />
+
+              <p className="mt-3 text-xs text-ink/50">
+                Total
+              </p>
+
+              <p className="font-display mt-1 text-xl font-extrabold text-ink">
+                {data.shipments.total}
+              </p>
+            </button>
           </div>
         </div>
-      </div>
 
-      {/* ==================================================
-          SYSTEM OVERVIEW
-      ================================================== */}
+        {/* ==================================================
+            FINANCE + PICKUPS
+        ================================================== */}
 
-      <div className="mt-6 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5 md:p-6">
-        <div>
-          <h2 className="font-display text-lg font-bold text-ink">
-            System Overview
-          </h2>
+        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+          {/* ==================================================
+              FINANCE
+          ================================================== */}
 
-          <p className="mt-1 text-sm text-ink/45">
-            Resources configured on the platform.
-          </p>
-        </div>
+          <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5 md:p-6">
+            <div className="flex items-start justify-between">
+              <div>
+                <h2 className="font-display text-lg font-bold text-ink">
+                  Finance
+                </h2>
 
-        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div className="flex items-center gap-3 rounded-xl border border-black/5 p-4">
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
-              <MapPin className="h-4 w-4" />
-            </span>
+                <p className="mt-1 text-sm text-ink/45">
+                  Current financial position.
+                </p>
+              </div>
 
-            <div>
-              <p className="text-xs text-ink/45">
-                Locations
-              </p>
-
-              <p className="font-bold text-ink">
-                {data.system.locations}
-              </p>
+              <SectionLink
+                onClick={goToShipments}
+              >
+                View shipments
+              </SectionLink>
             </div>
-          </div>
 
-          <div className="flex items-center gap-3 rounded-xl border border-black/5 p-4">
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-50 text-purple-600">
-              <Layers className="h-4 w-4" />
-            </span>
+            <div className="mt-5 space-y-3">
+              {/* REVENUE */}
 
-            <div>
-              <p className="text-xs text-ink/45">
-                Delivery Types
-              </p>
+              <button
+                type="button"
+                onClick={goToShipments}
+                className="flex w-full items-center justify-between rounded-xl bg-emerald-50/60 p-4 text-left transition hover:bg-emerald-50"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600">
+                    <ArrowUpRight className="h-4 w-4" />
+                  </span>
 
-              <p className="font-bold text-ink">
-                {data.system.deliveryTypes}
-              </p>
-            </div>
-          </div>
+                  <div>
+                    <p className="text-sm font-semibold text-ink">
+                      Revenue
+                    </p>
 
-          <div className="flex items-center gap-3 rounded-xl border border-black/5 p-4">
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
-              <Warehouse className="h-4 w-4" />
-            </span>
-
-            <div>
-              <p className="text-xs text-ink/45">
-                Warehouses
-              </p>
-
-              <p className="font-bold text-ink">
-                {data.system.warehouses}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 rounded-xl border border-black/5 p-4">
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
-              <Boxes className="h-4 w-4" />
-            </span>
-
-            <div>
-              <p className="text-xs text-ink/45">
-                Carriers
-              </p>
-
-              <p className="font-bold text-ink">
-                {data.system.carriers}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ==================================================
-          RECENT SHIPMENTS
-      ================================================== */}
-
-      <div className="mt-6 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5 md:p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="font-display text-lg font-bold text-ink">
-              Recent Shipments
-            </h2>
-
-            <p className="mt-1 text-sm text-ink/45">
-              Latest shipments added to the platform.
-            </p>
-          </div>
-
-          <Package className="h-5 w-5 text-ink/20" />
-        </div>
-
-        {data.recentShipments.length === 0 ? (
-          <div className="py-10 text-center text-sm text-ink/40">
-            No shipments found.
-          </div>
-        ) : (
-          <>
-            {/* MOBILE */}
-
-            <div className="mt-5 space-y-3 md:hidden">
-              {data.recentShipments.map((shipment) => (
-                <div
-                  key={shipment.id}
-                  className="rounded-xl border border-black/5 p-4"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-ink">
-                        {shipment.trackingNumber}
-                      </p>
-
-                      <p className="mt-1 text-xs text-ink/45">
-                        {shipment.receiverName}
-                      </p>
-                    </div>
-
-                    <span
-                      className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${getStatusStyle(
-                        shipment.status
-                      )}`}
-                    >
-                      {formatStatus(shipment.status)}
-                    </span>
-                  </div>
-
-                  <div className="mt-4 flex items-center gap-2 text-sm text-ink/50">
-                    <MapPin className="h-4 w-4 shrink-0" />
-
-                    <span className="truncate">
-                      {shipment.receiverAddress}
-                    </span>
-                  </div>
-
-                  <div className="mt-3 flex items-center justify-between text-xs">
-                    <span className="text-ink/40">
-                      Vendor
-                    </span>
-
-                    <span className="font-medium text-ink">
-                      {shipment.vendor?.companyName || "—"}
-                    </span>
-                  </div>
-
-                  <div className="mt-2 flex items-center justify-between text-xs">
-                    <span className="text-ink/40">
-                      Rider
-                    </span>
-
-                    <span className="font-medium text-ink">
-                      {shipment.rider?.user?.name || "Not assigned"}
-                    </span>
+                    <p className="text-xs text-ink/40">
+                      Shipping charges
+                    </p>
                   </div>
                 </div>
-              ))}
+
+                <p className="font-semibold text-emerald-600">
+                  {formatNPR(
+                    data.finance.totalRevenue
+                  )}
+                </p>
+              </button>
+
+              {/* COD */}
+
+              <div className="flex items-center justify-between rounded-xl border border-black/5 p-4">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                    <Banknote className="h-4 w-4" />
+                  </span>
+
+                  <div>
+                    <p className="text-sm font-semibold text-ink">
+                      COD Collected
+                    </p>
+
+                    <p className="text-xs text-ink/40">
+                      Delivered orders
+                    </p>
+                  </div>
+                </div>
+
+                <p className="font-semibold text-ink">
+                  {formatNPR(
+                    data.finance.codCollected
+                  )}
+                </p>
+              </div>
+
+              {/* COD PENDING */}
+
+              <div className="flex items-center justify-between rounded-xl border border-black/5 p-4">
+                <div>
+                  <p className="text-sm font-semibold text-ink">
+                    COD Pending
+                  </p>
+
+                  <p className="text-xs text-ink/40">
+                    Yet to be collected
+                  </p>
+                </div>
+
+                <p className="font-semibold text-amber-600">
+                  {formatNPR(
+                    data.finance.codPending
+                  )}
+                </p>
+              </div>
+
+              {/* SHIPPING PENDING */}
+
+              <div className="flex items-center justify-between rounded-xl border border-black/5 p-4">
+                <div>
+                  <p className="text-sm font-semibold text-ink">
+                    Shipping Pending
+                  </p>
+
+                  <p className="text-xs text-ink/40">
+                    Not yet collected
+                  </p>
+                </div>
+
+                <p className="font-semibold text-amber-600">
+                  {formatNPR(
+                    data.finance
+                      .shippingChargesPending
+                  )}
+                </p>
+              </div>
+
+              {/* AVERAGE */}
+
+              <div className="flex items-center justify-between border-t border-black/5 pt-4">
+                <div className="flex items-center gap-2">
+                  <CircleDollarSign className="h-4 w-4 text-ink/30" />
+
+                  <p className="text-sm text-ink/50">
+                    Average shipping charge
+                  </p>
+                </div>
+
+                <p className="font-semibold text-ink">
+                  {formatNPR(
+                    data.finance
+                      .averageShippingCharge
+                  )}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* ==================================================
+              PICKUPS
+          ================================================== */}
+
+          <button
+            type="button"
+            onClick={goToPickup}
+            className="rounded-2xl bg-white p-5 text-left shadow-sm ring-1 ring-black/5 transition hover:shadow-md md:p-6"
+          >
+            <div className="flex items-start justify-between">
+              <div>
+                <h2 className="font-display text-lg font-bold text-ink">
+                  Pickups
+                </h2>
+
+                <p className="mt-1 text-sm text-ink/45">
+                  Current pickup activity.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Truck className="h-5 w-5 text-ink/20" />
+
+                <ChevronRight className="h-4 w-4 text-ink/20" />
+              </div>
             </div>
 
-            {/* DESKTOP */}
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <div className="rounded-xl bg-blue-50/60 p-4">
+                <p className="text-xs text-ink/50">
+                  Total
+                </p>
 
-            <div className="mt-5 hidden overflow-x-auto md:block">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="border-b border-black/5 text-xs uppercase tracking-wide text-ink/40">
-                    <th className="pb-3">
-                      Tracking
-                    </th>
+                <p className="font-display mt-1 text-2xl font-extrabold text-ink">
+                  {data.pickups.total}
+                </p>
+              </div>
 
-                    <th className="pb-3">
-                      Receiver
-                    </th>
+              <div className="rounded-xl bg-amber-50/60 p-4">
+                <p className="text-xs text-ink/50">
+                  Requested
+                </p>
 
-                    <th className="pb-3">
-                      Vendor
-                    </th>
+                <p className="font-display mt-1 text-2xl font-extrabold text-amber-600">
+                  {data.pickups.requested}
+                </p>
+              </div>
 
-                    <th className="pb-3">
-                      Rider
-                    </th>
+              <div className="rounded-xl bg-indigo-50/60 p-4">
+                <p className="text-xs text-ink/50">
+                  Assigned
+                </p>
 
-                    <th className="pb-3">
-                      Status
-                    </th>
-                  </tr>
-                </thead>
+                <p className="font-display mt-1 text-2xl font-extrabold text-indigo-600">
+                  {data.pickups.assigned}
+                </p>
+              </div>
 
-                <tbody>
-                  {data.recentShipments.map((shipment) => (
-                    <tr
+              <div className="rounded-xl bg-emerald-50/60 p-4">
+                <p className="text-xs text-ink/50">
+                  Completed
+                </p>
+
+                <p className="font-display mt-1 text-2xl font-extrabold text-emerald-600">
+                  {data.pickups.completed}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-3 flex items-center justify-between rounded-xl bg-red-50/60 p-4">
+              <div className="flex items-center gap-2">
+                <XCircle className="h-4 w-4 text-red-500" />
+
+                <span className="text-sm font-medium text-ink">
+                  Cancelled
+                </span>
+              </div>
+
+              <span className="font-bold text-red-600">
+                {data.pickups.cancelled}
+              </span>
+            </div>
+          </button>
+        </div>
+
+        {/* ==================================================
+            SYSTEM OVERVIEW
+        ================================================== */}
+
+        <div className="mt-6 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5 md:p-6">
+          <div className="flex items-start justify-between">
+            <div>
+              <h2 className="font-display text-lg font-bold text-ink">
+                System Overview
+              </h2>
+
+              <p className="mt-1 text-sm text-ink/45">
+                Resources currently configured.
+              </p>
+            </div>
+
+            <SectionLink
+              onClick={goToLocation}
+            >
+              Manage locations
+            </SectionLink>
+          </div>
+
+          <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {/* LOCATIONS */}
+
+            <button
+              type="button"
+              onClick={goToLocation}
+              className="group flex items-center gap-3 rounded-xl border border-black/5 p-4 text-left transition hover:-translate-y-0.5 hover:bg-gray-50"
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                <MapPin className="h-4 w-4" />
+              </span>
+
+              <div>
+                <p className="text-xs text-ink/45">
+                  Locations
+                </p>
+
+                <p className="font-bold text-ink">
+                  {data.system.locations}
+                </p>
+              </div>
+            </button>
+
+            {/* DELIVERY TYPES */}
+
+            <button
+              type="button"
+              onClick={goToLocation}
+              className="group flex items-center gap-3 rounded-xl border border-black/5 p-4 text-left transition hover:-translate-y-0.5 hover:bg-gray-50"
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-purple-50 text-purple-600">
+                <Layers className="h-4 w-4" />
+              </span>
+
+              <div>
+                <p className="text-xs text-ink/45">
+                  Delivery Types
+                </p>
+
+                <p className="font-bold text-ink">
+                  {data.system.deliveryTypes}
+                </p>
+              </div>
+            </button>
+
+            {/* WAREHOUSES */}
+
+            <button
+              type="button"
+              onClick={goToLocation}
+              className="group flex items-center gap-3 rounded-xl border border-black/5 p-4 text-left transition hover:-translate-y-0.5 hover:bg-gray-50"
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
+                <Warehouse className="h-4 w-4" />
+              </span>
+
+              <div>
+                <p className="text-xs text-ink/45">
+                  Warehouses
+                </p>
+
+                <p className="font-bold text-ink">
+                  {data.system.warehouses}
+                </p>
+              </div>
+            </button>
+
+            {/* CARRIERS */}
+
+            <button
+              type="button"
+              onClick={goToLocation}
+              className="group flex items-center gap-3 rounded-xl border border-black/5 p-4 text-left transition hover:-translate-y-0.5 hover:bg-gray-50"
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+                <Boxes className="h-4 w-4" />
+              </span>
+
+              <div>
+                <p className="text-xs text-ink/45">
+                  Carriers
+                </p>
+
+                <p className="font-bold text-ink">
+                  {data.system.carriers}
+                </p>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        {/* ==================================================
+            RECENT SHIPMENTS
+        ================================================== */}
+
+        <div className="mt-6 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5 md:p-6">
+          <div className="flex items-start justify-between">
+            <div>
+              <h2 className="font-display text-lg font-bold text-ink">
+                Recent Shipments
+              </h2>
+
+              <p className="mt-1 text-sm text-ink/45">
+                Latest shipments added to the platform.
+              </p>
+            </div>
+
+            <SectionLink
+              onClick={goToShipments}
+            >
+              View all
+            </SectionLink>
+          </div>
+
+          {data.recentShipments.length ===
+          0 ? (
+            <div className="py-10 text-center">
+              <Package className="mx-auto h-8 w-8 text-ink/15" />
+
+              <p className="mt-3 text-sm text-ink/40">
+                No shipments found.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* ==================================================
+                  MOBILE
+              ================================================== */}
+
+              <div className="mt-5 space-y-3 md:hidden">
+                {data.recentShipments.map(
+                  (shipment) => (
+                    <button
+                      type="button"
                       key={shipment.id}
-                      className="border-b border-black/5 last:border-0"
+                      onClick={goToShipments}
+                      className="w-full rounded-xl border border-black/5 p-4 text-left transition hover:bg-gray-50"
                     >
-                      <td className="py-4 font-semibold text-ink">
-                        {shipment.trackingNumber}
-                      </td>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-ink">
+                            {
+                              shipment.trackingNumber
+                            }
+                          </p>
 
-                      <td className="py-4">
-                        <p className="font-medium text-ink">
-                          {shipment.receiverName}
-                        </p>
+                          <p className="mt-1 text-xs text-ink/45">
+                            {
+                              shipment.receiverName ||
+                              "Unknown receiver"
+                            }
+                          </p>
+                        </div>
 
-                        <p className="mt-0.5 max-w-[180px] truncate text-xs text-ink/40">
-                          {shipment.receiverAddress}
-                        </p>
-                      </td>
-
-                      <td className="py-4 text-ink/60">
-                        {shipment.vendor?.companyName || "—"}
-                      </td>
-
-                      <td className="py-4 text-ink/60">
-                        {shipment.rider?.user?.name ||
-                          "Not assigned"}
-                      </td>
-
-                      <td className="py-4">
                         <span
-                          className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${getStatusStyle(
+                          className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${getStatusStyle(
                             shipment.status
                           )}`}
                         >
-                          {formatStatus(shipment.status)}
+                          {formatStatus(
+                            shipment.status
+                          )}
                         </span>
-                      </td>
+                      </div>
+
+                      <div className="mt-4 flex items-center gap-2 text-sm text-ink/50">
+                        <MapPin className="h-4 w-4 shrink-0" />
+
+                        <span className="truncate">
+                          {shipment.receiverAddress ||
+                            "Address unavailable"}
+                        </span>
+                      </div>
+
+                      <div className="mt-3 flex items-center justify-between text-xs">
+                        <span className="text-ink/40">
+                          Vendor
+                        </span>
+
+                        <span className="font-medium text-ink">
+                          {shipment.vendor
+                            ?.companyName ||
+                            "—"}
+                        </span>
+                      </div>
+
+                      <div className="mt-2 flex items-center justify-between text-xs">
+                        <span className="text-ink/40">
+                          Rider
+                        </span>
+
+                        <span className="font-medium text-ink">
+                          {shipment.rider
+                            ?.user?.name ||
+                            "Not assigned"}
+                        </span>
+                      </div>
+                    </button>
+                  )
+                )}
+              </div>
+
+              {/* ==================================================
+                  DESKTOP
+              ================================================== */}
+
+              <div className="mt-5 hidden overflow-x-auto md:block">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-black/5 text-xs uppercase tracking-wide text-ink/40">
+                      <th className="pb-3">
+                        Tracking
+                      </th>
+
+                      <th className="pb-3">
+                        Receiver
+                      </th>
+
+                      <th className="pb-3">
+                        Vendor
+                      </th>
+
+                      <th className="pb-3">
+                        Rider
+                      </th>
+
+                      <th className="pb-3">
+                        Status
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
+                  </thead>
+
+                  <tbody>
+                    {data.recentShipments.map(
+                      (shipment) => (
+                        <tr
+                          key={shipment.id}
+                          onClick={
+                            goToShipments
+                          }
+                          className="cursor-pointer border-b border-black/5 transition hover:bg-gray-50 last:border-0"
+                        >
+                          <td className="py-4 font-semibold text-ink">
+                            {
+                              shipment.trackingNumber
+                            }
+                          </td>
+
+                          <td className="py-4">
+                            <p className="font-medium text-ink">
+                              {shipment.receiverName ||
+                                "Unknown receiver"}
+                            </p>
+
+                            <p className="mt-0.5 max-w-[180px] truncate text-xs text-ink/40">
+                              {shipment.receiverAddress ||
+                                "Address unavailable"}
+                            </p>
+                          </td>
+
+                          <td className="py-4 text-ink/60">
+                            {shipment.vendor
+                              ?.companyName ||
+                              "—"}
+                          </td>
+
+                          <td className="py-4 text-ink/60">
+                            {shipment.rider
+                              ?.user?.name ||
+                              "Not assigned"}
+                          </td>
+
+                          <td className="py-4">
+                            <span
+                              className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${getStatusStyle(
+                                shipment.status
+                              )}`}
+                            >
+                              {formatStatus(
+                                shipment.status
+                              )}
+                            </span>
+                          </td>
+                        </tr>
+                      )
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* ==================================================
+            FOOTER STATUS
+        ================================================== */}
+
+        <div className="flex flex-col gap-2 py-8 text-xs text-ink/35 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+
+            Dashboard connected
+          </div>
+
+          <button
+            type="button"
+            onClick={() =>
+              reloadDashboard(true)
+            }
+            className="self-start font-medium transition hover:text-[#E23C2E] sm:self-auto"
+          >
+            Refresh data
+          </button>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
-

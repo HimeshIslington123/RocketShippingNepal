@@ -251,7 +251,7 @@ export default function ServicesPage() {
                         </div>
 
                         <a
-                          href="/contact"
+                          href="/contactus"
                           className="inline-flex w-fit shrink-0 cursor-pointer items-center gap-2 rounded-full bg-[#E23C2E] px-5 py-2.5 text-sm font-semibold text-white transition-colors duration-200 hover:bg-[#CE3122]"
                         >
                           Get Started
@@ -366,7 +366,7 @@ export default function ServicesPage() {
             <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
 
               <a
-                href="/contact"
+                href="/contactus"
                 className="inline-flex h-12 cursor-pointer items-center gap-2 rounded-full bg-[#E23C2E] px-6 text-sm font-semibold text-white transition-colors duration-200 hover:bg-[#CE3122]"
               >
                 Contact Us

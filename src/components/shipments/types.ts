@@ -65,9 +65,7 @@ export type ReturnTracking = {
 
 export type ShipmentLocation = {
   id?: number;
-
   name?: string | null;
-
   zone?: string | null;
 };
 
@@ -77,7 +75,6 @@ export type ShipmentLocation = {
 
 export type ShipmentDeliveryType = {
   id?: number;
-
   name?: string | null;
 };
 
@@ -87,7 +84,6 @@ export type ShipmentDeliveryType = {
 
 export type ShipmentLocationRate = {
   location?: ShipmentLocation | null;
-
   deliveryType?: ShipmentDeliveryType | null;
 };
 
@@ -258,73 +254,5 @@ export type ReturnRequest = {
      SHIPMENT
   ------------------------------------------------------- */
 
-  shipment: {
-    /* -----------------------------------------------------
-       BASIC
-    ----------------------------------------------------- */
-
-    id: string;
-
-    trackingNumber: string;
-
-    status: string;
-
-    origin?: string | null;
-
-    zone?: string | null;
-
-    deliveryType?: string | null;
-
-    /* -----------------------------------------------------
-       PACKAGE
-    ----------------------------------------------------- */
-
-    weight?: number | null;
-
-    shippingCharge?: number | null;
-
-    packageType?: string | null;
-
-    /* -----------------------------------------------------
-       PAYMENT
-    ----------------------------------------------------- */
-
-    paymentType?: string | null;
-
-    /* -----------------------------------------------------
-       VENDOR
-    ----------------------------------------------------- */
-
-    vendor?: {
-      id?: number;
-
-      name?: string | null;
-
-      companyName?: string | null;
-
-      location?: string | null;
-
-      address?: string | null;
-    } | null;
-
-    /* -----------------------------------------------------
-       CUSTOMER
-    ----------------------------------------------------- */
-
-    customer?: {
-      id?: number;
-
-      name?: string | null;
-
-      phone?: string | null;
-
-      address?: string | null;
-    } | null;
-
-    /* -----------------------------------------------------
-       TRACKINGS
-    ----------------------------------------------------- */
-
-    trackings?: ReturnTracking[];
-  };
+  shipment: Shipment;
 };

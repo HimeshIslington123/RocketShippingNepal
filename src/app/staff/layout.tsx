@@ -35,11 +35,7 @@ const STAFF_NAV: NavLink[] = [
     label: "Return request",
     icon: ArrowLeft,
   },
-  {
-    href: "/staff/location",
-    label: "Rate & Location",
-    icon: LocateIcon,
-  },
+ 
   {
     href: "/staff/pickupRequest",
     label: "Pickup Request",

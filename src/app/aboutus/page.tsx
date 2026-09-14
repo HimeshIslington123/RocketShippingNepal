@@ -82,7 +82,7 @@ export default function AboutPage() {
                 </a>
 
                 <a
-                  href="/contact"
+                  href="/contactus"
                   className="inline-flex h-12 cursor-pointer items-center justify-center rounded-full border border-white/25 bg-white px-6 text-sm font-semibold text-[#0b1729] transition-colors duration-200 hover:bg-[#E23C2E] hover:text-white"
                 >
                   Contact Us

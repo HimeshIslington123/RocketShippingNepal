@@ -121,8 +121,7 @@ type Shipment = {
 // COMPANY NAME
 // ============================================================
 
-const CARGO_COMPANY_NAME =
-  "Rocket Shipping Cargo";
+const CARGO_COMPANY_NAME = "Rocket Shipping Cargo";
 
 // ============================================================
 // NORMAL DELIVERY FLOW
@@ -141,26 +140,19 @@ const STATUS_FLOW = [
 // ============================================================
 
 const STATUS_STYLES: Record<string, string> = {
-  CREATED:
-    "bg-gray-100 text-gray-700 ring-gray-600/20",
+  CREATED: "bg-gray-100 text-gray-700 ring-gray-600/20",
 
-  IN_WAREHOUSE:
-    "bg-amber-50 text-amber-700 ring-amber-600/20",
+  IN_WAREHOUSE: "bg-amber-50 text-amber-700 ring-amber-600/20",
 
-  ASSIGNED_TO_RIDER:
-    "bg-blue-50 text-blue-700 ring-blue-600/20",
+  ASSIGNED_TO_RIDER: "bg-blue-50 text-blue-700 ring-blue-600/20",
 
-  OUT_FOR_DELIVERY:
-    "bg-orange-50 text-orange-700 ring-orange-600/20",
+  OUT_FOR_DELIVERY: "bg-orange-50 text-orange-700 ring-orange-600/20",
 
-  DELIVERED:
-    "bg-green-50 text-green-700 ring-green-600/20",
+  DELIVERED: "bg-green-50 text-green-700 ring-green-600/20",
 
-  RETURNED:
-    "bg-yellow-50 text-yellow-700 ring-yellow-700/20",
+  RETURNED: "bg-yellow-50 text-yellow-700 ring-yellow-700/20",
 
-  CANCELLED:
-    "bg-red-50 text-red-700 ring-red-600/20",
+  CANCELLED: "bg-red-50 text-red-700 ring-red-600/20",
 };
 
 // ============================================================
@@ -198,15 +190,12 @@ function formatStatus(status?: string) {
   return status
     .replaceAll("_", " ")
     .toLowerCase()
-    .replace(/\b\w/g, (letter) =>
-      letter.toUpperCase()
-    );
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function getStatusStyle(status?: string) {
   return (
-    STATUS_STYLES[status || ""] ||
-    "bg-gray-50 text-gray-700 ring-gray-600/20"
+    STATUS_STYLES[status || ""] || "bg-gray-50 text-gray-700 ring-gray-600/20"
   );
 }
 
@@ -217,17 +206,13 @@ function getStatusStyle(status?: string) {
 function getNextStatus(status?: string) {
   if (!status) return null;
 
-  const currentIndex =
-    STATUS_FLOW.indexOf(status);
+  const currentIndex = STATUS_FLOW.indexOf(status);
 
   if (currentIndex === -1) {
     return null;
   }
 
-  if (
-    currentIndex >=
-    STATUS_FLOW.length - 1
-  ) {
+  if (currentIndex >= STATUS_FLOW.length - 1) {
     return null;
   }
 
@@ -240,9 +225,7 @@ function getNextStatus(status?: string) {
 
 function isTerminalStatus(status?: string) {
   return (
-    status === "DELIVERED" ||
-    status === "RETURNED" ||
-    status === "CANCELLED"
+    status === "DELIVERED" || status === "RETURNED" || status === "CANCELLED"
   );
 }
 
@@ -255,66 +238,51 @@ export default function VendorShipmentsPage() {
   // SHIPMENTS
   // ============================================================
 
-  const [shipments, setShipments] =
-    useState<Shipment[]>([]);
+  const [shipments, setShipments] = useState<Shipment[]>([]);
 
-  const [loading, setLoading] =
-    useState(true);
+  const [loading, setLoading] = useState(true);
 
-  const [error, setError] =
-    useState("");
+  const [error, setError] = useState("");
 
   // ============================================================
   // DETAILS
   // ============================================================
 
-  const [detailsShipment, setDetailsShipment] =
-    useState<Shipment | null>(null);
+  const [detailsShipment, setDetailsShipment] = useState<Shipment | null>(null);
 
-  const [detailsLoading, setDetailsLoading] =
-    useState(false);
+  const [detailsLoading, setDetailsLoading] = useState(false);
 
   // ============================================================
   // STATUS UPDATE
   // ============================================================
 
-  const [updatingStatus, setUpdatingStatus] =
-    useState(false);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
 
-  const [statusMessage, setStatusMessage] =
-    useState("");
+  const [statusMessage, setStatusMessage] = useState("");
 
-  const [statusError, setStatusError] =
-    useState("");
+  const [statusError, setStatusError] = useState("");
 
   // ============================================================
   // RIDER ASSIGNMENT
   // ============================================================
 
-  const [riders, setRiders] =
-    useState<Rider[]>([]);
+  const [riders, setRiders] = useState<Rider[]>([]);
 
-  const [ridersLoading, setRidersLoading] =
-    useState(false);
+  const [ridersLoading, setRidersLoading] = useState(false);
 
-  const [selectedRiderId, setSelectedRiderId] =
-    useState("");
+  const [selectedRiderId, setSelectedRiderId] = useState("");
 
-  const [assigningRider, setAssigningRider] =
-    useState(false);
+  const [assigningRider, setAssigningRider] = useState(false);
 
-  const [assignError, setAssignError] =
-    useState("");
+  const [assignError, setAssignError] = useState("");
 
-  const [assignMessage, setAssignMessage] =
-    useState("");
+  const [assignMessage, setAssignMessage] = useState("");
 
   // ============================================================
   // PRINT RECEIPT
   // ============================================================
 
-  const [receiptShipment, setReceiptShipment] =
-    useState<Shipment | null>(null);
+  const [receiptShipment, setReceiptShipment] = useState<Shipment | null>(null);
 
   // ============================================================
   // LOAD SHIPMENTS
@@ -329,13 +297,10 @@ export default function VendorShipmentsPage() {
       setLoading(true);
       setError("");
 
-      const token =
-        localStorage.getItem("token");
+      const token = localStorage.getItem("token");
 
       if (!token) {
-        throw new Error(
-          "Authentication token not found. Please login again."
-        );
+        throw new Error("Authentication token not found. Please login again.");
       }
 
       const res = await fetch(
@@ -347,34 +312,25 @@ export default function VendorShipmentsPage() {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
-        }
+        },
       );
 
       if (!res.ok) {
-        const data =
-          await res.json().catch(() => null);
+        const data = await res.json().catch(() => null);
 
         throw new Error(
-          data?.message ||
-            `Failed to load shipments (${res.status})`
+          data?.message || `Failed to load shipments (${res.status})`,
         );
       }
 
       const data = await res.json();
 
-      setShipments(
-        data.shipments || []
-      );
+      setShipments(data.shipments || []);
     } catch (err) {
-      console.error(
-        "LOAD SHIPMENTS ERROR:",
-        err
-      );
+      console.error("LOAD SHIPMENTS ERROR:", err);
 
       setError(
-        err instanceof Error
-          ? err.message
-          : "Could not load shipments."
+        err instanceof Error ? err.message : "Could not load shipments.",
       );
     } finally {
       setLoading(false);
@@ -389,49 +345,34 @@ export default function VendorShipmentsPage() {
     try {
       setRidersLoading(true);
 
-      const token =
-        localStorage.getItem("token");
+      const token = localStorage.getItem("token");
 
       if (!token) {
-        throw new Error(
-          "Authentication token not found."
-        );
+        throw new Error("Authentication token not found.");
       }
 
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/rider/`,
-        {
-          method: "GET",
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/rider/`, {
+        method: "GET",
 
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
 
       if (!res.ok) {
-        const data =
-          await res.json().catch(() => null);
+        const data = await res.json().catch(() => null);
 
         throw new Error(
-          data?.message ||
-            `Failed to load riders (${res.status})`
+          data?.message || `Failed to load riders (${res.status})`,
         );
       }
 
       const data = await res.json();
 
-      setRiders(
-        Array.isArray(data)
-          ? data
-          : data.riders || []
-      );
+      setRiders(Array.isArray(data) ? data : data.riders || []);
     } catch (err) {
-      console.error(
-        "LOAD RIDERS ERROR:",
-        err
-      );
+      console.error("LOAD RIDERS ERROR:", err);
 
       setRiders([]);
     } finally {
@@ -443,9 +384,7 @@ export default function VendorShipmentsPage() {
   // OPEN DETAILS
   // ============================================================
 
-  async function openShipment(
-    shipment: Shipment
-  ) {
+  async function openShipment(shipment: Shipment) {
     setDetailsLoading(true);
 
     setStatusMessage("");
@@ -458,10 +397,7 @@ export default function VendorShipmentsPage() {
 
     setDetailsShipment(shipment);
 
-    if (
-      shipment.status ===
-      "IN_WAREHOUSE"
-    ) {
+    if (shipment.status === "IN_WAREHOUSE") {
       await loadRiders();
     }
 
@@ -473,10 +409,7 @@ export default function VendorShipmentsPage() {
   // ============================================================
 
   function closeDetails() {
-    if (
-      updatingStatus ||
-      assigningRider
-    ) {
+    if (updatingStatus || assigningRider) {
       return;
     }
 
@@ -496,56 +429,39 @@ export default function VendorShipmentsPage() {
   // ============================================================
 
   const nextStatus = useMemo(() => {
-    return getNextStatus(
-      detailsShipment?.status
-    );
+    return getNextStatus(detailsShipment?.status);
   }, [detailsShipment?.status]);
 
   // ============================================================
   // CAN ASSIGN RIDER
   // ============================================================
 
-  const canAssignRider =
-    detailsShipment?.status ===
-    "IN_WAREHOUSE";
+  const canAssignRider = detailsShipment?.status === "IN_WAREHOUSE";
 
   // ============================================================
   // AVAILABLE RIDERS
   // ============================================================
 
-  const availableRiders =
-    riders.filter(
-      (rider) =>
-        rider.isAvailable !== false
-    );
+  const availableRiders = riders.filter((rider) => rider.isAvailable !== false);
 
   // ============================================================
   // UPDATE SHIPMENT STATUS
   // ============================================================
 
-  async function updateShipmentStatus(
-    newStatus: string
-  ) {
+  async function updateShipmentStatus(newStatus: string) {
     if (!detailsShipment) {
       return;
     }
 
-    const currentStatus =
-      detailsShipment.status;
+    const currentStatus = detailsShipment.status;
 
-    const expectedNextStatus =
-      getNextStatus(currentStatus);
+    const expectedNextStatus = getNextStatus(currentStatus);
 
-    if (
-      newStatus !==
-      expectedNextStatus
-    ) {
+    if (newStatus !== expectedNextStatus) {
       setStatusError(
         `Invalid status transition. Shipment must move from ${formatStatus(
-          currentStatus
-        )} to ${formatStatus(
-          expectedNextStatus || ""
-        )}.`
+          currentStatus,
+        )} to ${formatStatus(expectedNextStatus || "")}.`,
       );
 
       return;
@@ -557,13 +473,10 @@ export default function VendorShipmentsPage() {
       setStatusMessage("");
       setStatusError("");
 
-      const token =
-        localStorage.getItem("token");
+      const token = localStorage.getItem("token");
 
       if (!token) {
-        throw new Error(
-          "Authentication token not found."
-        );
+        throw new Error("Authentication token not found.");
       }
 
       const res = await fetch(
@@ -580,87 +493,67 @@ export default function VendorShipmentsPage() {
             status: newStatus,
 
             location:
-              detailsShipment
-                .locationRate
-                ?.location?.name ||
-              "Main Office",
+              detailsShipment.locationRate?.location?.name || "Main Office",
 
             message: `Shipment moved from ${formatStatus(
-              currentStatus
-            )} to ${formatStatus(
-              newStatus
-            )}`,
+              currentStatus,
+            )} to ${formatStatus(newStatus)}`,
           }),
-        }
+        },
       );
 
-      const data =
-        await res.json().catch(() => null);
+      const data = await res.json().catch(() => null);
 
       if (!res.ok) {
         throw new Error(
-          data?.message ||
-            `Failed to update status (${res.status})`
+          data?.message || `Failed to update status (${res.status})`,
         );
       }
 
-      const updatedShipment =
-        data?.shipment || data;
+      const updatedShipment = data?.shipment || data;
 
       if (updatedShipment) {
-        setDetailsShipment(
-          updatedShipment
-        );
+        setDetailsShipment(updatedShipment);
 
         setShipments((current) =>
           current.map((item) =>
-            item.id ===
-            updatedShipment.id
-              ? updatedShipment
-              : item
-          )
+            item.id === updatedShipment.id ? updatedShipment : item,
+          ),
         );
       } else {
-        setDetailsShipment(
-          (previous) =>
-            previous
-              ? {
-                  ...previous,
-                  status: newStatus,
-                }
-              : previous
+        setDetailsShipment((previous) =>
+          previous
+            ? {
+                ...previous,
+                status: newStatus,
+              }
+            : previous,
         );
 
         setShipments((current) =>
           current.map((item) =>
-            item.id ===
-            detailsShipment.id
+            item.id === detailsShipment.id
               ? {
                   ...item,
                   status: newStatus,
                 }
-              : item
-          )
+              : item,
+          ),
         );
       }
 
       setStatusMessage(
-        `Shipment moved to ${formatStatus(
-          newStatus
-        )} successfully.`
+        `Shipment moved to ${formatStatus(newStatus)} successfully.`,
       );
 
       await loadShipments();
     } catch (err) {
-      console.error(
-        "UPDATE STATUS ERROR:",
-        err
-      );
+      console.error("UPDATE STATUS ERROR:", err);
 
       setStatusError(
         err instanceof Error
           ? err.message
-          : "Failed to update shipment status."
+          : "Failed to update shipment status.",
       );
     } finally {
       setUpdatingStatus(false);
@@ -676,21 +569,16 @@ export default function VendorShipmentsPage() {
       return;
     }
 
-    if (
-      detailsShipment.status !==
-      "IN_WAREHOUSE"
-    ) {
+    if (detailsShipment.status !== "IN_WAREHOUSE") {
       setAssignError(
-        "A rider can only be assigned when the shipment is in warehouse."
+        "A rider can only be assigned when the shipment is in warehouse.",
       );
 
       return;
     }
 
     if (!selectedRiderId) {
-      setAssignError(
-        "Please select a rider."
-      );
+      setAssignError("Please select a rider.");
 
       return;
     }
@@ -701,13 +589,10 @@ export default function VendorShipmentsPage() {
       setAssignError("");
       setAssignMessage("");
 
-      const token =
-        localStorage.getItem("token");
+      const token = localStorage.getItem("token");
 
       if (!token) {
-        throw new Error(
-          "Authentication token not found."
-        );
+        throw new Error("Authentication token not found.");
       }
 
       const res = await fetch(
@@ -721,51 +606,37 @@ export default function VendorShipmentsPage() {
           },
 
           body: JSON.stringify({
-            riderId:
-              Number(selectedRiderId),
+            riderId: Number(selectedRiderId),
           }),
-        }
+        },
       );
 
-      const data =
-        await res.json().catch(() => null);
+      const data = await res.json().catch(() => null);
 
       if (!res.ok) {
         throw new Error(
-          data?.message ||
-            `Failed to assign rider (${res.status})`
+          data?.message || `Failed to assign rider (${res.status})`,
         );
       }
 
-      const updatedShipment =
-        data?.shipment;
+      const updatedShipment = data?.shipment;
 
-      const selectedRider =
-        riders.find(
-          (rider) =>
-            rider.id ===
-            Number(selectedRiderId)
-        );
+      const selectedRider = riders.find(
+        (rider) => rider.id === Number(selectedRiderId),
+      );
 
       setDetailsShipment((previous) =>
         previous
           ? {
               ...previous,
 
-              rider:
-                updatedShipment?.rider ||
-                selectedRider ||
-                previous.rider,
+              rider: updatedShipment?.rider || selectedRider || previous.rider,
 
-              riderId:
-                updatedShipment?.riderId ||
-                Number(selectedRiderId),
+              riderId: updatedShipment?.riderId || Number(selectedRiderId),
 
-              status:
-                updatedShipment?.status ||
-                "ASSIGNED_TO_RIDER",
+              status: updatedShipment?.status || "ASSIGNED_TO_RIDER",
             }
-          : previous
+          : previous,
       );
 
       setShipments((current) =>
@@ -774,25 +645,18 @@ export default function VendorShipmentsPage() {
             ? {
                 ...item,
 
-                rider:
-                  updatedShipment?.rider ||
-                  selectedRider ||
-                  item.rider,
+                rider: updatedShipment?.rider || selectedRider || item.rider,
 
-                riderId:
-                  updatedShipment?.riderId ||
-                  Number(selectedRiderId),
+                riderId: updatedShipment?.riderId || Number(selectedRiderId),
 
-                status:
-                  updatedShipment?.status ||
-                  "ASSIGNED_TO_RIDER",
+                status: updatedShipment?.status || "ASSIGNED_TO_RIDER",
               }
-            : item
-        )
+            : item,
+        ),
       );
 
       setAssignMessage(
-        "Rider assigned successfully. Shipment moved to Rider Assigned."
+        "Rider assigned successfully. Shipment moved to Rider Assigned.",
       );
 
       setSelectedRiderId("");
@@ -801,15 +665,10 @@ export default function VendorShipmentsPage() {
 
       await loadRiders();
     } catch (err) {
-      console.error(
-        "ASSIGN RIDER ERROR:",
-        err
-      );
+      console.error("ASSIGN RIDER ERROR:", err);
 
       setAssignError(
-        err instanceof Error
-          ? err.message
-          : "Failed to assign rider."
+        err instanceof Error ? err.message : "Failed to assign rider.",
       );
     } finally {
       setAssigningRider(false);
@@ -820,10 +679,7 @@ export default function VendorShipmentsPage() {
   // PRINT BILL
   // ============================================================
 
-  function printReceipt(
-    shipment: Shipment,
-    e?: React.MouseEvent
-  ) {
+  function printReceipt(shipment: Shipment, e?: React.MouseEvent) {
     e?.stopPropagation();
 
     setReceiptShipment(shipment);
@@ -838,9 +694,7 @@ export default function VendorShipmentsPage() {
   // ============================================================
 
   const completedSteps =
-    detailsShipment?.trackings?.map(
-      (tracking) => tracking.status
-    ) || [];
+    detailsShipment?.trackings?.map((tracking) => tracking.status) || [];
 
   // ============================================================
   // RENDER
@@ -848,15 +702,12 @@ export default function VendorShipmentsPage() {
 
   return (
     <div className="mx-auto max-w-7xl text-black">
-
       {/* ======================================================
           PRINT CSS
       ======================================================= */}
 
       <style jsx global>{`
-
         @media print {
-
           /*
            * 80mm thermal / compact receipt
            */
@@ -929,11 +780,9 @@ export default function VendorShipmentsPage() {
          */
 
         @media screen {
-
           #print-bill {
             display: none;
           }
-
         }
       `}</style>
 
@@ -942,24 +791,17 @@ export default function VendorShipmentsPage() {
       ======================================================= */}
 
       <div className="no-print">
-
         {/* ====================================================
             HEADER
         ===================================================== */}
 
         <div className="flex items-start justify-between">
-
           <div>
-
-            <h1 className="text-2xl font-bold">
-              Shipments
-            </h1>
+            <h1 className="text-2xl font-bold">Shipments</h1>
 
             <p className="mt-1 text-sm text-gray-500">
-              Manage shipments through the
-              delivery workflow.
+              Manage shipments through the delivery workflow.
             </p>
-
           </div>
 
           <button
@@ -967,11 +809,8 @@ export default function VendorShipmentsPage() {
             disabled={loading}
             className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
           >
-            {loading
-              ? "Refreshing..."
-              : "Refresh"}
+            {loading ? "Refreshing..." : "Refresh"}
           </button>
-
         </div>
 
         {/* ====================================================
@@ -980,11 +819,7 @@ export default function VendorShipmentsPage() {
 
         {!loading && error && (
           <div className="mt-6 rounded-2xl border border-red-100 bg-red-50 p-5">
-
-            <p className="text-sm font-medium text-red-700">
-              {error}
-            </p>
-
+            <p className="text-sm font-medium text-red-700">{error}</p>
           </div>
         )}
 
@@ -994,11 +829,7 @@ export default function VendorShipmentsPage() {
 
         {loading && (
           <div className="mt-6 rounded-2xl bg-white p-10 text-center shadow-sm ring-1 ring-black/5">
-
-            <p className="text-sm text-gray-500">
-              Loading shipments...
-            </p>
-
+            <p className="text-sm text-gray-500">Loading shipments...</p>
           </div>
         )}
 
@@ -1008,13 +839,9 @@ export default function VendorShipmentsPage() {
 
         {!loading && !error && (
           <div className="mt-6 overflow-x-auto rounded-2xl bg-white shadow-sm ring-1 ring-black/5">
-
             <table className="min-w-full divide-y divide-gray-200 text-sm">
-
               <thead className="bg-gray-50">
-
                 <tr>
-
                   <th className="px-4 py-3 text-left font-semibold">
                     Tracking #
                   </th>
@@ -1027,274 +854,172 @@ export default function VendorShipmentsPage() {
                     Destination
                   </th>
 
-                  <th className="px-4 py-3 text-left font-semibold">
-                    Package
-                  </th>
+                  <th className="px-4 py-3 text-left font-semibold">Package</th>
 
-                  <th className="px-4 py-3 text-left font-semibold">
-                    Payment
-                  </th>
+                  <th className="px-4 py-3 text-left font-semibold">Payment</th>
 
-                  <th className="px-4 py-3 text-left font-semibold">
-                    Charge
-                  </th>
+                  <th className="px-4 py-3 text-left font-semibold">Charge</th>
 
-                  <th className="px-4 py-3 text-left font-semibold">
-                    Rider
-                  </th>
+                  <th className="px-4 py-3 text-left font-semibold">Rider</th>
 
-                  <th className="px-4 py-3 text-left font-semibold">
-                    Status
-                  </th>
+                  <th className="px-4 py-3 text-left font-semibold">Status</th>
 
                   <th className="px-4 py-3 text-right font-semibold">
                     Receipt
                   </th>
-
                 </tr>
-
               </thead>
 
               <tbody className="divide-y divide-gray-100">
-
                 {shipments.length === 0 && (
                   <tr>
-
                     <td
                       colSpan={9}
                       className="px-4 py-10 text-center text-gray-400"
                     >
                       No shipments found.
                     </td>
-
                   </tr>
                 )}
 
-                {shipments.map(
-                  (shipment) => (
-                    <tr
-                      key={shipment.id}
-                      onClick={() =>
-                        openShipment(
-                          shipment
-                        )
-                      }
-                      className="cursor-pointer hover:bg-gray-50"
-                    >
+                {shipments.map((shipment) => (
+                  <tr
+                    key={shipment.id}
+                    onClick={() => openShipment(shipment)}
+                    className="cursor-pointer hover:bg-gray-50"
+                  >
+                    {/* TRACKING */}
 
-                      {/* TRACKING */}
+                    <td className="px-4 py-4">
+                      <p className="font-semibold">{shipment.trackingNumber}</p>
 
-                      <td className="px-4 py-4">
+                      <p className="mt-1 text-xs text-gray-400">
+                        {formatDate(shipment.createdAt)}
+                      </p>
+                    </td>
 
-                        <p className="font-semibold">
-                          {
-                            shipment.trackingNumber
-                          }
-                        </p>
+                    {/* RECEIVER */}
 
+                    <td className="px-4 py-4">
+                      <p className="font-medium">{shipment.receiverName}</p>
+
+                      <p className="mt-1 text-xs text-gray-400">
+                        {shipment.receiverPhone}
+                      </p>
+                    </td>
+
+                    {/* DESTINATION */}
+
+                    <td className="px-4 py-4">
+                      <p className="font-medium">
+                        {shipment.locationRate?.location?.name || "—"}
+                      </p>
+
+                      {shipment.locationRate?.deliveryType && (
                         <p className="mt-1 text-xs text-gray-400">
-                          {formatDate(
-                            shipment.createdAt
-                          )}
+                          {shipment.locationRate.deliveryType.name}
                         </p>
+                      )}
+                    </td>
 
-                      </td>
+                    {/* PACKAGE */}
 
-                      {/* RECEIVER */}
+                    <td className="px-4 py-4">
+                      <p className="font-medium">{shipment.packageType}</p>
 
-                      <td className="px-4 py-4">
+                      <p className="mt-1 text-xs text-gray-400">
+                        {shipment.weight} kg
+                      </p>
+                    </td>
 
-                        <p className="font-medium">
-                          {
-                            shipment.receiverName
-                          }
-                        </p>
+                    {/* PAYMENT */}
 
+                    <td className="px-4 py-4">
+                      <p className="font-medium">{shipment.paymentType}</p>
+
+                      {shipment.paymentType === "COD" && (
                         <p className="mt-1 text-xs text-gray-400">
-                          {
-                            shipment.receiverPhone
-                          }
+                          COD {formatCurrency(shipment.codAmount)}
                         </p>
+                      )}
+                    </td>
 
-                      </td>
+                    {/* CHARGE */}
 
-                      {/* DESTINATION */}
+                    <td className="px-4 py-4 font-medium">
+                      {formatCurrency(shipment.shippingCharge)}
+                    </td>
 
-                      <td className="px-4 py-4">
+                    {/* RIDER */}
 
-                        <p className="font-medium">
-                          {
-                            shipment
-                              .locationRate
-                              ?.location?.name ||
-                            "—"
-                          }
-                        </p>
-
-                        {shipment.locationRate
-                          ?.deliveryType && (
-                          <p className="mt-1 text-xs text-gray-400">
-                            {
-                              shipment
-                                .locationRate
-                                .deliveryType
-                                .name
-                            }
+                    <td className="px-4 py-4">
+                      {shipment.rider ? (
+                        <>
+                          <p className="font-medium">
+                            {shipment.rider.user?.name}
                           </p>
-                        )}
 
-                      </td>
-
-                      {/* PACKAGE */}
-
-                      <td className="px-4 py-4">
-
-                        <p className="font-medium">
-                          {
-                            shipment.packageType
-                          }
-                        </p>
-
-                        <p className="mt-1 text-xs text-gray-400">
-                          {shipment.weight} kg
-                        </p>
-
-                      </td>
-
-                      {/* PAYMENT */}
-
-                      <td className="px-4 py-4">
-
-                        <p className="font-medium">
-                          {
-                            shipment.paymentType
-                          }
-                        </p>
-
-                        {shipment.paymentType ===
-                          "COD" && (
                           <p className="mt-1 text-xs text-gray-400">
-                            COD{" "}
-                            {formatCurrency(
-                              shipment.codAmount
-                            )}
+                            {shipment.rider.phone}
                           </p>
-                        )}
-
-                      </td>
-
-                      {/* CHARGE */}
-
-                      <td className="px-4 py-4 font-medium">
-                        {formatCurrency(
-                          shipment.shippingCharge
-                        )}
-                      </td>
-
-                      {/* RIDER */}
-
-                      <td className="px-4 py-4">
-
-                        {shipment.rider ? (
-                          <>
-                            <p className="font-medium">
-                              {
-                                shipment.rider
-                                  .user
-                                  ?.name
-                              }
-                            </p>
-
-                            <p className="mt-1 text-xs text-gray-400">
-                              {
-                                shipment.rider.phone
-                              }
-                            </p>
-                          </>
-                        ) : (
-                          <span className="text-xs text-gray-400">
-                            Unassigned
-                          </span>
-                        )}
-
-                      </td>
-
-                      {/* STATUS */}
-
-                      <td className="px-4 py-4">
-
-                        <span
-                          className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset ${getStatusStyle(
-                            shipment.status
-                          )}`}
-                        >
-                          {formatStatus(
-                            shipment.status
-                          )}
+                        </>
+                      ) : (
+                        <span className="text-xs text-gray-400">
+                          Unassigned
                         </span>
+                      )}
+                    </td>
 
-                      </td>
+                    {/* STATUS */}
 
-                      {/* PRINT BILL */}
+                    <td className="px-4 py-4">
+                      <span
+                        className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset ${getStatusStyle(
+                          shipment.status,
+                        )}`}
+                      >
+                        {formatStatus(shipment.status)}
+                      </span>
+                    </td>
 
-                      <td className="px-4 py-4 text-right">
+                    {/* PRINT BILL */}
 
-                        <button
-                          onClick={(e) =>
-                            printReceipt(
-                              shipment,
-                              e
-                            )
-                          }
-                          className="rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-white hover:bg-accent-dark"
-                        >
-                          Print Bill
-                        </button>
-
-                      </td>
-
-                    </tr>
-                  )
-                )}
-
+                    <td className="px-4 py-4 text-right">
+                      <button
+                        onClick={(e) => printReceipt(shipment, e)}
+                        className="rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-white hover:bg-accent-dark"
+                      >
+                        Print Bill
+                      </button>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
-
             </table>
-
           </div>
         )}
-
       </div>
 
       {/* ======================================================
           DETAILS MODAL
       ======================================================= */}
 
-      {(detailsLoading ||
-        detailsShipment) && (
+      {(detailsLoading || detailsShipment) && (
         <div
           className="no-print fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
           onClick={closeDetails}
         >
-
           <div
             className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-2xl bg-white shadow-xl"
-            onClick={(e) =>
-              e.stopPropagation()
-            }
+            onClick={(e) => e.stopPropagation()}
           >
-
             {/* ==================================================
                 LOADING
             =================================================== */}
 
             {detailsLoading && (
               <div className="p-10 text-center">
-
-                <p className="text-sm text-gray-500">
-                  Loading shipment...
-                </p>
-
+                <p className="text-sm text-gray-500">Loading shipment...</p>
               </div>
             )}
 
@@ -1302,836 +1027,550 @@ export default function VendorShipmentsPage() {
                 DETAILS
             =================================================== */}
 
-            {!detailsLoading &&
-              detailsShipment && (
-                <>
-
-                  {/* ==================================================
+            {!detailsLoading && detailsShipment && (
+              <>
+                {/* ==================================================
                       HEADER
                   =================================================== */}
 
-                  <div className="flex items-start justify-between border-b px-6 py-5">
+                <div className="flex items-start justify-between border-b px-6 py-5">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                      Tracking Number
+                    </p>
 
-                    <div>
+                    <h2 className="mt-1 text-xl font-bold">
+                      {detailsShipment.trackingNumber}
+                    </h2>
 
-                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                        Tracking Number
-                      </p>
-
-                      <h2 className="mt-1 text-xl font-bold">
-                        {
-                          detailsShipment.trackingNumber
-                        }
-                      </h2>
-
-                      <div className="mt-2">
-
-                        <span
-                          className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset ${getStatusStyle(
-                            detailsShipment.status
-                          )}`}
-                        >
-                          {formatStatus(
-                            detailsShipment.status
-                          )}
-                        </span>
-
-                      </div>
-
+                    <div className="mt-2">
+                      <span
+                        className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset ${getStatusStyle(
+                          detailsShipment.status,
+                        )}`}
+                      >
+                        {formatStatus(detailsShipment.status)}
+                      </span>
                     </div>
-
-                    <button
-                      onClick={closeDetails}
-                      disabled={
-                        updatingStatus ||
-                        assigningRider
-                      }
-                      className="rounded-full p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
-                    >
-                      ✕
-                    </button>
-
                   </div>
 
-                  {/* ==================================================
+                  <button
+                    onClick={closeDetails}
+                    disabled={updatingStatus || assigningRider}
+                    className="rounded-full p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* ==================================================
                       CONTENT
                   =================================================== */}
 
-                  <div className="grid gap-6 p-6 md:grid-cols-3">
-
-                    {/* ==================================================
+                <div className="grid gap-6 p-6 md:grid-cols-3">
+                  {/* ==================================================
                         LEFT
                     =================================================== */}
 
-                    <div className="md:col-span-2">
+                  <div className="md:col-span-2">
+                    {/* SHIPMENT INFORMATION */}
 
-                      {/* SHIPMENT INFORMATION */}
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                        Shipment Information
+                      </p>
 
-                      <div>
+                      <div className="mt-4 rounded-xl border">
+                        <div className="grid grid-cols-2 divide-x divide-y">
+                          <InfoItem
+                            label="Receiver"
+                            value={detailsShipment.receiverName}
+                          />
 
-                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                          Shipment Information
-                        </p>
+                          <InfoItem
+                            label="Phone"
+                            value={detailsShipment.receiverPhone}
+                          />
 
-                        <div className="mt-4 rounded-xl border">
+                          <InfoItem
+                            label="Package"
+                            value={`${detailsShipment.packageType} · ${detailsShipment.weight} kg`}
+                          />
 
-                          <div className="grid grid-cols-2 divide-x divide-y">
+                          <InfoItem
+                            label="Payment"
+                            value={detailsShipment.paymentType}
+                          />
 
+                          {detailsShipment.paymentType === "COD" && (
                             <InfoItem
-                              label="Receiver"
-                              value={
-                                detailsShipment.receiverName
-                              }
+                              label="COD Amount"
+                              value={formatCurrency(detailsShipment.codAmount)}
                             />
-
-                            <InfoItem
-                              label="Phone"
-                              value={
-                                detailsShipment.receiverPhone
-                              }
-                            />
-
-                            <InfoItem
-                              label="Package"
-                              value={`${detailsShipment.packageType} · ${detailsShipment.weight} kg`}
-                            />
-
-                            <InfoItem
-                              label="Payment"
-                              value={
-                                detailsShipment.paymentType
-                              }
-                            />
-
-                            {detailsShipment.paymentType ===
-                              "COD" && (
-                              <InfoItem
-                                label="COD Amount"
-                                value={formatCurrency(
-                                  detailsShipment.codAmount
-                                )}
-                              />
-                            )}
-
-                            <InfoItem
-                              label="Shipping Charge"
-                              value={formatCurrency(
-                                detailsShipment.shippingCharge
-                              )}
-                            />
-
-                            <InfoItem
-                              label="Destination"
-                              value={
-                                detailsShipment
-                                  .locationRate
-                                  ?.location
-                                  ?.name ||
-                                "—"
-                              }
-                            />
-
-                            <InfoItem
-                              label="Delivery Type"
-                              value={
-                                detailsShipment
-                                  .locationRate
-                                  ?.deliveryType
-                                  ?.name ||
-                                "—"
-                              }
-                            />
-
-                            <InfoItem
-                              label="Zone"
-                              value={
-                                detailsShipment.deliveryZone ||
-                                detailsShipment
-                                  .locationRate
-                                  ?.location
-                                  ?.zone ||
-                                "—"
-                              }
-                            />
-
-                            <InfoItem
-                              label="Origin"
-                              value={
-                                detailsShipment.origin ||
-                                "—"
-                              }
-                            />
-
-                            <InfoItem
-                              label="Created"
-                              value={formatDate(
-                                detailsShipment.createdAt
-                              )}
-                            />
-
-                            <div className="col-span-2 px-4 py-4">
-
-                              <p className="text-xs text-gray-400">
-                                Receiver Address
-                              </p>
-
-                              <p className="mt-1 text-sm font-medium">
-                                {
-                                  detailsShipment.receiverAddress
-                                }
-                              </p>
-
-                            </div>
-
-                            {detailsShipment.notes && (
-                              <div className="col-span-2 border-t px-4 py-4">
-
-                                <p className="text-xs text-gray-400">
-                                  Notes
-                                </p>
-
-                                <p className="mt-1 text-sm font-medium">
-                                  {
-                                    detailsShipment.notes
-                                  }
-                                </p>
-
-                              </div>
-                            )}
-
-                          </div>
-
-                        </div>
-
-                      </div>
-
-                      {/* ==================================================
-                          TRACKING TIMELINE
-                      =================================================== */}
-
-                      <div className="mt-8 border-t pt-6">
-
-                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                          Shipment Tracking
-                        </p>
-
-                        <div className="mt-5 space-y-4">
-
-                          {STEPS.map(
-                            (step, index) => {
-
-                              const done =
-                                completedSteps.includes(
-                                  step
-                                );
-
-                              const record =
-                                detailsShipment.trackings?.find(
-                                  (
-                                    tracking
-                                  ) =>
-                                    tracking.status ===
-                                    step
-                                );
-
-                              const current =
-                                detailsShipment.status ===
-                                step;
-
-                              return (
-                                <div
-                                  key={
-                                    step
-                                  }
-                                  className="flex gap-4"
-                                >
-
-                                  <div className="flex flex-col items-center">
-
-                                    <div
-                                      className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold ${
-                                        done
-                                          ? "bg-green-100 text-green-700"
-                                          : current
-                                          ? "bg-accent/10 text-accent"
-                                          : "bg-gray-100 text-gray-400"
-                                      }`}
-                                    >
-                                      {done
-                                        ? "✓"
-                                        : current
-                                        ? "•"
-                                        : "○"}
-                                    </div>
-
-                                    {index <
-                                      STEPS.length -
-                                        1 && (
-                                      <div
-                                        className={`mt-1 h-8 w-px ${
-                                          done
-                                            ? "bg-green-200"
-                                            : "bg-gray-200"
-                                        }`}
-                                      />
-                                    )}
-
-                                  </div>
-
-                                  <div className="pb-3">
-
-                                    <p
-                                      className={`text-sm font-semibold ${
-                                        done
-                                          ? "text-gray-900"
-                                          : current
-                                          ? "text-accent"
-                                          : "text-gray-400"
-                                      }`}
-                                    >
-                                      {formatStatus(
-                                        step
-                                      )}
-                                    </p>
-
-                                    {record && (
-                                      <>
-                                        <p className="mt-1 text-xs text-gray-400">
-                                          {formatDate(
-                                            record.createdAt
-                                          )}
-
-                                          {record.location
-                                            ? ` · ${record.location}`
-                                            : ""}
-                                        </p>
-
-                                        {record.message && (
-                                          <p className="mt-1 text-xs text-gray-500">
-                                            {
-                                              record.message
-                                            }
-                                          </p>
-                                        )}
-                                      </>
-                                    )}
-
-                                  </div>
-
-                                </div>
-                              );
-                            }
                           )}
 
-                        </div>
+                          <InfoItem
+                            label="Shipping Charge"
+                            value={formatCurrency(
+                              detailsShipment.shippingCharge,
+                            )}
+                          />
 
-                      </div>
+                          <InfoItem
+                            label="Destination"
+                            value={
+                              detailsShipment.locationRate?.location?.name ||
+                              "—"
+                            }
+                          />
 
-                      {/* ==================================================
-                          TRACKING HISTORY
-                      =================================================== */}
+                          <InfoItem
+                            label="Delivery Type"
+                            value={
+                              detailsShipment.locationRate?.deliveryType
+                                ?.name || "—"
+                            }
+                          />
 
-                      {detailsShipment.trackings &&
-                        detailsShipment
-                          .trackings
-                          .length > 0 && (
-                          <div className="mt-8 border-t pt-6">
+                          <InfoItem
+                            label="Zone"
+                            value={
+                              detailsShipment.deliveryZone ||
+                              detailsShipment.locationRate?.location?.zone ||
+                              "—"
+                            }
+                          />
 
-                            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                              Tracking History
+                          <InfoItem
+                            label="Origin"
+                            value={detailsShipment.origin || "—"}
+                          />
+
+                          <InfoItem
+                            label="Created"
+                            value={formatDate(detailsShipment.createdAt)}
+                          />
+
+                          <div className="col-span-2 px-4 py-4">
+                            <p className="text-xs text-gray-400">
+                              Receiver Address
                             </p>
 
-                            <div className="mt-4 space-y-2">
-
-                              {detailsShipment.trackings.map(
-                                (
-                                  tracking
-                                ) => (
-                                  <div
-                                    key={
-                                      tracking.id
-                                    }
-                                    className="rounded-xl bg-gray-50 p-3"
-                                  >
-
-                                    <div className="flex items-center justify-between gap-3">
-
-                                      <span className="text-xs font-semibold">
-                                        {formatStatus(
-                                          tracking.status
-                                        )}
-                                      </span>
-
-                                      <span className="text-xs text-gray-400">
-                                        {formatDate(
-                                          tracking.createdAt
-                                        )}
-                                      </span>
-
-                                    </div>
-
-                                    {tracking.location && (
-                                      <p className="mt-1 text-xs text-gray-500">
-                                        Location:{" "}
-                                        {
-                                          tracking.location
-                                        }
-                                      </p>
-                                    )}
-
-                                    {tracking.message && (
-                                      <p className="mt-1 text-xs text-gray-500">
-                                        {
-                                          tracking.message
-                                        }
-                                      </p>
-                                    )}
-
-                                  </div>
-                                )
-                              )}
-
-                            </div>
-
+                            <p className="mt-1 text-sm font-medium">
+                              {detailsShipment.receiverAddress}
+                            </p>
                           </div>
-                        )}
 
+                          {detailsShipment.notes && (
+                            <div className="col-span-2 border-t px-4 py-4">
+                              <p className="text-xs text-gray-400">Notes</p>
+
+                              <p className="mt-1 text-sm font-medium">
+                                {detailsShipment.notes}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
 
                     {/* ==================================================
+                          TRACKING TIMELINE
+                      =================================================== */}
+
+                    <div className="mt-8 border-t pt-6">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                        Shipment Tracking
+                      </p>
+
+                      <div className="mt-5 space-y-4">
+                        {STEPS.map((step, index) => {
+                          const done = completedSteps.includes(step);
+
+                          const record = detailsShipment.trackings?.find(
+                            (tracking) => tracking.status === step,
+                          );
+
+                          const current = detailsShipment.status === step;
+
+                          return (
+                            <div key={step} className="flex gap-4">
+                              <div className="flex flex-col items-center">
+                                <div
+                                  className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold ${
+                                    done
+                                      ? "bg-green-100 text-green-700"
+                                      : current
+                                        ? "bg-accent/10 text-accent"
+                                        : "bg-gray-100 text-gray-400"
+                                  }`}
+                                >
+                                  {done ? "✓" : current ? "•" : "○"}
+                                </div>
+
+                                {index < STEPS.length - 1 && (
+                                  <div
+                                    className={`mt-1 h-8 w-px ${
+                                      done ? "bg-green-200" : "bg-gray-200"
+                                    }`}
+                                  />
+                                )}
+                              </div>
+
+                              <div className="pb-3">
+                                <p
+                                  className={`text-sm font-semibold ${
+                                    done
+                                      ? "text-gray-900"
+                                      : current
+                                        ? "text-accent"
+                                        : "text-gray-400"
+                                  }`}
+                                >
+                                  {formatStatus(step)}
+                                </p>
+
+                                {record && (
+                                  <>
+                                    <p className="mt-1 text-xs text-gray-400">
+                                      {formatDate(record.createdAt)}
+
+                                      {record.location
+                                        ? ` · ${record.location}`
+                                        : ""}
+                                    </p>
+
+                                    {record.message && (
+                                      <p className="mt-1 text-xs text-gray-500">
+                                        {record.message}
+                                      </p>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* ==================================================
+                          TRACKING HISTORY
+                      =================================================== */}
+
+                    {detailsShipment.trackings &&
+                      detailsShipment.trackings.length > 0 && (
+                        <div className="mt-8 border-t pt-6">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                            Tracking History
+                          </p>
+
+                          <div className="mt-4 space-y-2">
+                            {detailsShipment.trackings.map((tracking) => (
+                              <div
+                                key={tracking.id}
+                                className="rounded-xl bg-gray-50 p-3"
+                              >
+                                <div className="flex items-center justify-between gap-3">
+                                  <span className="text-xs font-semibold">
+                                    {formatStatus(tracking.status)}
+                                  </span>
+
+                                  <span className="text-xs text-gray-400">
+                                    {formatDate(tracking.createdAt)}
+                                  </span>
+                                </div>
+
+                                {tracking.location && (
+                                  <p className="mt-1 text-xs text-gray-500">
+                                    Location: {tracking.location}
+                                  </p>
+                                )}
+
+                                {tracking.message && (
+                                  <p className="mt-1 text-xs text-gray-500">
+                                    {tracking.message}
+                                  </p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                  </div>
+
+                  {/* ==================================================
                         RIGHT
                     =================================================== */}
 
-                    <div>
+                  <div>
+                    {/* STATUS */}
 
-                      {/* STATUS */}
+                    <div className="rounded-xl border p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                        Update Shipment Status
+                      </p>
 
-                      <div className="rounded-xl border p-4">
+                      <p className="mt-1 text-xs text-gray-400">
+                        Move the shipment through the inside-valley delivery
+                        process.
+                      </p>
 
-                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                          Update Shipment Status
-                        </p>
-
-                        <p className="mt-1 text-xs text-gray-400">
-                          Move the shipment through
-                          the inside-valley delivery
-                          process.
-                        </p>
-
-                        <div className="mt-4">
-
-                          <select
-                            value={
-                              detailsShipment.status
-                            }
-                            onChange={(e) =>
-                              updateShipmentStatus(
-                                e.target.value
-                              )
-                            }
-                            disabled={
-                              updatingStatus ||
-                              !nextStatus ||
-                              isTerminalStatus(
-                                detailsShipment.status
-                              )
-                            }
-                            className="w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 disabled:cursor-not-allowed disabled:bg-gray-100"
-                          >
-
-                            <option
-                              value={
-                                detailsShipment.status
-                              }
-                            >
-                              {formatStatus(
-                                detailsShipment.status
-                              )}
-                            </option>
-
-                            {nextStatus && (
-                              <option
-                                value={
-                                  nextStatus
-                                }
-                              >
-                                Move to{" "}
-                                {formatStatus(
-                                  nextStatus
-                                )}
-                              </option>
-                            )}
-
-                          </select>
-
-                        </div>
-
-                        {nextStatus && (
-                          <div className="mt-3 rounded-lg bg-gray-50 p-3">
-
-                            <p className="text-xs text-gray-400">
-                              Next step
-                            </p>
-
-                            <p className="mt-1 text-sm font-semibold text-gray-700">
-                              {formatStatus(
-                                nextStatus
-                              )}
-                            </p>
-
-                          </div>
-                        )}
-
-                        {!nextStatus &&
-                          detailsShipment.status ===
-                            "DELIVERED" && (
-                          <div className="mt-3 rounded-lg bg-green-50 p-3">
-
-                            <p className="text-xs font-medium text-green-700">
-                              Shipment has been
-                              delivered.
-                            </p>
-
-                          </div>
-                        )}
-
-                        {updatingStatus && (
-                          <p className="mt-2 text-xs text-gray-500">
-                            Updating shipment...
-                          </p>
-                        )}
-
-                        {statusMessage && (
-                          <div className="mt-3 rounded-lg bg-green-50 p-3">
-
-                            <p className="text-xs font-medium text-green-700">
-                              {
-                                statusMessage
-                              }
-                            </p>
-
-                          </div>
-                        )}
-
-                        {statusError && (
-                          <div className="mt-3 rounded-lg bg-red-50 p-3">
-
-                            <p className="text-xs font-medium text-red-700">
-                              {statusError}
-                            </p>
-
-                          </div>
-                        )}
-
-                      </div>
-
-                      {/* CURRENT STATUS */}
-
-                      <div className="mt-4 rounded-xl border p-4">
-
-                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                          Current Status
-                        </p>
-
-                        <span
-                          className={`mt-3 inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset ${getStatusStyle(
-                            detailsShipment.status
-                          )}`}
+                      <div className="mt-4">
+                        <select
+                          value={detailsShipment.status}
+                          onChange={(e) => updateShipmentStatus(e.target.value)}
+                          disabled={
+                            updatingStatus ||
+                            !nextStatus ||
+                            isTerminalStatus(detailsShipment.status)
+                          }
+                          className="w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 disabled:cursor-not-allowed disabled:bg-gray-100"
                         >
-                          {formatStatus(
-                            detailsShipment.status
+                          <option value={detailsShipment.status}>
+                            {formatStatus(detailsShipment.status)}
+                          </option>
+
+                          {nextStatus && (
+                            <option value={nextStatus}>
+                              Move to {formatStatus(nextStatus)}
+                            </option>
                           )}
-                        </span>
-
+                        </select>
                       </div>
 
-                      {/* QR */}
+                      {nextStatus && (
+                        <div className="mt-3 rounded-lg bg-gray-50 p-3">
+                          <p className="text-xs text-gray-400">Next step</p>
 
-                      <div className="mt-4 rounded-xl border p-4">
-
-                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                          Track Shipment
-                        </p>
-
-                        <div className="mt-4 flex justify-center">
-
-                          <div className="rounded-xl border bg-white p-3">
-
-                            <QRCode
-                              value={`${process.env.NEXT_PUBLIC_APP_URL}/track/${detailsShipment.trackingNumber}`}
-                              size={150}
-                            />
-
-                          </div>
-
-                        </div>
-
-                        <p className="mt-3 text-center text-xs text-gray-400">
-                          Scan QR code to track
-                          this shipment.
-                        </p>
-
-                      </div>
-
-                      {/* PRINT */}
-
-                      <button
-                        onClick={() =>
-                          printReceipt(
-                            detailsShipment
-                          )
-                        }
-                        className="mt-4 w-full rounded-xl bg-accent px-4 py-3 text-sm font-semibold text-white hover:bg-accent-dark"
-                      >
-                        Print Bill
-                      </button>
-
-                      {/* RIDER */}
-
-                      <div className="mt-4 rounded-xl border p-4">
-
-                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                          Delivery Rider
-                        </p>
-
-                        {detailsShipment.rider ? (
-                          <div className="mt-3 space-y-2">
-
-                            <div className="flex justify-between gap-3">
-
-                              <span className="text-xs text-gray-400">
-                                Name
-                              </span>
-
-                              <span className="text-right text-sm font-medium">
-                                {
-                                  detailsShipment
-                                    .rider.user
-                                    ?.name
-                                }
-                              </span>
-
-                            </div>
-
-                            <div className="flex justify-between gap-3">
-
-                              <span className="text-xs text-gray-400">
-                                Phone
-                              </span>
-
-                              <span className="text-right text-sm font-medium">
-                                {
-                                  detailsShipment
-                                    .rider.phone
-                                }
-                              </span>
-
-                            </div>
-
-                            {detailsShipment
-                              .rider
-                              .vehicleNumber && (
-                              <div className="flex justify-between gap-3">
-
-                                <span className="text-xs text-gray-400">
-                                  Vehicle
-                                </span>
-
-                                <span className="text-right text-sm font-medium">
-                                  {
-                                    detailsShipment
-                                      .rider
-                                      .vehicleNumber
-                                  }
-                                </span>
-
-                              </div>
-                            )}
-
-                            <div className="border-t pt-3">
-
-                              <p className="text-xs text-gray-400">
-                                Live Location
-                              </p>
-
-                              {detailsShipment
-                                .rider
-                                .latitude !=
-                                null &&
-                              detailsShipment
-                                .rider
-                                .longitude !=
-                                null ? (
-                                <p className="mt-1 text-xs font-medium">
-                                  {
-                                    detailsShipment
-                                      .rider
-                                      .latitude
-                                  }
-                                  ,{" "}
-                                  {
-                                    detailsShipment
-                                      .rider
-                                      .longitude
-                                  }
-                                </p>
-                              ) : (
-                                <p className="mt-1 text-xs text-gray-400">
-                                  Location not
-                                  available
-                                </p>
-                              )}
-
-                            </div>
-
-                          </div>
-                        ) : (
-                          <p className="mt-3 text-xs text-gray-400">
-                            No rider has been
-                            assigned yet.
+                          <p className="mt-1 text-sm font-semibold text-gray-700">
+                            {formatStatus(nextStatus)}
                           </p>
-                        )}
+                        </div>
+                      )}
 
-                        {/* ASSIGN RIDER */}
-
-                        {canAssignRider && (
-                          <div className="mt-4 border-t pt-4">
-
-                            <p className="text-xs text-gray-400">
-                              Assign a rider
+                      {!nextStatus &&
+                        detailsShipment.status === "DELIVERED" && (
+                          <div className="mt-3 rounded-lg bg-green-50 p-3">
+                            <p className="text-xs font-medium text-green-700">
+                              Shipment has been delivered.
                             </p>
-
-                            <select
-                              value={
-                                selectedRiderId
-                              }
-                              onChange={(e) =>
-                                setSelectedRiderId(
-                                  e.target.value
-                                )
-                              }
-                              disabled={
-                                ridersLoading ||
-                                assigningRider
-                              }
-                              className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 disabled:cursor-not-allowed disabled:bg-gray-100"
-                            >
-
-                              <option value="">
-                                {ridersLoading
-                                  ? "Loading riders..."
-                                  : "Select a rider"}
-                              </option>
-
-                              {availableRiders.map(
-                                (
-                                  rider
-                                ) => (
-                                  <option
-                                    key={
-                                      rider.id
-                                    }
-                                    value={
-                                      rider.id
-                                    }
-                                  >
-                                    {
-                                      rider.user
-                                        ?.name
-                                    }{" "}
-                                    —{" "}
-                                    {
-                                      rider.phone
-                                    }
-
-                                    {rider.vehicleNumber
-                                      ? ` (${rider.vehicleNumber})`
-                                      : ""}
-                                  </option>
-                                )
-                              )}
-
-                            </select>
-
-                            <button
-                              onClick={
-                                assignRiderToShipment
-                              }
-                              disabled={
-                                !selectedRiderId ||
-                                assigningRider ||
-                                ridersLoading
-                              }
-                              className="mt-3 w-full rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-dark disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              {assigningRider
-                                ? "Assigning..."
-                                : "Assign Rider"}
-                            </button>
-
-                            {assignMessage && (
-                              <div className="mt-3 rounded-lg bg-green-50 p-3">
-
-                                <p className="text-xs font-medium text-green-700">
-                                  {
-                                    assignMessage
-                                  }
-                                </p>
-
-                              </div>
-                            )}
-
-                            {assignError && (
-                              <div className="mt-3 rounded-lg bg-red-50 p-3">
-
-                                <p className="text-xs font-medium text-red-700">
-                                  {assignError}
-                                </p>
-
-                              </div>
-                            )}
-
-                            {!ridersLoading &&
-                              availableRiders.length ===
-                                0 && (
-                                <p className="mt-3 text-xs text-gray-400">
-                                  No available
-                                  riders right
-                                  now.
-                                </p>
-                              )}
-
                           </div>
                         )}
 
-                        {detailsShipment.rider &&
-                          !canAssignRider && (
-                            <div className="mt-4 border-t pt-4">
+                      {updatingStatus && (
+                        <p className="mt-2 text-xs text-gray-500">
+                          Updating shipment...
+                        </p>
+                      )}
 
-                              <p className="text-xs text-gray-400">
-                                Rider assignment
-                              </p>
+                      {statusMessage && (
+                        <div className="mt-3 rounded-lg bg-green-50 p-3">
+                          <p className="text-xs font-medium text-green-700">
+                            {statusMessage}
+                          </p>
+                        </div>
+                      )}
 
-                              <p className="mt-1 text-xs text-gray-500">
-                                Rider has already
-                                been assigned to
-                                this shipment.
-                              </p>
-
-                            </div>
-                          )}
-
-                      </div>
-
+                      {statusError && (
+                        <div className="mt-3 rounded-lg bg-red-50 p-3">
+                          <p className="text-xs font-medium text-red-700">
+                            {statusError}
+                          </p>
+                        </div>
+                      )}
                     </div>
 
+                    {/* CURRENT STATUS */}
+
+                    <div className="mt-4 rounded-xl border p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                        Current Status
+                      </p>
+
+                      <span
+                        className={`mt-3 inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset ${getStatusStyle(
+                          detailsShipment.status,
+                        )}`}
+                      >
+                        {formatStatus(detailsShipment.status)}
+                      </span>
+                    </div>
+
+                    {/* QR */}
+
+                    <div className="mt-4 rounded-xl border p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                        Track Shipment
+                      </p>
+
+                      <div className="mt-4 flex justify-center">
+                        <div className="rounded-xl border bg-white p-3">
+                          <QRCode
+                            value={`${process.env.NEXT_PUBLIC_APP_URL}/track/${detailsShipment.trackingNumber}`}
+                            size={150}
+                          />
+                        </div>
+                      </div>
+
+                      <p className="mt-3 text-center text-xs text-gray-400">
+                        Scan QR code to track this shipment.
+                      </p>
+                    </div>
+
+                    {/* PRINT */}
+
+                    <button
+                      onClick={() => printReceipt(detailsShipment)}
+                      className="mt-4 w-full rounded-xl bg-accent px-4 py-3 text-sm font-semibold text-white hover:bg-accent-dark"
+                    >
+                      Print Bill
+                    </button>
+
+                    {/* RIDER */}
+
+                    <div className="mt-4 rounded-xl border p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                        Delivery Rider
+                      </p>
+
+                      {detailsShipment.rider ? (
+                        <div className="mt-3 space-y-2">
+                          <div className="flex justify-between gap-3">
+                            <span className="text-xs text-gray-400">Name</span>
+
+                            <span className="text-right text-sm font-medium">
+                              {detailsShipment.rider.user?.name}
+                            </span>
+                          </div>
+
+                          <div className="flex justify-between gap-3">
+                            <span className="text-xs text-gray-400">Phone</span>
+
+                            <span className="text-right text-sm font-medium">
+                              {detailsShipment.rider.phone}
+                            </span>
+                          </div>
+
+                          {detailsShipment.rider.vehicleNumber && (
+                            <div className="flex justify-between gap-3">
+                              <span className="text-xs text-gray-400">
+                                Vehicle
+                              </span>
+
+                              <span className="text-right text-sm font-medium">
+                                {detailsShipment.rider.vehicleNumber}
+                              </span>
+                            </div>
+                          )}
+
+                          <div className="border-t pt-3">
+                            <p className="text-xs text-gray-400">
+                              Live Location
+                            </p>
+
+                            {detailsShipment.rider.latitude != null &&
+                            detailsShipment.rider.longitude != null ? (
+                              <p className="mt-1 text-xs font-medium">
+                                {detailsShipment.rider.latitude},{" "}
+                                {detailsShipment.rider.longitude}
+                              </p>
+                            ) : (
+                              <p className="mt-1 text-xs text-gray-400">
+                                Location not available
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="mt-3 text-xs text-gray-400">
+                          No rider has been assigned yet.
+                        </p>
+                      )}
+
+                      {/* ASSIGN RIDER */}
+
+                      {canAssignRider && (
+                        <div className="mt-4 border-t pt-4">
+                          <p className="text-xs text-gray-400">
+                            Assign a rider
+                          </p>
+
+                          <select
+                            value={selectedRiderId}
+                            onChange={(e) => setSelectedRiderId(e.target.value)}
+                            disabled={ridersLoading || assigningRider}
+                            className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 disabled:cursor-not-allowed disabled:bg-gray-100"
+                          >
+                            <option value="">
+                              {ridersLoading
+                                ? "Loading riders..."
+                                : "Select a rider"}
+                            </option>
+
+                            {availableRiders.map((rider) => (
+                              <option key={rider.id} value={rider.id}>
+                                {rider.user?.name} — {rider.phone}
+                                {rider.vehicleNumber
+                                  ? ` (${rider.vehicleNumber})`
+                                  : ""}
+                              </option>
+                            ))}
+                          </select>
+
+                          <button
+                            onClick={assignRiderToShipment}
+                            disabled={
+                              !selectedRiderId ||
+                              assigningRider ||
+                              ridersLoading
+                            }
+                            className="mt-3 w-full rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-dark disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {assigningRider ? "Assigning..." : "Assign Rider"}
+                          </button>
+
+                          {assignMessage && (
+                            <div className="mt-3 rounded-lg bg-green-50 p-3">
+                              <p className="text-xs font-medium text-green-700">
+                                {assignMessage}
+                              </p>
+                            </div>
+                          )}
+
+                          {assignError && (
+                            <div className="mt-3 rounded-lg bg-red-50 p-3">
+                              <p className="text-xs font-medium text-red-700">
+                                {assignError}
+                              </p>
+                            </div>
+                          )}
+
+                          {!ridersLoading && availableRiders.length === 0 && (
+                            <p className="mt-3 text-xs text-gray-400">
+                              No available riders right now.
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {detailsShipment.rider && !canAssignRider && (
+                        <div className="mt-4 border-t pt-4">
+                          <p className="text-xs text-gray-400">
+                            Rider assignment
+                          </p>
+
+                          <p className="mt-1 text-xs text-gray-500">
+                            Rider has already been assigned to this shipment.
+                          </p>
+                        </div>
+                      )}
+                    </div>
                   </div>
-
-                </>
-              )}
-
+                </div>
+              </>
+            )}
           </div>
-
         </div>
       )}
 
@@ -2140,19 +1579,13 @@ export default function VendorShipmentsPage() {
       ======================================================= */}
 
       {receiptShipment && (
-        <div
-          id="print-bill"
-          className="text-black"
-        >
-
+        <div id="print-bill" className="text-black">
           {/* ==================================================
               COMPANY HEADER
           =================================================== */}
 
           <div className="border-b-2 border-black pb-3">
-
             <div className="text-center">
-
               {/* FIXED CARGO COMPANY NAME */}
 
               <h1 className="text-[18px] font-black uppercase leading-tight">
@@ -2162,9 +1595,7 @@ export default function VendorShipmentsPage() {
               <p className="mt-1 text-[9px] uppercase tracking-[0.15em] text-gray-500">
                 Shipment Receipt
               </p>
-
             </div>
-
           </div>
 
           {/* ==================================================
@@ -2172,17 +1603,13 @@ export default function VendorShipmentsPage() {
           =================================================== */}
 
           <div className="border-b py-3 text-center">
-
             <p className="text-[8px] font-semibold uppercase tracking-wider text-gray-500">
               Tracking Number
             </p>
 
             <p className="mt-1 text-[16px] font-black tracking-wide">
-              {
-                receiptShipment.trackingNumber
-              }
+              {receiptShipment.trackingNumber}
             </p>
-
           </div>
 
           {/* ==================================================
@@ -2190,63 +1617,43 @@ export default function VendorShipmentsPage() {
           =================================================== */}
 
           <div className="border-b py-3">
-
             {/* FROM */}
 
             <div>
-
               <p className="text-[8px] font-bold uppercase tracking-wider text-gray-500">
                 From / Sender
               </p>
 
               <p className="mt-1 text-[12px] font-bold">
-                {
-                  receiptShipment.vendor
-                    ?.companyName ||
-                  "Vendor"
-                }
+                {receiptShipment.vendor?.companyName || "Vendor"}
               </p>
 
-              {receiptShipment.vendor
-                ?.location && (
+              {receiptShipment.vendor?.location && (
                 <p className="mt-1 text-[9px] text-gray-500">
-                  {
-                    receiptShipment.vendor
-                      .location
-                  }
+                  {receiptShipment.vendor.location}
                 </p>
               )}
-
             </div>
 
             {/* ARROW */}
 
-            <div className="my-2 text-center text-[11px] font-bold">
-              ↓
-            </div>
+            <div className="my-2 text-center text-[11px] font-bold">↓</div>
 
             {/* TO */}
 
             <div>
-
               <p className="text-[8px] font-bold uppercase tracking-wider text-gray-500">
                 To / Receiver
               </p>
 
               <p className="mt-1 text-[12px] font-bold">
-                {
-                  receiptShipment.receiverName
-                }
+                {receiptShipment.receiverName}
               </p>
 
               <p className="mt-1 text-[10px]">
-                {
-                  receiptShipment.receiverPhone
-                }
+                {receiptShipment.receiverPhone}
               </p>
-
             </div>
-
           </div>
 
           {/* ==================================================
@@ -2254,17 +1661,13 @@ export default function VendorShipmentsPage() {
           =================================================== */}
 
           <div className="border-b py-3">
-
             <p className="text-[8px] font-bold uppercase tracking-wider text-gray-500">
               Delivery Address
             </p>
 
             <p className="mt-1 break-words text-[10px] leading-4">
-              {
-                receiptShipment.receiverAddress
-              }
+              {receiptShipment.receiverAddress}
             </p>
-
           </div>
 
           {/* ==================================================
@@ -2272,46 +1675,27 @@ export default function VendorShipmentsPage() {
           =================================================== */}
 
           <div className="border-b py-3">
-
             <div className="flex items-start justify-between gap-3">
-
               <div>
-
                 <p className="text-[8px] font-semibold uppercase text-gray-500">
                   Destination
                 </p>
 
                 <p className="mt-1 text-[11px] font-bold">
-                  {
-                    receiptShipment
-                      .locationRate
-                      ?.location?.name ||
-                    "—"
-                  }
+                  {receiptShipment.locationRate?.location?.name || "—"}
                 </p>
-
               </div>
 
               <div className="text-right">
-
                 <p className="text-[8px] font-semibold uppercase text-gray-500">
                   Delivery Type
                 </p>
 
                 <p className="mt-1 text-[10px] font-semibold">
-                  {
-                    receiptShipment
-                      .locationRate
-                      ?.deliveryType
-                      ?.name ||
-                    "—"
-                  }
+                  {receiptShipment.locationRate?.deliveryType?.name || "—"}
                 </p>
-
               </div>
-
             </div>
-
           </div>
 
           {/* ==================================================
@@ -2319,79 +1703,57 @@ export default function VendorShipmentsPage() {
           =================================================== */}
 
           <div className="border-b py-3">
-
             <div className="grid grid-cols-2 gap-y-3">
-
               {/* PACKAGE */}
 
               <div>
-
                 <p className="text-[8px] font-semibold uppercase text-gray-500">
                   Package
                 </p>
 
                 <p className="mt-1 text-[10px] font-semibold">
-                  {
-                    receiptShipment.packageType
-                  }
+                  {receiptShipment.packageType}
                 </p>
-
               </div>
 
               {/* WEIGHT */}
 
               <div className="text-right">
-
                 <p className="text-[8px] font-semibold uppercase text-gray-500">
                   Weight
                 </p>
 
                 <p className="mt-1 text-[10px] font-semibold">
-                  {
-                    receiptShipment.weight
-                  }{" "}
-                  kg
+                  {receiptShipment.weight} kg
                 </p>
-
               </div>
 
               {/* PAYMENT */}
 
               <div>
-
                 <p className="text-[8px] font-semibold uppercase text-gray-500">
                   Payment
                 </p>
 
                 <p className="mt-1 text-[10px] font-semibold">
-                  {
-                    receiptShipment.paymentType
-                  }
+                  {receiptShipment.paymentType}
                 </p>
-
               </div>
 
               {/* COD */}
 
-              {receiptShipment.paymentType ===
-                "COD" && (
+              {receiptShipment.paymentType === "COD" && (
                 <div className="text-right">
-
                   <p className="text-[8px] font-semibold uppercase text-gray-500">
                     COD Amount
                   </p>
 
                   <p className="mt-1 text-[11px] font-bold">
-                    {formatCurrency(
-                      receiptShipment.codAmount
-                    )}
+                    {formatCurrency(receiptShipment.codAmount)}
                   </p>
-
                 </div>
               )}
-
             </div>
-
           </div>
 
           {/* ==================================================
@@ -2399,21 +1761,13 @@ export default function VendorShipmentsPage() {
           =================================================== */}
 
           <div className="border-b py-3">
-
             <div className="flex items-center justify-between">
-
-              <span className="text-[11px] font-bold">
-                Shipping Charge
-              </span>
+              <span className="text-[11px] font-bold">Shipping Charge</span>
 
               <span className="text-[14px] font-black">
-                {formatCurrency(
-                  receiptShipment.shippingCharge
-                )}
+                {formatCurrency(receiptShipment.shippingCharge)}
               </span>
-
             </div>
-
           </div>
 
           {/* ==================================================
@@ -2421,36 +1775,26 @@ export default function VendorShipmentsPage() {
           =================================================== */}
 
           <div className="flex items-center justify-between gap-4 py-4">
-
             <div className="flex-1">
-
               <p className="text-[9px] font-bold uppercase tracking-wider">
                 Track Shipment
               </p>
 
               <p className="mt-1 text-[8px] leading-3 text-gray-500">
-                Scan the QR code to see
-                the latest shipment
-                status.
+                Scan the QR code to see the latest shipment status.
               </p>
 
               <p className="mt-2 break-all text-[8px] font-bold">
-                {
-                  receiptShipment.trackingNumber
-                }
+                {receiptShipment.trackingNumber}
               </p>
-
             </div>
 
             <div className="shrink-0 border border-black p-1">
-
               <QRCode
                 value={`${process.env.NEXT_PUBLIC_APP_URL}/track/${receiptShipment.trackingNumber}`}
                 size={82}
               />
-
             </div>
-
           </div>
 
           {/* ==================================================
@@ -2458,28 +1802,20 @@ export default function VendorShipmentsPage() {
           =================================================== */}
 
           <div className="border-t pt-3 text-center">
-
             <p className="text-[9px] font-semibold">
-              Thank you for choosing{" "}
-              {CARGO_COMPANY_NAME}.
+              Thank you for choosing {CARGO_COMPANY_NAME}.
             </p>
 
             <p className="mt-1 text-[7px] text-gray-500">
-              Please keep this receipt
-              for your reference.
+              Please keep this receipt for your reference.
             </p>
 
             <p className="mt-2 text-[7px] text-gray-400">
-              {formatDate(
-                receiptShipment.createdAt
-              )}
+              {formatDate(receiptShipment.createdAt)}
             </p>
-
           </div>
-
         </div>
       )}
-
     </div>
   );
 }
@@ -2488,24 +1824,12 @@ export default function VendorShipmentsPage() {
 // INFO ITEM
 // ============================================================
 
-function InfoItem({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function InfoItem({ label, value }: { label: string; value: string }) {
   return (
     <div className="px-4 py-4">
+      <p className="text-xs text-gray-400">{label}</p>
 
-      <p className="text-xs text-gray-400">
-        {label}
-      </p>
-
-      <p className="mt-1 text-sm font-medium">
-        {value}
-      </p>
-
+      <p className="mt-1 text-sm font-medium">{value}</p>
     </div>
   );
 }

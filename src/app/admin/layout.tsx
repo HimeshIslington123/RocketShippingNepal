@@ -8,7 +8,7 @@ import {
   Users,
   Receipt,
   BikeIcon,
-  ArrowLeft,
+  ArrowLeft,MapIcon
 } from "lucide-react";
 
 import DashboardShell, {
@@ -45,6 +45,11 @@ const ADMIN_NAV: NavLink[] = [
     href: "/admin/return",
     label: "Return details",
     icon: ArrowLeft,
+  },
+   {
+    href: "/admin/location",
+    label: "Rates & Location",
+    icon: MapIcon,
   },
   
 ];
