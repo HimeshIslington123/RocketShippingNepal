@@ -2,48 +2,63 @@
 
 import {
   ReturnRequest,
+  ReturnStatus,
 } from "@/components/shipments/types";
 
 type ReturnTableProps = {
   returns: ReturnRequest[];
 
-  loading: boolean;
+  loading?: boolean;
 
-  error: string;
-
-  onRefresh: () => void;
-
-  onOpenReturn: (
-    returnRequest: ReturnRequest
-  ) => void;
+  onView: (returnRequest: ReturnRequest) => void;
 };
 
-
 // ============================================================
-// FORMAT STATUS
+// STATUS
 // ============================================================
 
-function formatStatus(
-  status?: string | null
-) {
+function formatStatus(status?: string | null) {
   if (!status) return "-";
 
   return status
     .replaceAll("_", " ")
     .toLowerCase()
-    .replace(/\b\w/g, (letter) =>
-      letter.toUpperCase()
-    );
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function getStatusStyle(status: ReturnStatus) {
+  switch (status) {
+    case "REQUESTED":
+      return "bg-amber-50 text-amber-700 border-amber-200";
+
+    case "ASSIGNED_TO_RIDER":
+      return "bg-blue-50 text-blue-700 border-blue-200";
+
+    case "PICKED_UP_FROM_CUSTOMER":
+      return "bg-purple-50 text-purple-700 border-purple-200";
+
+    case "IN_WAREHOUSE":
+      return "bg-orange-50 text-orange-700 border-orange-200";
+
+    case "OUT_FOR_RETURN":
+      return "bg-indigo-50 text-indigo-700 border-indigo-200";
+
+    case "RETURNED_TO_VENDOR":
+      return "bg-green-50 text-green-700 border-green-200";
+
+    case "CANCELLED":
+      return "bg-red-50 text-red-700 border-red-200";
+
+    default:
+      return "bg-gray-50 text-gray-700 border-gray-200";
+  }
+}
 
 // ============================================================
-// FORMAT REASON
+// REASON
 // ============================================================
 
-function formatReason(
-  reason?: string | null
-) {
+function formatReason(reason?: string | null) {
   if (!reason) return "-";
 
   return reason
@@ -54,562 +69,344 @@ function formatReason(
     );
 }
 
-
 // ============================================================
-// DELIVERY OPTION
+// DATE
 // ============================================================
 
-function formatDeliveryOption(
-  option?: string | null
-) {
-  if (!option) {
-    return "Not selected";
-  }
+function formatDate(date?: string | null) {
+  if (!date) return "-";
 
-  if (
-    option === "VENDOR_PICKUP"
-  ) {
-    return "Vendor Pickup";
-  }
-
-  if (
-    option === "DELIVER_TO_VENDOR"
-  ) {
-    return "Deliver To Vendor";
-  }
-
-  return formatStatus(option);
+  return new Date(date).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
-
 // ============================================================
-// STATUS STYLE
+// SKELETON
 // ============================================================
 
-function getStatusStyle(
-  status: string
-) {
-  switch (status) {
+function TableSkeleton() {
+  return (
+    <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white">
+      <div className="hidden overflow-x-auto lg:block">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-gray-100 bg-gray-50">
+              {Array.from({ length: 7 }).map((_, index) => (
+                <th key={index} className="px-5 py-4">
+                  <div className="h-3 w-20 animate-pulse rounded bg-gray-200" />
+                </th>
+              ))}
+            </tr>
+          </thead>
 
-    case "REQUESTED":
-      return "bg-yellow-100 text-yellow-800";
+          <tbody>
+            {Array.from({ length: 6 }).map((_, row) => (
+              <tr
+                key={row}
+                className="border-b border-gray-100 last:border-0"
+              >
+                {Array.from({ length: 7 }).map(
+                  (_, column) => (
+                    <td key={column} className="px-5 py-5">
+                      <div
+                        className={`h-4 animate-pulse rounded bg-gray-100 ${
+                          column === 0
+                            ? "w-32"
+                            : "w-24"
+                        }`}
+                      />
+                    </td>
+                  )
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
-    case "ASSIGNED_TO_RIDER":
-      return "bg-blue-100 text-blue-800";
+      <div className="space-y-3 p-4 lg:hidden">
+        {Array.from({ length: 5 }).map((_, index) => (
+          <div
+            key={index}
+            className="rounded-xl border border-gray-100 p-4"
+          >
+            <div className="h-4 w-32 animate-pulse rounded bg-gray-100" />
 
-    case "PICKED_UP_FROM_CUSTOMER":
-      return "bg-purple-100 text-purple-800";
+            <div className="mt-3 h-3 w-48 animate-pulse rounded bg-gray-100" />
 
-    case "IN_WAREHOUSE":
-      return "bg-amber-100 text-amber-800";
-
-    case "OUT_FOR_RETURN":
-      return "bg-orange-100 text-orange-800";
-
-    case "RETURNED_TO_VENDOR":
-      return "bg-green-100 text-green-800";
-
-    case "CANCELLED":
-      return "bg-red-100 text-red-800";
-
-    default:
-      return "bg-gray-100 text-gray-800";
-  }
+            <div className="mt-3 h-6 w-24 animate-pulse rounded-full bg-gray-100" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
+// ============================================================
+// EMPTY
+// ============================================================
+
+function EmptyState() {
+  return (
+    <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-14 text-center">
+      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-[#fff1ef] text-xl text-[#E23C2E]">
+        ↩
+      </div>
+
+      <h3 className="mt-4 text-base font-bold text-[#0b1729]">
+        No return requests found
+      </h3>
+
+      <p className="mx-auto mt-1 max-w-md text-sm text-gray-500">
+        Return requests will appear here when vendors create
+        return requests for delivered shipments.
+      </p>
+    </div>
+  );
+}
 
 // ============================================================
-// MAIN COMPONENT
+// MAIN TABLE
 // ============================================================
 
 export default function ReturnTable({
   returns,
-  loading,
-  error,
-  onRefresh,
-  onOpenReturn,
+  loading = false,
+  onView,
 }: ReturnTableProps) {
-
-  // ==========================================================
-  // LOADING
-  // ==========================================================
-
   if (loading) {
-
-    return (
-      <div className="rounded-xl border bg-white p-10 text-center">
-
-        <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" />
-
-        <p className="mt-3 text-sm text-gray-500">
-          Loading returns...
-        </p>
-
-      </div>
-    );
+    return <TableSkeleton />;
   }
 
-
-  // ==========================================================
-  // ERROR
-  // ==========================================================
-
-  if (error) {
-
-    return (
-      <div className="rounded-xl border border-red-200 bg-red-50 p-6">
-
-        <p className="font-semibold text-red-700">
-          Failed to load returns
-        </p>
-
-        <p className="mt-1 text-sm text-red-600">
-          {error}
-        </p>
-
-        <button
-          onClick={onRefresh}
-          className="mt-4 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
-        >
-          Try Again
-        </button>
-
-      </div>
-    );
+  if (!returns.length) {
+    return <EmptyState />;
   }
-
-
-  // ==========================================================
-  // EMPTY
-  // ==========================================================
-
-  if (returns.length === 0) {
-
-    return (
-      <div className="rounded-xl border bg-white p-10 text-center">
-
-        <p className="text-lg font-semibold text-gray-800">
-          No return requests found
-        </p>
-
-        <p className="mt-1 text-sm text-gray-500">
-          There are currently no returns matching
-          your filters.
-        </p>
-
-        <button
-          onClick={onRefresh}
-          className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-        >
-          Refresh
-        </button>
-
-      </div>
-    );
-  }
-
 
   return (
-    <>
+    <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white">
 
-      {/* ====================================================== */}
+      {/* ================================================== */}
       {/* DESKTOP TABLE */}
-      {/* ====================================================== */}
+      {/* ================================================== */}
 
-      <div className="hidden overflow-hidden rounded-xl border bg-white md:block">
+      <div className="hidden overflow-x-auto lg:block">
+        <table className="w-full min-w-[1050px]">
+          <thead>
+            <tr className="border-b border-gray-100 bg-gray-50/80 text-left">
+              <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                Shipment
+              </th>
 
-        <div className="overflow-x-auto">
+              <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                Receiver
+              </th>
 
-          <table className="w-full">
+              <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                Vendor
+              </th>
 
-            <thead className="border-b bg-gray-50">
+              <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                Reason
+              </th>
 
-              <tr>
+              <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                Status
+              </th>
 
-                <th className="px-5 py-4 text-left text-xs font-semibold uppercase text-gray-500">
-                  Tracking
-                </th>
+              <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                Requested
+              </th>
 
-                <th className="px-5 py-4 text-left text-xs font-semibold uppercase text-gray-500">
-                  Vendor
-                </th>
+              <th className="px-5 py-4 text-right text-xs font-semibold uppercase tracking-wide text-gray-400">
+                Action
+              </th>
+            </tr>
+          </thead>
 
-                <th className="px-5 py-4 text-left text-xs font-semibold uppercase text-gray-500">
-                  Customer
-                </th>
+          <tbody>
+            {returns.map((item) => {
+              const shipment = item.shipment;
 
-                <th className="px-5 py-4 text-left text-xs font-semibold uppercase text-gray-500">
-                  Reason
-                </th>
+              return (
+                <tr
+                  key={item.id}
+                  className="border-b border-gray-100 transition last:border-0 hover:bg-gray-50/60"
+                >
+                  {/* SHIPMENT */}
 
-                <th className="px-5 py-4 text-left text-xs font-semibold uppercase text-gray-500">
-                  Return Option
-                </th>
-
-                <th className="px-5 py-4 text-left text-xs font-semibold uppercase text-gray-500">
-                  Rider
-                </th>
-
-                <th className="px-5 py-4 text-left text-xs font-semibold uppercase text-gray-500">
-                  Status
-                </th>
-
-                <th className="px-5 py-4 text-right text-xs font-semibold uppercase text-gray-500">
-                  Action
-                </th>
-
-              </tr>
-
-            </thead>
-
-
-            <tbody className="divide-y">
-
-              {returns.map(
-                (item) => (
-
-                  <tr
-                    key={item.id}
-                    onClick={() =>
-                      onOpenReturn(item)
-                    }
-                    className="cursor-pointer transition hover:bg-gray-50"
-                  >
-
-                    {/* ====================================== */}
-                    {/* TRACKING */}
-                    {/* ====================================== */}
-
-                    <td className="px-5 py-4">
-
-                      <p className="font-semibold text-gray-900">
-                        {
-                          item.shipment
-                            ?.trackingNumber
-                        }
+                  <td className="px-5 py-4">
+                    <div>
+                      <p className="font-semibold text-[#0b1729]">
+                        {shipment?.trackingNumber || "-"}
                       </p>
 
                       <p className="mt-1 text-xs text-gray-400">
-                        Return ID: {item.id}
+                        ID: {item.shipmentId}
                       </p>
+                    </div>
+                  </td>
 
-                    </td>
+                  {/* RECEIVER */}
 
-
-                    {/* ====================================== */}
-                    {/* VENDOR */}
-                    {/* ====================================== */}
-
-                    <td className="px-5 py-4">
-
+                  <td className="px-5 py-4">
+                    <div>
                       <p className="font-medium text-gray-800">
-                        {
-                          item.shipment
-                            ?.vendor?.name ||
-                          "-"
-                        }
+                        {shipment?.receiverName || "-"}
                       </p>
 
-                      <p className="mt-1 text-xs text-gray-500">
-                        {
-                          item.shipment
-                            ?.vendor?.location ||
-                          "-"
-                        }
-                      </p>
-
-                    </td>
-
-
-                    {/* ====================================== */}
-                    {/* CUSTOMER */}
-                    {/* ====================================== */}
-
-                    <td className="px-5 py-4">
-
-                      <p className="font-medium text-gray-800">
-                        {
-                          item.shipment
-                            ?.customer?.name ||
-                          "-"
-                        }
-                      </p>
-
-                      <p className="mt-1 text-xs text-gray-500">
-                        {
-                          item.shipment
-                            ?.customer?.phone ||
-                          "-"
-                        }
-                      </p>
-
-                    </td>
-
-
-                    {/* ====================================== */}
-                    {/* REASON */}
-                    {/* ====================================== */}
-
-                    <td className="px-5 py-4">
-
-                      <p className="text-sm font-medium">
-                        {formatReason(
-                          item.reason
-                        )}
-                      </p>
-
-                    </td>
-
-
-                    {/* ====================================== */}
-                    {/* DELIVERY OPTION */}
-                    {/* ====================================== */}
-
-                    <td className="px-5 py-4">
-
-                      <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
-                        {formatDeliveryOption(
-                          item.deliveryOption
-                        )}
-                      </span>
-
-                    </td>
-
-
-                    {/* ====================================== */}
-                    {/* RIDER */}
-                    {/* ====================================== */}
-
-                    <td className="px-5 py-4">
-
-                      {item.returnDeliveryRider ? (
-
-                        <div>
-
-                          <p className="font-medium text-gray-800">
-                            {
-                              item
-                                .returnDeliveryRider
-                                .user?.name ||
-                              "-"
-                            }
-                          </p>
-
-                          <p className="mt-1 text-xs text-blue-600">
-                            Return delivery
-                          </p>
-
-                        </div>
-
-                      ) : item.rider ? (
-
-                        <div>
-
-                          <p className="font-medium text-gray-800">
-                            {
-                              item.rider
-                                .user?.name ||
-                              "-"
-                            }
-                          </p>
-
-                          <p className="mt-1 text-xs text-gray-500">
-                            Original pickup
-                          </p>
-
-                        </div>
-
-                      ) : (
-
-                        <span className="text-sm text-gray-400">
-                          Unassigned
-                        </span>
-
+                      {shipment?.receiverPhone && (
+                        <p className="mt-1 text-xs text-gray-400">
+                          {shipment.receiverPhone}
+                        </p>
                       )}
+                    </div>
+                  </td>
 
-                    </td>
+                  {/* VENDOR */}
 
+                  <td className="px-5 py-4">
+                    <div>
+                      <p className="font-medium text-gray-800">
+                        {shipment?.vendor?.companyName ||
+                          shipment?.vendor?.name ||
+                          "-"}
+                      </p>
 
-                    {/* ====================================== */}
-                    {/* STATUS */}
-                    {/* ====================================== */}
+                      {shipment?.vendor?.location && (
+                        <p className="mt-1 text-xs text-gray-400">
+                          {shipment.vendor.location}
+                        </p>
+                      )}
+                    </div>
+                  </td>
 
-                    <td className="px-5 py-4">
+                  {/* REASON */}
 
-                      <span
-                        className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusStyle(
-                          item.status
-                        )}`}
-                      >
-                        {formatStatus(
-                          item.status
-                        )}
-                      </span>
+                  <td className="px-5 py-4">
+                    <p className="max-w-[160px] text-sm text-gray-700">
+                      {formatReason(item.reason)}
+                    </p>
+                  </td>
 
-                    </td>
+                  {/* STATUS */}
 
-
-                    {/* ====================================== */}
-                    {/* ACTION */}
-                    {/* ====================================== */}
-
-                    <td
-                      className="px-5 py-4 text-right"
-                      onClick={(event) =>
-                        event.stopPropagation()
-                      }
+                  <td className="px-5 py-4">
+                    <span
+                      className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${getStatusStyle(
+                        item.status
+                      )}`}
                     >
+                      {formatStatus(item.status)}
+                    </span>
+                  </td>
 
-                      <button
-                        onClick={() =>
-                          onOpenReturn(item)
-                        }
-                        className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700"
-                      >
-                        View
-                      </button>
+                  {/* DATE */}
 
-                    </td>
+                  <td className="px-5 py-4">
+                    <p className="text-sm text-gray-600">
+                      {formatDate(item.requestedAt)}
+                    </p>
+                  </td>
 
-                  </tr>
+                  {/* ACTION */}
 
-                )
-              )}
-
-            </tbody>
-
-          </table>
-
-        </div>
-
+                  <td className="px-5 py-4 text-right">
+                    <button
+                      onClick={() => onView(item)}
+                      className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-[#0b1729] transition hover:border-[#E23C2E]/30 hover:bg-[#fff1ef] hover:text-[#E23C2E]"
+                    >
+                      View
+                      <span aria-hidden="true">→</span>
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
 
-
-      {/* ====================================================== */}
+      {/* ================================================== */}
       {/* MOBILE */}
-      {/* ====================================================== */}
+      {/* ================================================== */}
 
-      <div className="space-y-4 md:hidden">
+      <div className="space-y-3 p-4 lg:hidden">
+        {returns.map((item) => {
+          const shipment = item.shipment;
 
-        {returns.map(
-          (item) => (
-
+          return (
             <div
               key={item.id}
-              onClick={() =>
-                onOpenReturn(item)
-              }
-              className="cursor-pointer rounded-xl border bg-white p-4 shadow-sm"
+              className="rounded-xl border border-gray-100 p-4 transition hover:border-gray-200"
             >
-
-              {/* ============================================ */}
-              {/* HEADER */}
-              {/* ============================================ */}
+              {/* TOP */}
 
               <div className="flex items-start justify-between gap-3">
-
-                <div>
-
-                  <p className="text-sm font-bold text-gray-900">
-                    {
-                      item.shipment
-                        ?.trackingNumber
-                    }
+                <div className="min-w-0">
+                  <p className="truncate font-bold text-[#0b1729]">
+                    {shipment?.trackingNumber || "-"}
                   </p>
 
-                  <p className="mt-1 text-xs text-gray-500">
-                    {
-                      item.shipment
-                        ?.vendor?.name ||
-                      "-"
-                    }
+                  <p className="mt-1 text-xs text-gray-400">
+                    {formatDate(item.requestedAt)}
                   </p>
-
                 </div>
 
-
                 <span
-                  className={`rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusStyle(
+                  className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${getStatusStyle(
                     item.status
                   )}`}
                 >
-                  {formatStatus(
-                    item.status
-                  )}
+                  {formatStatus(item.status)}
                 </span>
-
               </div>
 
-
-              {/* ============================================ */}
               {/* DETAILS */}
-              {/* ============================================ */}
 
               <div className="mt-4 space-y-3">
+                <MobileInfo
+                  label="Receiver"
+                  value={shipment?.receiverName}
+                />
 
                 <MobileInfo
-                  label="Customer"
+                  label="Phone"
+                  value={shipment?.receiverPhone}
+                />
+
+                <MobileInfo
+                  label="Vendor"
                   value={
-                    item.shipment
-                      ?.customer?.name
+                    shipment?.vendor?.companyName ||
+                    shipment?.vendor?.name
                   }
                 />
 
                 <MobileInfo
                   label="Reason"
-                  value={formatReason(
-                    item.reason
-                  )}
+                  value={formatReason(item.reason)}
                 />
-
-                <MobileInfo
-                  label="Return Option"
-                  value={formatDeliveryOption(
-                    item.deliveryOption
-                  )}
-                />
-
-
-                <MobileInfo
-                  label="Rider"
-                  value={
-                    item.returnDeliveryRider
-                      ?.user?.name
-                      ? `${item.returnDeliveryRider.user.name} (Return Delivery)`
-                      : item.rider?.user?.name
-                        ? `${item.rider.user.name} (Original Pickup)`
-                        : "Unassigned"
-                  }
-                />
-
               </div>
 
-
-              {/* ============================================ */}
-              {/* BUTTON */}
-              {/* ============================================ */}
+              {/* ACTION */}
 
               <button
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onOpenReturn(item);
-                }}
-                className="mt-4 w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+                onClick={() => onView(item)}
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-[#0b1729] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#14253d]"
               >
                 View Return
+                <span aria-hidden="true">→</span>
               </button>
-
             </div>
-
-          )
-        )}
-
+          );
+        })}
       </div>
-
-    </>
+    </div>
   );
 }
-
 
 // ============================================================
 // MOBILE INFO
@@ -624,15 +421,13 @@ function MobileInfo({
 }) {
   return (
     <div className="flex items-start justify-between gap-4">
-
-      <span className="text-xs text-gray-500">
+      <span className="shrink-0 text-xs font-medium uppercase tracking-wide text-gray-400">
         {label}
       </span>
 
-      <span className="text-right text-sm font-medium text-gray-800">
+      <span className="text-right text-sm font-medium text-gray-700">
         {value || "-"}
       </span>
-
     </div>
   );
 }
