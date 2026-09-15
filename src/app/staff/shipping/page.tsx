@@ -1,6 +1,20 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import {
+  Building2,
+  UserRound,
+  X,
+  Package,
+  MapPin,
+  Phone,
+  User,
+  ChevronRight,
+  Truck,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+} from "lucide-react";
 
 // =====================================================
 // TYPES
@@ -10,6 +24,7 @@ type Vendor = {
   id: number;
   companyName: string;
   location?: string;
+  contactId?: string;
 };
 
 type LocationRate = {
@@ -28,15 +43,30 @@ type LocationRate = {
   };
 };
 
+type CreationMode = "VENDOR" | "UNREGISTERED" | null;
+
 type ShipmentForm = {
   vendorId: number;
-  locationRateId: number;
+
+  senderName: string;
+  senderPhone: string;
+  senderAddress: string;
 
   receiverName: string;
   receiverPhone: string;
   receiverAddress: string;
 
-  packageType: string;
+  locationRateId: number;
+
+  packageType:
+    | "DOCUMENT"
+    | "PARCEL"
+    | "BOX"
+    | "ELECTRONICS"
+    | "CLOTHING"
+    | "FOOD"
+    | "FRAGILE"
+    | "OTHER";
 
   weight: number;
 
@@ -53,13 +83,18 @@ type ShipmentForm = {
 
 const initialForm: ShipmentForm = {
   vendorId: 0,
-  locationRateId: 0,
+
+  senderName: "",
+  senderPhone: "",
+  senderAddress: "",
 
   receiverName: "",
   receiverPhone: "",
   receiverAddress: "",
 
-  packageType: "DOCUMENT",
+  locationRateId: 0,
+
+  packageType: "PARCEL",
 
   weight: 1,
 
@@ -71,224 +106,7 @@ const initialForm: ShipmentForm = {
 };
 
 // =====================================================
-// CLIENT-SIDE CACHE
-//
-// These survive normal Next.js client-side navigation.
-//
-// Browser refresh/F5/Cmd+R:
-// JavaScript runtime restarts -> cache becomes null
-// -> API requests happen again.
-//
-// This is intentionally NOT localStorage.
-// =====================================================
-
-let vendorsCache: Vendor[] | null = null;
-let locationRatesCache: LocationRate[] | null = null;
-
-// Prevent duplicate requests during React Strict Mode
-// or if the page is mounted again while a request is running.
-let vendorsRequest: Promise<Vendor[]> | null = null;
-let locationRatesRequest: Promise<LocationRate[]> | null = null;
-
-// =====================================================
-// SHIMMER
-// =====================================================
-
-function ShipmentFormSkeleton() {
-  return (
-    <>
-      <style jsx global>{`
-        @keyframes shipment-skeleton-shimmer {
-          0% {
-            background-position: 200% 0;
-          }
-
-          100% {
-            background-position: -200% 0;
-          }
-        }
-
-        .shipment-skeleton-shimmer {
-          background-image: linear-gradient(
-            90deg,
-            #e5e7eb 0%,
-            #f8fafc 45%,
-            #ffffff 50%,
-            #f8fafc 55%,
-            #e5e7eb 100%
-          );
-
-          background-size: 200% 100%;
-
-          animation:
-            shipment-skeleton-shimmer 1.5s ease-in-out infinite;
-        }
-      `}</style>
-
-      <div className="mx-auto max-w-5xl px-4 pb-10 sm:px-6 lg:px-0">
-        {/* =================================================
-            HEADER SKELETON
-        ================================================= */}
-
-        <div>
-          <div className="shipment-skeleton-shimmer h-8 w-52 rounded-lg" />
-
-          <div className="shipment-skeleton-shimmer mt-3 h-4 w-80 max-w-full rounded" />
-        </div>
-
-        {/* =================================================
-            FORM SKELETON
-        ================================================= */}
-
-        <div className="mt-6 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5 sm:p-6">
-          {/* =================================================
-              VENDOR
-          ================================================= */}
-
-          <SkeletonSectionTitle />
-
-          <div className="grid gap-5 md:grid-cols-2">
-            <SkeletonField />
-            <SkeletonField />
-          </div>
-
-          <SkeletonDivider />
-
-          {/* =================================================
-              RECEIVER
-          ================================================= */}
-
-          <SkeletonSectionTitle />
-
-          <div className="grid gap-5 md:grid-cols-2">
-            <SkeletonField />
-            <SkeletonField />
-
-            <div className="md:col-span-2">
-              <SkeletonField height="h-24" />
-            </div>
-          </div>
-
-          <SkeletonDivider />
-
-          {/* =================================================
-              DELIVERY
-          ================================================= */}
-
-          <SkeletonSectionTitle />
-
-          <div className="grid gap-5 md:grid-cols-2">
-            <div className="md:col-span-2">
-              <SkeletonField />
-            </div>
-
-            <SkeletonField />
-            <SkeletonField />
-
-            <SkeletonField />
-            <SkeletonField />
-
-            <SkeletonField />
-            <SkeletonField />
-          </div>
-
-          <SkeletonDivider />
-
-          {/* =================================================
-              PAYMENT
-          ================================================= */}
-
-          <SkeletonSectionTitle />
-
-          <div className="grid gap-5 md:grid-cols-2">
-            <SkeletonField />
-            <SkeletonField />
-          </div>
-
-          <SkeletonDivider />
-
-          {/* =================================================
-              NOTES
-          ================================================= */}
-
-          <SkeletonField height="h-28" />
-
-          {/* =================================================
-              SUMMARY
-          ================================================= */}
-
-          <div className="mt-8 rounded-2xl bg-gray-100 p-5">
-            <div className="shipment-skeleton-shimmer h-5 w-40 rounded" />
-
-            <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-              <SkeletonSummary />
-              <SkeletonSummary />
-              <SkeletonSummary />
-              <SkeletonSummary />
-            </div>
-          </div>
-
-          {/* =================================================
-              BUTTONS
-          ================================================= */}
-
-          <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-            <div className="shipment-skeleton-shimmer h-12 w-full rounded-xl sm:w-28" />
-
-            <div className="shipment-skeleton-shimmer h-12 w-full rounded-xl sm:w-44" />
-          </div>
-        </div>
-      </div>
-    </>
-  );
-}
-
-// =====================================================
-// SKELETON HELPERS
-// =====================================================
-
-function SkeletonSectionTitle() {
-  return (
-    <div className="mb-5">
-      <div className="shipment-skeleton-shimmer h-5 w-40 rounded" />
-
-      <div className="shipment-skeleton-shimmer mt-2 h-4 w-72 max-w-full rounded" />
-    </div>
-  );
-}
-
-function SkeletonField({
-  height = "h-12",
-}: {
-  height?: string;
-}) {
-  return (
-    <div>
-      <div className="shipment-skeleton-shimmer mb-2 h-4 w-28 rounded" />
-
-      <div
-        className={`shipment-skeleton-shimmer w-full rounded-xl ${height}`}
-      />
-    </div>
-  );
-}
-
-function SkeletonSummary() {
-  return (
-    <div>
-      <div className="shipment-skeleton-shimmer h-3 w-16 rounded" />
-
-      <div className="shipment-skeleton-shimmer mt-2 h-5 w-28 rounded" />
-    </div>
-  );
-}
-
-function SkeletonDivider() {
-  return <div className="my-8 border-t border-gray-100" />;
-}
-
-// =====================================================
-// PAGE
+// COMPONENT
 // =====================================================
 
 export default function StaffCreateShipmentPage() {
@@ -296,210 +114,112 @@ export default function StaffCreateShipmentPage() {
   // STATE
   // ===================================================
 
-  const [vendors, setVendors] = useState<Vendor[]>(
-    vendorsCache ?? []
-  );
+  const [vendors, setVendors] = useState<Vendor[]>([]);
 
   const [locationRates, setLocationRates] =
-    useState<LocationRate[]>(
-      locationRatesCache ?? []
-    );
+    useState<LocationRate[]>([]);
 
-  const [loading, setLoading] = useState(
-    vendorsCache === null ||
-      locationRatesCache === null
-  );
+  const [loading, setLoading] = useState(true);
 
   const [submitting, setSubmitting] =
     useState(false);
 
   const [error, setError] = useState("");
 
-  const [success, setSuccess] =
-    useState("");
+  const [success, setSuccess] = useState("");
+
+  const [mode, setMode] =
+    useState<CreationMode>(null);
 
   const [form, setForm] =
     useState<ShipmentForm>(initialForm);
 
   // ===================================================
-  // UPDATE FIELD
-  // ===================================================
-
-  function updateField<K extends keyof ShipmentForm>(
-    key: K,
-    value: ShipmentForm[K]
-  ) {
-    setForm((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
-  }
-
-  // ===================================================
-  // FETCH VENDORS
-  // ===================================================
-
-  async function fetchVendors(
-    force = false
-  ): Promise<Vendor[]> {
-    if (!force && vendorsCache !== null) {
-      return vendorsCache;
-    }
-
-    if (!force && vendorsRequest) {
-      return vendorsRequest;
-    }
-
-    const request = (async () => {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/vendor/getvendor`,
-        {
-          method: "GET",
-          cache: "no-store",
-        }
-      );
-
-      if (!res.ok) {
-        throw new Error(
-          "Failed to load vendors"
-        );
-      }
-
-      const data = await res.json();
-
-      const result: Vendor[] =
-        Array.isArray(data)
-          ? data
-          : data.vendors || [];
-
-      vendorsCache = result;
-
-      return result;
-    })();
-
-    vendorsRequest = request;
-
-    try {
-      return await request;
-    } finally {
-      if (vendorsRequest === request) {
-        vendorsRequest = null;
-      }
-    }
-  }
-
-  // ===================================================
-  // FETCH LOCATION RATES
-  // ===================================================
-
-  async function fetchLocationRates(
-    force = false
-  ): Promise<LocationRate[]> {
-    if (
-      !force &&
-      locationRatesCache !== null
-    ) {
-      return locationRatesCache;
-    }
-
-    if (
-      !force &&
-      locationRatesRequest
-    ) {
-      return locationRatesRequest;
-    }
-
-    const request = (async () => {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/locationRate`,
-        {
-          method: "GET",
-          cache: "no-store",
-        }
-      );
-
-      if (!res.ok) {
-        throw new Error(
-          "Failed to load location rates"
-        );
-      }
-
-      const data = await res.json();
-
-      const result: LocationRate[] =
-        Array.isArray(data)
-          ? data
-          : data.locationRates ||
-            data.rates ||
-            [];
-
-      locationRatesCache = result;
-
-      return result;
-    })();
-
-    locationRatesRequest = request;
-
-    try {
-      return await request;
-    } finally {
-      if (
-        locationRatesRequest === request
-      ) {
-        locationRatesRequest = null;
-      }
-    }
-  }
-
-  // ===================================================
   // LOAD DATA
   // ===================================================
 
-  async function loadData(
-    force = false
-  ) {
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  async function loadData() {
     try {
+      setLoading(true);
       setError("");
 
-      // Only show skeleton when we don't already
-      // have usable cached data.
-      if (
-        !force &&
-        vendorsCache !== null &&
-        locationRatesCache !== null
-      ) {
-        setVendors(vendorsCache);
-        setLocationRates(
-          locationRatesCache
-        );
-        setLoading(false);
-        return;
-      }
-
-      setLoading(true);
+      const token =
+        localStorage.getItem("token");
 
       const [
-        vendorsData,
-        locationRatesData,
+        vendorsRes,
+        locationRatesRes,
       ] = await Promise.all([
-        fetchVendors(force),
-        fetchLocationRates(force),
+        fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/vendor/getvendor`,
+          {
+            headers: token
+              ? {
+                  Authorization:
+                    `Bearer ${token}`,
+                }
+              : undefined,
+          }
+        ),
+
+        fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/locationRate`,
+          {
+            headers: token
+              ? {
+                  Authorization:
+                    `Bearer ${token}`,
+                }
+              : undefined,
+          }
+        ),
       ]);
 
-      setVendors(vendorsData);
+      if (!vendorsRes.ok) {
+        throw new Error(
+          "Failed to load vendors."
+        );
+      }
+
+      if (!locationRatesRes.ok) {
+        throw new Error(
+          "Failed to load location rates."
+        );
+      }
+
+      const vendorsData =
+        await vendorsRes.json();
+
+      const ratesData =
+        await locationRatesRes.json();
+
+      setVendors(
+        Array.isArray(vendorsData)
+          ? vendorsData
+          : vendorsData.vendors || []
+      );
+
       setLocationRates(
-        locationRatesData
+        Array.isArray(ratesData)
+          ? ratesData
+          : ratesData.locationRates ||
+              ratesData.rates ||
+              []
       );
     } catch (err) {
       console.error(
-        "LOAD STAFF SHIPMENT DATA ERROR:",
+        "LOAD CREATE SHIPMENT DATA ERROR:",
         err
       );
 
       setError(
         err instanceof Error
           ? err.message
-          : "Failed to load data"
+          : "Failed to load shipment data."
       );
     } finally {
       setLoading(false);
@@ -507,18 +227,18 @@ export default function StaffCreateShipmentPage() {
   }
 
   // ===================================================
-  // INITIAL LOAD
-  //
-  // Cache exists:
-  // no API request.
-  //
-  // Cache doesn't exist:
-  // API request + shimmer.
+  // FIELD UPDATE
   // ===================================================
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  function updateField<K extends keyof ShipmentForm>(
+    key: K,
+    value: ShipmentForm[K]
+  ) {
+    setForm((previous) => ({
+      ...previous,
+      [key]: value,
+    }));
+  }
 
   // ===================================================
   // SELECTED VENDOR
@@ -529,13 +249,10 @@ export default function StaffCreateShipmentPage() {
       (vendor) =>
         vendor.id === form.vendorId
     );
-  }, [
-    vendors,
-    form.vendorId,
-  ]);
+  }, [vendors, form.vendorId]);
 
   // ===================================================
-  // SELECTED LOCATION RATE
+  // SELECTED RATE
   // ===================================================
 
   const selectedRate = useMemo(() => {
@@ -552,111 +269,179 @@ export default function StaffCreateShipmentPage() {
   // SHIPPING CHARGE
   // ===================================================
 
-  const shippingCharge = selectedRate
-    ? Number(selectedRate.price) *
-      Number(form.weight || 0)
-    : 0;
+  const shippingCharge =
+    selectedRate
+      ? Number(selectedRate.price) *
+        Number(form.weight || 0)
+      : 0;
 
   // ===================================================
-  // SUBMIT
+  // OPEN VENDOR MODAL
   // ===================================================
 
-  async function handleSubmit(
-    e: React.FormEvent
-  ) {
-    e.preventDefault();
-
+  function openVendorModal() {
     setError("");
     setSuccess("");
+    setMode("VENDOR");
 
-    // -----------------------------------------------
-    // VALIDATION
-    // -----------------------------------------------
+    setForm((previous) => ({
+      ...previous,
+      senderName: "",
+      senderPhone: "",
+      senderAddress: "",
+    }));
+  }
 
-    if (!form.vendorId) {
-      setError(
-        "Please select a vendor."
-      );
-      return;
+  // ===================================================
+  // OPEN UNREGISTERED MODAL
+  // ===================================================
+
+  function openUnregisteredModal() {
+    setError("");
+    setSuccess("");
+    setMode("UNREGISTERED");
+
+    setForm((previous) => ({
+      ...previous,
+      vendorId: 0,
+    }));
+  }
+
+  // ===================================================
+  // CLOSE MODAL
+  // ===================================================
+
+  function closeModal() {
+    if (submitting) return;
+
+    setMode(null);
+    setError("");
+  }
+
+  // ===================================================
+  // VALIDATION
+  // ===================================================
+
+  function validateForm() {
+    if (mode === "VENDOR") {
+      if (!form.vendorId) {
+        return "Please select a vendor.";
+      }
     }
 
-    if (!form.locationRateId) {
-      setError(
-        "Please select destination and delivery type."
-      );
-      return;
+    if (mode === "UNREGISTERED") {
+      if (!form.senderName.trim()) {
+        return "Sender name is required.";
+      }
+
+      if (!form.senderPhone.trim()) {
+        return "Sender phone is required.";
+      }
+
+      if (!form.senderAddress.trim()) {
+        return "Sender address is required.";
+      }
     }
 
     if (!form.receiverName.trim()) {
-      setError(
-        "Receiver name is required."
-      );
-      return;
+      return "Receiver name is required.";
     }
 
     if (!form.receiverPhone.trim()) {
-      setError(
-        "Receiver phone is required."
-      );
-      return;
+      return "Receiver phone is required.";
     }
 
     if (!form.receiverAddress.trim()) {
-      setError(
-        "Receiver address is required."
-      );
-      return;
+      return "Receiver address is required.";
+    }
+
+    if (!form.locationRateId) {
+      return "Please select destination and delivery type.";
     }
 
     if (
       !form.weight ||
       Number(form.weight) <= 0
     ) {
-      setError(
-        "Weight must be greater than 0."
-      );
-      return;
+      return "Weight must be greater than 0.";
     }
 
     if (
       form.paymentType === "COD" &&
       Number(form.codAmount) <= 0
     ) {
-      setError(
-        "Please enter a valid COD amount."
-      );
+      return "Please enter a valid COD amount.";
+    }
+
+    return null;
+  }
+
+  // ===================================================
+  // CREATE SHIPMENT
+  // ===================================================
+
+  async function handleSubmit(
+    event: React.FormEvent
+  ) {
+    event.preventDefault();
+
+    setError("");
+    setSuccess("");
+
+    const validationError =
+      validateForm();
+
+    if (validationError) {
+      setError(validationError);
       return;
     }
 
     try {
       setSubmitting(true);
 
-      // ---------------------------------------------
-      // GET AUTH TOKEN
-      // ---------------------------------------------
-
       const token =
         localStorage.getItem("token");
 
       if (!token) {
-        setError(
+        throw new Error(
           "You are not logged in. Please login again."
         );
-
-        return;
       }
 
-      // ---------------------------------------------
-      // REQUEST BODY
-      // ---------------------------------------------
+      // =================================================
+      // PAYLOAD
+      // =================================================
 
       const payload = {
+        // Registered vendor only
         vendorId:
-          form.vendorId,
+          mode === "VENDOR"
+            ? form.vendorId
+            : null,
 
-        locationRateId:
-          form.locationRateId,
+        // STAFF or VENDOR
+        origin:
+          mode === "VENDOR"
+            ? "VENDOR"
+            : "STAFF",
 
+        // Sender
+        senderName:
+          mode === "VENDOR"
+            ? selectedVendor?.companyName || ""
+            : form.senderName.trim(),
+
+        senderPhone:
+          mode === "VENDOR"
+            ? selectedVendor?.contactId || ""
+            : form.senderPhone.trim(),
+
+        senderAddress:
+          mode === "VENDOR"
+            ? selectedVendor?.location || ""
+            : form.senderAddress.trim(),
+
+        // Receiver
         receiverName:
           form.receiverName.trim(),
 
@@ -666,12 +451,18 @@ export default function StaffCreateShipmentPage() {
         receiverAddress:
           form.receiverAddress.trim(),
 
+        // Delivery
+        locationRateId:
+          form.locationRateId,
+
+        // Package
         packageType:
           form.packageType,
 
         weight:
           Number(form.weight),
 
+        // Payment
         paymentType:
           form.paymentType,
 
@@ -684,65 +475,66 @@ export default function StaffCreateShipmentPage() {
           form.notes.trim() || null,
       };
 
-      // ---------------------------------------------
-      // CREATE SHIPMENT
-      // ---------------------------------------------
+      // =================================================
+      // API
+      // =================================================
 
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/shipment`,
-        {
-          method: "POST",
+      const response =
+        await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/shipment`,
+          {
+            method: "POST",
 
-          headers: {
-            "Content-Type":
-              "application/json",
+            headers: {
+              "Content-Type":
+                "application/json",
 
-            Authorization:
-              `Bearer ${token}`,
-          },
+              Authorization:
+                `Bearer ${token}`,
+            },
 
-          body: JSON.stringify(
-            payload
-          ),
-        }
-      );
+            body: JSON.stringify(payload),
+          }
+        );
 
       const data =
-        await res.json();
+        await response.json();
 
-      if (!res.ok) {
+      if (!response.ok) {
         throw new Error(
           data.message ||
-            "Failed to create shipment"
+            "Failed to create shipment."
         );
       }
 
-      // ---------------------------------------------
+      // =================================================
       // SUCCESS
-      // ---------------------------------------------
+      // =================================================
+
+      const trackingNumber =
+        data.shipment?.trackingNumber ||
+        data.trackingNumber ||
+        "";
 
       setSuccess(
-        `Shipment ${
-          data.shipment
-            ?.trackingNumber || ""
-        } created successfully.`
+        trackingNumber
+          ? `Shipment ${trackingNumber} created successfully.`
+          : "Shipment created successfully."
       );
 
-      // ---------------------------------------------
-      // RESET FORM
-      // ---------------------------------------------
+      setMode(null);
 
       setForm(initialForm);
     } catch (err) {
       console.error(
-        "CREATE STAFF SHIPMENT ERROR:",
+        "CREATE SHIPMENT ERROR:",
         err
       );
 
       setError(
         err instanceof Error
           ? err.message
-          : "Something went wrong"
+          : "Something went wrong."
       );
     } finally {
       setSubmitting(false);
@@ -750,756 +542,1224 @@ export default function StaffCreateShipmentPage() {
   }
 
   // ===================================================
-  // CANCEL
+  // RESET
   // ===================================================
 
-  function handleCancel() {
+  function resetForm() {
+    if (submitting) return;
+
     setForm(initialForm);
-
+    setMode(null);
     setError("");
-
     setSuccess("");
   }
 
   // ===================================================
-  // LOADING
+  // LOADING SKELETON
   // ===================================================
 
   if (loading) {
-    return <ShipmentFormSkeleton />;
+    return (
+      <div className="mx-auto max-w-6xl text-black">
+        <div className="animate-pulse">
+
+          <div className="h-8 w-64 rounded-lg bg-gray-200" />
+
+          <div className="mt-3 h-4 w-96 max-w-full rounded bg-gray-200" />
+
+          <div className="mt-8 grid gap-5 md:grid-cols-2">
+
+            <div className="h-48 rounded-2xl bg-gray-200" />
+
+            <div className="h-48 rounded-2xl bg-gray-200" />
+
+          </div>
+
+          <div className="mt-8 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-black/5">
+
+            <div className="grid gap-5 md:grid-cols-3">
+
+              <div className="h-14 rounded-xl bg-gray-100" />
+              <div className="h-14 rounded-xl bg-gray-100" />
+              <div className="h-14 rounded-xl bg-gray-100" />
+
+            </div>
+
+          </div>
+
+        </div>
+      </div>
+    );
   }
 
   // ===================================================
-  // RENDER
+  // UI
   // ===================================================
 
   return (
-    <>
+    <div className="mx-auto max-w-6xl text-black">
+
       {/* =================================================
-          SHIMMER STYLES
+          HEADER
       ================================================= */}
 
-      <style jsx global>{`
-        @keyframes shipment-skeleton-shimmer {
-          0% {
-            background-position: 200% 0;
-          }
+      <div className="mb-8">
 
-          100% {
-            background-position: -200% 0;
-          }
-        }
+        <div className="flex items-center gap-3">
 
-        .shipment-skeleton-shimmer {
-          background-image: linear-gradient(
-            90deg,
-            #e5e7eb 0%,
-            #f8fafc 45%,
-            #ffffff 50%,
-            #f8fafc 55%,
-            #e5e7eb 100%
-          );
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent text-white">
+            <Truck size={22} />
+          </div>
 
-          background-size: 200% 100%;
-
-          animation:
-            shipment-skeleton-shimmer 1.5s ease-in-out infinite;
-        }
-      `}</style>
-
-      <div className="mx-auto max-w-5xl px-4 pb-10 text-black sm:px-6 lg:px-0">
-        {/* =================================================
-            HEADER
-        ================================================= */}
-
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-ink">
+
+            <h1 className="text-2xl font-bold tracking-tight">
               Create Shipment
             </h1>
 
             <p className="mt-1 text-sm text-gray-500">
-              Create a shipment on behalf of a vendor.
+              Create a shipment for a registered
+              vendor or an unregistered customer.
             </p>
+
           </div>
 
-          {/* =================================================
-              RELOAD DATA
-          ================================================= */}
-
-          {error &&
-            !submitting && (
-              <button
-                type="button"
-                onClick={() =>
-                  loadData(true)
-                }
-                className="w-fit rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Reload Data
-              </button>
-            )}
         </div>
 
-        {/* =================================================
-            ERROR
-        ================================================= */}
-
-        {error && (
-          <div className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
-            {error}
-          </div>
-        )}
-
-        {/* =================================================
-            SUCCESS
-        ================================================= */}
-
-        {success && (
-          <div className="mt-5 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-700">
-            {success}
-          </div>
-        )}
-
-        {/* =================================================
-            FORM
-        ================================================= */}
-
-        <form
-          onSubmit={handleSubmit}
-          className="mt-6 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5 sm:p-6"
-        >
-          {/* =================================================
-              VENDOR SECTION
-          ================================================= */}
-
-          <div>
-            <div className="mb-5">
-              <h2 className="text-base font-bold">
-                Vendor Information
-              </h2>
-
-              <p className="mt-1 text-sm text-gray-500">
-                Select the vendor for this shipment.
-              </p>
-            </div>
-
-            <div className="grid gap-5 md:grid-cols-2">
-              {/* VENDOR */}
-
-              <div>
-                <label className="mb-2 block text-sm font-medium">
-                  Vendor
-                </label>
-
-                <select
-                  value={
-                    form.vendorId
-                  }
-                  onChange={(e) =>
-                    updateField(
-                      "vendorId",
-                      Number(
-                        e.target.value
-                      )
-                    )
-                  }
-                  className="w-full rounded-xl border border-gray-200 bg-white p-3 outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/10"
-                >
-                  <option value={0}>
-                    Select Vendor
-                  </option>
-
-                  {vendors.map(
-                    (vendor) => (
-                      <option
-                        key={
-                          vendor.id
-                        }
-                        value={
-                          vendor.id
-                        }
-                      >
-                        {
-                          vendor.companyName
-                        }
-                      </option>
-                    )
-                  )}
-                </select>
-              </div>
-
-              {/* VENDOR LOCATION */}
-
-              <div>
-                <label className="mb-2 block text-sm font-medium">
-                  Vendor Location
-                </label>
-
-                <input
-                  type="text"
-                  value={
-                    selectedVendor?.location ||
-                    ""
-                  }
-                  readOnly
-                  placeholder="Vendor location"
-                  className="w-full rounded-xl border border-gray-200 bg-gray-100 p-3 text-gray-600 outline-none"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="my-8 border-t border-gray-100" />
-
-          {/* =================================================
-              RECEIVER
-          ================================================= */}
-
-          <div>
-            <div className="mb-5">
-              <h2 className="text-base font-bold">
-                Receiver Information
-              </h2>
-
-              <p className="mt-1 text-sm text-gray-500">
-                Enter the customer's delivery details.
-              </p>
-            </div>
-
-            <div className="grid gap-5 md:grid-cols-2">
-              {/* NAME */}
-
-              <div>
-                <label className="mb-2 block text-sm font-medium">
-                  Receiver Name
-                </label>
-
-                <input
-                  type="text"
-                  value={
-                    form.receiverName
-                  }
-                  onChange={(e) =>
-                    updateField(
-                      "receiverName",
-                      e.target.value
-                    )
-                  }
-                  placeholder="Enter receiver name"
-                  className="w-full rounded-xl border border-gray-200 p-3 outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/10"
-                />
-              </div>
-
-              {/* PHONE */}
-
-              <div>
-                <label className="mb-2 block text-sm font-medium">
-                  Receiver Phone
-                </label>
-
-                <input
-                  type="tel"
-                  value={
-                    form.receiverPhone
-                  }
-                  onChange={(e) =>
-                    updateField(
-                      "receiverPhone",
-                      e.target.value
-                    )
-                  }
-                  placeholder="Enter receiver phone"
-                  className="w-full rounded-xl border border-gray-200 p-3 outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/10"
-                />
-              </div>
-
-              {/* ADDRESS */}
-
-              <div className="md:col-span-2">
-                <label className="mb-2 block text-sm font-medium">
-                  Receiver Address
-                </label>
-
-                <textarea
-                  rows={3}
-                  value={
-                    form.receiverAddress
-                  }
-                  onChange={(e) =>
-                    updateField(
-                      "receiverAddress",
-                      e.target.value
-                    )
-                  }
-                  placeholder="Enter complete delivery address"
-                  className="w-full resize-none rounded-xl border border-gray-200 p-3 outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/10"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="my-8 border-t border-gray-100" />
-
-          {/* =================================================
-              DELIVERY INFORMATION
-          ================================================= */}
-
-          <div>
-            <div className="mb-5">
-              <h2 className="text-base font-bold">
-                Delivery Information
-              </h2>
-
-              <p className="mt-1 text-sm text-gray-500">
-                Select destination, delivery type and package details.
-              </p>
-            </div>
-
-            <div className="grid gap-5 md:grid-cols-2">
-              {/* DESTINATION + DELIVERY TYPE */}
-
-              <div className="md:col-span-2">
-                <label className="mb-2 block text-sm font-medium">
-                  Destination & Delivery Type
-                </label>
-
-                <select
-                  value={
-                    form.locationRateId
-                  }
-                  onChange={(e) =>
-                    updateField(
-                      "locationRateId",
-                      Number(
-                        e.target.value
-                      )
-                    )
-                  }
-                  className="w-full rounded-xl border border-gray-200 bg-white p-3 outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/10"
-                >
-                  <option value={0}>
-                    Select Destination
-                  </option>
-
-                  {locationRates.map(
-                    (rate) => (
-                      <option
-                        key={
-                          rate.id
-                        }
-                        value={
-                          rate.id
-                        }
-                      >
-                        {
-                          rate.location
-                            .name
-                        }
-                        {" — "}
-                        {
-                          rate
-                            .deliveryType
-                            .name
-                        }
-                        {" — Rs. "}
-                        {Number(
-                          rate.price
-                        ).toLocaleString()}
-                        /kg
-                      </option>
-                    )
-                  )}
-                </select>
-              </div>
-
-              {/* DESTINATION */}
-
-              <div>
-                <label className="mb-2 block text-sm font-medium">
-                  Destination
-                </label>
-
-                <input
-                  value={
-                    selectedRate
-                      ?.location
-                      ?.name || ""
-                  }
-                  readOnly
-                  placeholder="Select destination"
-                  className="w-full rounded-xl border border-gray-200 bg-gray-100 p-3 text-gray-600"
-                />
-              </div>
-
-              {/* DELIVERY TYPE */}
-
-              <div>
-                <label className="mb-2 block text-sm font-medium">
-                  Delivery Type
-                </label>
-
-                <input
-                  value={
-                    selectedRate
-                      ?.deliveryType
-                      ?.name || ""
-                  }
-                  readOnly
-                  placeholder="Select delivery type"
-                  className="w-full rounded-xl border border-gray-200 bg-gray-100 p-3 text-gray-600"
-                />
-              </div>
-
-              {/* ZONE */}
-
-              <div>
-                <label className="mb-2 block text-sm font-medium">
-                  Zone
-                </label>
-
-                <input
-                  value={
-                    selectedRate
-                      ?.location
-                      ?.zone || ""
-                  }
-                  readOnly
-                  placeholder="Zone"
-                  className="w-full rounded-xl border border-gray-200 bg-gray-100 p-3 text-gray-600"
-                />
-              </div>
-
-              {/* PACKAGE */}
-
-              <div>
-                <label className="mb-2 block text-sm font-medium">
-                  Package Type
-                </label>
-
-                <select
-                  value={
-                    form.packageType
-                  }
-                  onChange={(e) =>
-                    updateField(
-                      "packageType",
-                      e.target.value
-                    )
-                  }
-                  className="w-full rounded-xl border border-gray-200 bg-white p-3 outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/10"
-                >
-                  <option value="DOCUMENT">
-                    Document
-                  </option>
-
-                  <option value="PARCEL">
-                    Parcel
-                  </option>
-
-                  <option value="BOX">
-                    Box
-                  </option>
-
-                  <option value="ELECTRONICS">
-                    Electronics
-                  </option>
-
-                  <option value="CLOTHING">
-                    Clothing
-                  </option>
-
-                  <option value="FOOD">
-                    Food
-                  </option>
-
-                  <option value="FRAGILE">
-                    Fragile
-                  </option>
-
-                  <option value="OTHER">
-                    Other
-                  </option>
-                </select>
-              </div>
-
-              {/* WEIGHT */}
-
-              <div>
-                <label className="mb-2 block text-sm font-medium">
-                  Weight (kg)
-                </label>
-
-                <input
-                  type="number"
-                  min="0.1"
-                  step="0.1"
-                  value={
-                    form.weight
-                  }
-                  onChange={(e) =>
-                    updateField(
-                      "weight",
-                      Number(
-                        e.target.value
-                      )
-                    )
-                  }
-                  className="w-full rounded-xl border border-gray-200 p-3 outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/10"
-                />
-              </div>
-
-              {/* RATE */}
-
-              <div>
-                <label className="mb-2 block text-sm font-medium">
-                  Rate / kg
-                </label>
-
-                <input
-                  type="text"
-                  value={
-                    selectedRate
-                      ? `Rs. ${Number(
-                          selectedRate.price
-                        ).toLocaleString()}`
-                      : ""
-                  }
-                  readOnly
-                  placeholder="Select destination"
-                  className="w-full rounded-xl border border-gray-200 bg-gray-100 p-3 text-gray-600"
-                />
-              </div>
-
-              {/* TOTAL SHIPPING */}
-
-              <div>
-                <label className="mb-2 block text-sm font-medium">
-                  Shipping Charge
-                </label>
-
-                <div className="flex min-h-[50px] items-center rounded-xl border border-gray-200 bg-gray-100 px-4">
-                  <span className="text-lg font-bold">
-                    Rs.{" "}
-                    {Number(
-                      shippingCharge
-                    ).toLocaleString()}
-                  </span>
-                </div>
-
-                <p className="mt-1 text-xs text-gray-500">
-                  Rate × Weight
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="my-8 border-t border-gray-100" />
-
-          {/* =================================================
-              PAYMENT
-          ================================================= */}
-
-          <div>
-            <div className="mb-5">
-              <h2 className="text-base font-bold">
-                Payment
-              </h2>
-            </div>
-
-            <div className="grid gap-5 md:grid-cols-2">
-              {/* PAYMENT TYPE */}
-
-              <div>
-                <label className="mb-2 block text-sm font-medium">
-                  Payment Type
-                </label>
-
-                <select
-                  value={
-                    form.paymentType
-                  }
-                  onChange={(e) =>
-                    updateField(
-                      "paymentType",
-                      e.target
-                        .value as
-                        | "PREPAID"
-                        | "COD"
-                    )
-                  }
-                  className="w-full rounded-xl border border-gray-200 bg-white p-3 outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/10"
-                >
-                  <option value="PREPAID">
-                    Prepaid
-                  </option>
-
-                  <option value="COD">
-                    Cash On Delivery
-                  </option>
-                </select>
-              </div>
-
-              {/* COD */}
-
-              {form.paymentType ===
-                "COD" && (
-                <div>
-                  <label className="mb-2 block text-sm font-medium">
-                    COD Amount
-                  </label>
-
-                  <input
-                    type="number"
-                    min="1"
-                    value={
-                      form.codAmount
-                    }
-                    onChange={(e) =>
-                      updateField(
-                        "codAmount",
-                        Number(
-                          e.target.value
-                        )
-                      )
-                    }
-                    placeholder="Enter COD amount"
-                    className="w-full rounded-xl border border-gray-200 p-3 outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/10"
-                  />
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="my-8 border-t border-gray-100" />
-
-          {/* =================================================
-              NOTES
-          ================================================= */}
-
-          <div>
-            <label className="mb-2 block text-sm font-medium">
-              Notes
-            </label>
-
-            <textarea
-              rows={4}
-              value={
-                form.notes
-              }
-              onChange={(e) =>
-                updateField(
-                  "notes",
-                  e.target.value
-                )
-              }
-              placeholder="Any additional shipment notes..."
-              className="w-full resize-none rounded-xl border border-gray-200 p-3 outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/10"
-            />
-          </div>
-
-          {/* =================================================
-              SUMMARY
-          ================================================= */}
-
-          <div className="mt-8 rounded-2xl bg-gray-50 p-5">
-            <div className="mb-4">
-              <h3 className="font-bold">
-                Shipment Summary
-              </h3>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {/* VENDOR */}
-
-              <div>
-                <p className="text-xs text-gray-500">
-                  Vendor
-                </p>
-
-                <p className="mt-1 text-sm font-semibold">
-                  {selectedVendor
-                    ?.companyName ||
-                    "Not selected"}
-                </p>
-              </div>
-
-              {/* DESTINATION */}
-
-              <div>
-                <p className="text-xs text-gray-500">
-                  Destination
-                </p>
-
-                <p className="mt-1 text-sm font-semibold">
-                  {selectedRate
-                    ?.location
-                    ?.name ||
-                    "Not selected"}
-                </p>
-              </div>
-
-              {/* WEIGHT */}
-
-              <div>
-                <p className="text-xs text-gray-500">
-                  Weight
-                </p>
-
-                <p className="mt-1 text-sm font-semibold">
-                  {form.weight} kg
-                </p>
-              </div>
-
-              {/* CHARGE */}
-
-              <div>
-                <p className="text-xs text-gray-500">
-                  Shipping Charge
-                </p>
-
-                <p className="mt-1 text-lg font-bold">
-                  Rs.{" "}
-                  {Number(
-                    shippingCharge
-                  ).toLocaleString()}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* =================================================
-              BUTTONS
-          ================================================= */}
-
-          <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-            <button
-              type="button"
-              onClick={
-                handleCancel
-              }
-              disabled={
-                submitting
-              }
-              className="rounded-xl border border-gray-200 px-6 py-3 font-medium transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Cancel
-            </button>
-
-            <button
-              type="submit"
-              disabled={
-                submitting
-              }
-              className="rounded-xl bg-accent px-7 py-3 font-semibold text-white transition hover:bg-accent-dark disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {submitting
-                ? "Creating Shipment..."
-                : "Create Shipment"}
-            </button>
-          </div>
-        </form>
       </div>
-    </>
+
+      {/* =================================================
+          SUCCESS
+      ================================================= */}
+
+      {success && (
+        <div className="mb-6 flex items-start gap-3 rounded-2xl border border-green-200 bg-green-50 p-4">
+
+          <CheckCircle2
+            className="mt-0.5 shrink-0 text-green-600"
+            size={20}
+          />
+
+          <div>
+
+            <p className="font-semibold text-green-800">
+              Shipment Created
+            </p>
+
+            <p className="mt-1 text-sm text-green-700">
+              {success}
+            </p>
+
+          </div>
+
+        </div>
+      )}
+
+      {/* =================================================
+          GLOBAL ERROR
+      ================================================= */}
+
+      {error && !mode && (
+        <div className="mb-6 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4">
+
+          <AlertCircle
+            className="mt-0.5 shrink-0 text-red-600"
+            size={20}
+          />
+
+          <p className="text-sm font-medium text-red-700">
+            {error}
+          </p>
+
+        </div>
+      )}
+
+      {/* =================================================
+          CREATION OPTIONS
+      ================================================= */}
+
+      <div className="grid gap-6 md:grid-cols-2">
+
+        {/* =================================================
+            REGISTERED VENDOR
+        ================================================= */}
+
+        <button
+          type="button"
+          onClick={openVendorModal}
+          className="group text-left"
+        >
+
+          <div className="h-full rounded-3xl border border-gray-200 bg-white p-7 shadow-sm transition duration-200 hover:-translate-y-1 hover:border-accent/40 hover:shadow-lg">
+
+            <div className="flex items-start justify-between">
+
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent/10 text-accent">
+
+                <Building2 size={27} />
+
+              </div>
+
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-50 transition group-hover:bg-accent group-hover:text-white">
+
+                <ChevronRight size={18} />
+
+              </div>
+
+            </div>
+
+            <div className="mt-7">
+
+              <h2 className="text-lg font-bold">
+                Registered Vendor
+              </h2>
+
+              <p className="mt-2 max-w-md text-sm leading-6 text-gray-500">
+                Create a shipment for a vendor
+                officially registered with
+                RocketShipping.
+              </p>
+
+            </div>
+
+            <div className="mt-6 flex items-center gap-2 text-sm font-semibold text-accent">
+
+              <span>
+                Select Vendor
+              </span>
+
+              <ChevronRight
+                size={17}
+                className="transition-transform group-hover:translate-x-1"
+              />
+
+            </div>
+
+          </div>
+
+        </button>
+
+        {/* =================================================
+            UNREGISTERED
+        ================================================= */}
+
+        <button
+          type="button"
+          onClick={openUnregisteredModal}
+          className="group text-left"
+        >
+
+          <div className="h-full rounded-3xl border border-gray-200 bg-white p-7 shadow-sm transition duration-200 hover:-translate-y-1 hover:border-accent/40 hover:shadow-lg">
+
+            <div className="flex items-start justify-between">
+
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-100 text-gray-700">
+
+                <UserRound size={27} />
+
+              </div>
+
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-50 transition group-hover:bg-accent group-hover:text-white">
+
+                <ChevronRight size={18} />
+
+              </div>
+
+            </div>
+
+            <div className="mt-7">
+
+              <h2 className="text-lg font-bold">
+                Unregistered Customer
+              </h2>
+
+              <p className="mt-2 max-w-md text-sm leading-6 text-gray-500">
+                Create a shipment for a walk-in
+                customer who is not registered as
+                a vendor.
+              </p>
+
+            </div>
+
+            <div className="mt-6 flex items-center gap-2 text-sm font-semibold text-accent">
+
+              <span>
+                Enter Sender Details
+              </span>
+
+              <ChevronRight
+                size={17}
+                className="transition-transform group-hover:translate-x-1"
+              />
+
+            </div>
+
+          </div>
+
+        </button>
+
+      </div>
+
+      {/* =================================================
+          INFO
+      ================================================= */}
+
+      <div className="mt-6 rounded-2xl bg-gray-50 p-5">
+
+        <div className="flex gap-3">
+
+          <div className="mt-0.5 shrink-0 text-gray-500">
+            <Package size={20} />
+          </div>
+
+          <div>
+
+            <p className="text-sm font-semibold">
+              How shipment creation works
+            </p>
+
+            <p className="mt-1 text-sm leading-6 text-gray-500">
+              Registered vendor shipments are
+              linked to the vendor account. For
+              walk-in customers, sender details
+              are stored directly on the shipment.
+            </p>
+
+          </div>
+
+        </div>
+
+      </div>
+
+      {/* =================================================
+          MODAL
+      ================================================= */}
+
+      {mode && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+
+          <div className="max-h-[92vh] w-full max-w-4xl overflow-hidden rounded-3xl bg-white shadow-2xl">
+
+            {/* =================================================
+                MODAL HEADER
+            ================================================= */}
+
+            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5">
+
+              <div className="flex items-center gap-3">
+
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent/10 text-accent">
+
+                  {mode === "VENDOR" ? (
+                    <Building2 size={22} />
+                  ) : (
+                    <UserRound size={22} />
+                  )}
+
+                </div>
+
+                <div>
+
+                  <h2 className="text-lg font-bold">
+                    {mode === "VENDOR"
+                      ? "Registered Vendor Shipment"
+                      : "Unregistered Customer Shipment"}
+                  </h2>
+
+                  <p className="text-xs text-gray-500">
+                    Fill in the shipment information
+                    below.
+                  </p>
+
+                </div>
+
+              </div>
+
+              <button
+                type="button"
+                onClick={closeModal}
+                disabled={submitting}
+                className="flex h-9 w-9 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 hover:text-black disabled:opacity-50"
+              >
+                <X size={20} />
+              </button>
+
+            </div>
+
+            {/* =================================================
+                MODAL BODY
+            ================================================= */}
+
+            <form
+              onSubmit={handleSubmit}
+              className="max-h-[calc(92vh-80px)] overflow-y-auto"
+            >
+
+              <div className="p-6">
+
+                {/* =================================================
+                    ERROR
+                ================================================= */}
+
+                {error && (
+                  <div className="mb-6 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4">
+
+                    <AlertCircle
+                      className="mt-0.5 shrink-0 text-red-600"
+                      size={19}
+                    />
+
+                    <p className="text-sm font-medium text-red-700">
+                      {error}
+                    </p>
+
+                  </div>
+                )}
+
+                {/* =================================================
+                    SENDER
+                ================================================= */}
+
+                <section>
+
+                  <SectionTitle
+                    icon={
+                      mode === "VENDOR"
+                        ? <Building2 size={18} />
+                        : <User size={18} />
+                    }
+                    title="Sender Information"
+                    description={
+                      mode === "VENDOR"
+                        ? "Select the registered vendor sending this shipment."
+                        : "Enter the details of the person sending this shipment."
+                    }
+                  />
+
+                  {mode === "VENDOR" ? (
+
+                    <div className="space-y-5">
+
+                      <div>
+
+                        <label className="mb-2 block text-sm font-medium">
+                          Vendor
+                        </label>
+
+                        <select
+                          value={form.vendorId}
+                          onChange={(event) => {
+                            updateField(
+                              "vendorId",
+                              Number(
+                                event.target.value
+                              )
+                            );
+                          }}
+                          className="w-full rounded-xl border border-gray-200 bg-white p-3 outline-none transition focus:border-accent"
+                        >
+
+                          <option value={0}>
+                            Select Vendor
+                          </option>
+
+                          {vendors.map(
+                            (vendor) => (
+                              <option
+                                key={vendor.id}
+                                value={vendor.id}
+                              >
+                                {vendor.companyName}
+                              </option>
+                            )
+                          )}
+
+                        </select>
+
+                      </div>
+
+                      {selectedVendor && (
+                        <div className="grid gap-4 md:grid-cols-2">
+
+                          <ReadonlyField
+                            label="Company"
+                            value={
+                              selectedVendor.companyName
+                            }
+                          />
+
+                          <ReadonlyField
+                            label="Location"
+                            value={
+                              selectedVendor.location ||
+                              "Not available"
+                            }
+                          />
+
+                        </div>
+                      )}
+
+                    </div>
+
+                  ) : (
+
+                    <div className="grid gap-5 md:grid-cols-2">
+
+                      <InputField
+                        label="Sender Name"
+                        placeholder="Enter sender name"
+                        value={
+                          form.senderName
+                        }
+                        onChange={(value) =>
+                          updateField(
+                            "senderName",
+                            value
+                          )
+                        }
+                        icon={
+                          <User size={16} />
+                        }
+                      />
+
+                      <InputField
+                        label="Sender Phone"
+                        placeholder="Enter sender phone"
+                        type="tel"
+                        value={
+                          form.senderPhone
+                        }
+                        onChange={(value) =>
+                          updateField(
+                            "senderPhone",
+                            value
+                          )
+                        }
+                        icon={
+                          <Phone size={16} />
+                        }
+                      />
+
+                      <div className="md:col-span-2">
+
+                        <TextAreaField
+                          label="Sender Address"
+                          placeholder="Enter complete sender address"
+                          value={
+                            form.senderAddress
+                          }
+                          onChange={(value) =>
+                            updateField(
+                              "senderAddress",
+                              value
+                            )
+                          }
+                          icon={
+                            <MapPin size={16} />
+                          }
+                        />
+
+                      </div>
+
+                    </div>
+
+                  )}
+
+                </section>
+
+                <Divider />
+
+                {/* =================================================
+                    RECEIVER
+                ================================================= */}
+
+                <section>
+
+                  <SectionTitle
+                    icon={
+                      <UserRound size={18} />
+                    }
+                    title="Receiver Information"
+                    description="Enter the customer's delivery details."
+                  />
+
+                  <div className="grid gap-5 md:grid-cols-2">
+
+                    <InputField
+                      label="Receiver Name"
+                      placeholder="Enter receiver name"
+                      value={
+                        form.receiverName
+                      }
+                      onChange={(value) =>
+                        updateField(
+                          "receiverName",
+                          value
+                        )
+                      }
+                    />
+
+                    <InputField
+                      label="Receiver Phone"
+                      placeholder="Enter receiver phone"
+                      type="tel"
+                      value={
+                        form.receiverPhone
+                      }
+                      onChange={(value) =>
+                        updateField(
+                          "receiverPhone",
+                          value
+                        )
+                      }
+                    />
+
+                    <div className="md:col-span-2">
+
+                      <TextAreaField
+                        label="Receiver Address"
+                        placeholder="Enter complete delivery address"
+                        value={
+                          form.receiverAddress
+                        }
+                        onChange={(value) =>
+                          updateField(
+                            "receiverAddress",
+                            value
+                          )
+                        }
+                      />
+
+                    </div>
+
+                  </div>
+
+                </section>
+
+                <Divider />
+
+                {/* =================================================
+                    DELIVERY
+                ================================================= */}
+
+                <section>
+
+                  <SectionTitle
+                    icon={
+                      <MapPin size={18} />
+                    }
+                    title="Delivery Information"
+                    description="Select destination, delivery type and package information."
+                  />
+
+                  <div className="grid gap-5 md:grid-cols-2">
+
+                    <div className="md:col-span-2">
+
+                      <label className="mb-2 block text-sm font-medium">
+                        Destination & Delivery Type
+                      </label>
+
+                      <select
+                        value={
+                          form.locationRateId
+                        }
+                        onChange={(event) =>
+                          updateField(
+                            "locationRateId",
+                            Number(
+                              event.target.value
+                            )
+                          )
+                        }
+                        className="w-full rounded-xl border border-gray-200 bg-white p-3 outline-none transition focus:border-accent"
+                      >
+
+                        <option value={0}>
+                          Select Destination
+                        </option>
+
+                        {locationRates.map(
+                          (rate) => (
+                            <option
+                              key={rate.id}
+                              value={rate.id}
+                            >
+                              {rate.location.name}
+                              {" — "}
+                              {
+                                rate.deliveryType.name
+                              }
+                              {" — Rs. "}
+                              {Number(
+                                rate.price
+                              ).toLocaleString()}
+                              /kg
+                            </option>
+                          )
+                        )}
+
+                      </select>
+
+                    </div>
+
+                    <ReadonlyField
+                      label="Destination"
+                      value={
+                        selectedRate
+                          ?.location.name ||
+                        ""
+                      }
+                      placeholder="Select destination"
+                    />
+
+                    <ReadonlyField
+                      label="Delivery Type"
+                      value={
+                        selectedRate
+                          ?.deliveryType.name ||
+                        ""
+                      }
+                      placeholder="Select delivery type"
+                    />
+
+                    <ReadonlyField
+                      label="Zone"
+                      value={
+                        selectedRate
+                          ?.location.zone ||
+                        ""
+                      }
+                      placeholder="Select destination"
+                    />
+
+                    <div>
+
+                      <label className="mb-2 block text-sm font-medium">
+                        Package Type
+                      </label>
+
+                      <select
+                        value={
+                          form.packageType
+                        }
+                        onChange={(event) =>
+                          updateField(
+                            "packageType",
+                            event.target
+                              .value as ShipmentForm["packageType"]
+                          )
+                        }
+                        className="w-full rounded-xl border border-gray-200 bg-white p-3 outline-none transition focus:border-accent"
+                      >
+
+                        <option value="DOCUMENT">
+                          Document
+                        </option>
+
+                        <option value="PARCEL">
+                          Parcel
+                        </option>
+
+                        <option value="BOX">
+                          Box
+                        </option>
+
+                        <option value="ELECTRONICS">
+                          Electronics
+                        </option>
+
+                        <option value="CLOTHING">
+                          Clothing
+                        </option>
+
+                        <option value="FOOD">
+                          Food
+                        </option>
+
+                        <option value="FRAGILE">
+                          Fragile
+                        </option>
+
+                        <option value="OTHER">
+                          Other
+                        </option>
+
+                      </select>
+
+                    </div>
+
+                    <InputField
+                      label="Weight (kg)"
+                      type="number"
+                      value={
+                        String(form.weight)
+                      }
+                      onChange={(value) =>
+                        updateField(
+                          "weight",
+                          Number(value)
+                        )
+                      }
+                    />
+
+                    <ReadonlyField
+                      label="Rate / kg"
+                      value={
+                        selectedRate
+                          ? `Rs. ${Number(
+                              selectedRate.price
+                            ).toLocaleString()}`
+                          : ""
+                      }
+                      placeholder="Select destination"
+                    />
+
+                    <div>
+
+                      <label className="mb-2 block text-sm font-medium">
+                        Shipping Charge
+                      </label>
+
+                      <div className="flex min-h-[50px] items-center rounded-xl bg-gray-50 px-4 ring-1 ring-gray-200">
+
+                        <span className="text-lg font-bold">
+                          Rs.{" "}
+                          {shippingCharge.toLocaleString()}
+                        </span>
+
+                      </div>
+
+                      <p className="mt-1 text-xs text-gray-500">
+                        Rate × Weight
+                      </p>
+
+                    </div>
+
+                  </div>
+
+                </section>
+
+                <Divider />
+
+                {/* =================================================
+                    PAYMENT
+                ================================================= */}
+
+                <section>
+
+                  <SectionTitle
+                    icon={
+                      <Package size={18} />
+                    }
+                    title="Payment"
+                    description="Select how this shipment will be paid."
+                  />
+
+                  <div className="grid gap-5 md:grid-cols-2">
+
+                    <div>
+
+                      <label className="mb-2 block text-sm font-medium">
+                        Payment Type
+                      </label>
+
+                      <select
+                        value={
+                          form.paymentType
+                        }
+                        onChange={(event) =>
+                          updateField(
+                            "paymentType",
+                            event.target
+                              .value as
+                              | "PREPAID"
+                              | "COD"
+                          )
+                        }
+                        className="w-full rounded-xl border border-gray-200 bg-white p-3 outline-none transition focus:border-accent"
+                      >
+
+                        <option value="PREPAID">
+                          Prepaid
+                        </option>
+
+                        <option value="COD">
+                          Cash On Delivery
+                        </option>
+
+                      </select>
+
+                    </div>
+
+                    {form.paymentType ===
+                      "COD" && (
+                      <InputField
+                        label="COD Amount"
+                        type="number"
+                        placeholder="Enter COD amount"
+                        value={
+                          String(
+                            form.codAmount
+                          )
+                        }
+                        onChange={(value) =>
+                          updateField(
+                            "codAmount",
+                            Number(value)
+                          )
+                        }
+                      />
+                    )}
+
+                  </div>
+
+                </section>
+
+                <Divider />
+
+                {/* =================================================
+                    NOTES
+                ================================================= */}
+
+                <section>
+
+                  <TextAreaField
+                    label="Notes"
+                    placeholder="Any additional shipment notes..."
+                    value={form.notes}
+                    onChange={(value) =>
+                      updateField(
+                        "notes",
+                        value
+                      )
+                    }
+                  />
+
+                </section>
+
+                {/* =================================================
+                    SUMMARY
+                ================================================= */}
+
+                <div className="mt-8 rounded-2xl bg-gray-50 p-5">
+
+                  <div className="mb-5">
+
+                    <p className="text-sm font-bold">
+                      Shipment Summary
+                    </p>
+
+                  </div>
+
+                  <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+
+                    <SummaryItem
+                      label="Sender"
+                      value={
+                        mode === "VENDOR"
+                          ? selectedVendor?.companyName ||
+                            "Not selected"
+                          : form.senderName ||
+                            "Not entered"
+                      }
+                    />
+
+                    <SummaryItem
+                      label="Receiver"
+                      value={
+                        form.receiverName ||
+                        "Not entered"
+                      }
+                    />
+
+                    <SummaryItem
+                      label="Destination"
+                      value={
+                        selectedRate
+                          ?.location.name ||
+                        "Not selected"
+                      }
+                    />
+
+                    <SummaryItem
+                      label="Shipping Charge"
+                      value={`Rs. ${shippingCharge.toLocaleString()}`}
+                      strong
+                    />
+
+                  </div>
+
+                </div>
+
+              </div>
+
+              {/* =================================================
+                  FOOTER
+              ================================================= */}
+
+              <div className="sticky bottom-0 flex flex-col-reverse gap-3 border-t border-gray-100 bg-white px-6 py-4 sm:flex-row sm:justify-end">
+
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  disabled={submitting}
+                  className="rounded-xl border border-gray-200 px-6 py-3 text-sm font-semibold transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="flex items-center justify-center gap-2 rounded-xl bg-accent px-7 py-3 text-sm font-semibold text-white transition hover:bg-accent-dark disabled:cursor-not-allowed disabled:opacity-60"
+                >
+
+                  {submitting ? (
+                    <>
+                      <Loader2
+                        size={17}
+                        className="animate-spin"
+                      />
+
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2
+                        size={17}
+                      />
+
+                      Create Shipment
+                    </>
+                  )}
+
+                </button>
+
+              </div>
+
+            </form>
+
+          </div>
+
+        </div>
+      )}
+
+    </div>
+  );
+}
+
+// =====================================================
+// SECTION TITLE
+// =====================================================
+
+function SectionTitle({
+  icon,
+  title,
+  description,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="mb-5 flex gap-3">
+
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-700">
+        {icon}
+      </div>
+
+      <div>
+
+        <h3 className="text-base font-bold">
+          {title}
+        </h3>
+
+        <p className="mt-0.5 text-xs text-gray-500">
+          {description}
+        </p>
+
+      </div>
+
+    </div>
+  );
+}
+
+// =====================================================
+// DIVIDER
+// =====================================================
+
+function Divider() {
+  return (
+    <div className="my-8 border-t border-gray-100" />
+  );
+}
+
+// =====================================================
+// INPUT
+// =====================================================
+
+function InputField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  type = "text",
+  icon,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  type?: string;
+  icon?: React.ReactNode;
+}) {
+  return (
+    <div>
+
+      <label className="mb-2 flex items-center gap-2 text-sm font-medium">
+
+        {icon && (
+          <span className="text-gray-400">
+            {icon}
+          </span>
+        )}
+
+        {label}
+
+      </label>
+
+      <input
+        type={type}
+        value={value}
+        placeholder={placeholder}
+        min={
+          type === "number"
+            ? "0.1"
+            : undefined
+        }
+        step={
+          type === "number"
+            ? "0.1"
+            : undefined
+        }
+        onChange={(event) =>
+          onChange(event.target.value)
+        }
+        className="w-full rounded-xl border border-gray-200 bg-white p-3 outline-none transition placeholder:text-gray-400 focus:border-accent focus:ring-2 focus:ring-accent/10"
+      />
+
+    </div>
+  );
+}
+
+// =====================================================
+// TEXTAREA
+// =====================================================
+
+function TextAreaField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  icon,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  icon?: React.ReactNode;
+}) {
+  return (
+    <div>
+
+      <label className="mb-2 flex items-center gap-2 text-sm font-medium">
+
+        {icon && (
+          <span className="text-gray-400">
+            {icon}
+          </span>
+        )}
+
+        {label}
+
+      </label>
+
+      <textarea
+        rows={3}
+        value={value}
+        placeholder={placeholder}
+        onChange={(event) =>
+          onChange(event.target.value)
+        }
+        className="w-full resize-none rounded-xl border border-gray-200 bg-white p-3 outline-none transition placeholder:text-gray-400 focus:border-accent focus:ring-2 focus:ring-accent/10"
+      />
+
+    </div>
+  );
+}
+
+// =====================================================
+// READONLY
+// =====================================================
+
+function ReadonlyField({
+  label,
+  value,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  placeholder?: string;
+}) {
+  return (
+    <div>
+
+      <label className="mb-2 block text-sm font-medium">
+        {label}
+      </label>
+
+      <input
+        value={value}
+        readOnly
+        placeholder={placeholder}
+        className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3 text-gray-600 outline-none"
+      />
+
+    </div>
+  );
+}
+
+// =====================================================
+// SUMMARY
+// =====================================================
+
+function SummaryItem({
+  label,
+  value,
+  strong = false,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+}) {
+  return (
+    <div>
+
+      <p className="text-xs text-gray-500">
+        {label}
+      </p>
+
+      <p
+        className={`mt-1 ${
+          strong
+            ? "text-lg font-bold"
+            : "text-sm font-semibold"
+        }`}
+      >
+        {value}
+      </p>
+
+    </div>
   );
 }

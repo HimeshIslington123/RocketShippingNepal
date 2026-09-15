@@ -22,12 +22,12 @@ const STAFF_NAV: NavLink[] = [
   },
   {
     href: "/staff/shipping",
-    label: "Shipments creation",
+    label: "Package creation",
     icon: PackageSearch,
   },
   {
     href: "/staff/shippingdetails",
-    label: "Shipments Details",
+    label: "Package Details",
     icon: PackageSearch,
   },
   {
