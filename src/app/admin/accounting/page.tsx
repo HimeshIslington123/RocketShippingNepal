@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { jsPDF } from "jspdf";
 
 import {
   ArrowDownRight,
@@ -16,6 +17,7 @@ import {
   Loader2,
   RefreshCw,
   Search,
+  Share2,
   Store,
   Wallet,
   X,
@@ -2650,6 +2652,16 @@ export default function AdminAccountingPage() {
                                   Bill
                                 </button>
 
+                                <button
+                                  type="button"
+                                  onClick={() => void shareSettlementBill(settlement)}
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                                  title="Share settlement bill"
+                                >
+                                  <Share2 className="h-3.5 w-3.5" />
+                                  Share
+                                </button>
+
                                 {settlement.status ===
                                   "PENDING" && (
                                   <button
@@ -3479,6 +3491,447 @@ function AccountingSkeleton() {
 }
 
 // ======================================================
+// SETTLEMENT BILL - TEXT
+// ======================================================
+
+function getSettlementShareText(settlement: Settlement) {
+  const direction = getDirectionLabel(settlement.direction);
+  const vendor = settlement.vendor?.companyName || "Vendor";
+
+  const itemLines = (settlement.items || []).map((item) => {
+    const entry = item.accountingEntry;
+    const tracking = entry?.shipment?.trackingNumber || "—";
+    const type = entry ? getTypeLabel(entry.type) : "Accounting Entry";
+    return `${tracking} | ${type} | ${formatMoney(item.amount)}`;
+  });
+
+  return [
+    "ROCKET SHIPPING CARGO",
+    "Settlement Bill",
+    "",
+    `Vendor: ${vendor}`,
+    `Settlement ID: ${settlement.id}`,
+    `Direction: ${direction}`,
+    `Status: ${settlement.status}`,
+    `Created: ${formatDate(settlement.createdAt)}`,
+    `Paid: ${formatDate(settlement.paidAt)}`,
+    "",
+    `COD Credits: ${formatMoney(settlement.totalCodAmount)}`,
+    `Shipping Charges: ${formatMoney(settlement.totalShippingCharge)}`,
+    `Return Charges: ${formatMoney(settlement.totalReturnCharge)}`,
+    `Other Charges: ${formatMoney(settlement.totalOtherCharges)}`,
+    `Total Credits: ${formatMoney(settlement.totalCredits)}`,
+    `Total Debits: ${formatMoney(settlement.totalDebits)}`,
+    `Net Amount: ${formatMoney(settlement.netPayable)}`,
+    "",
+    `Payment Reference: ${settlement.paymentReference || "—"}`,
+    `Notes: ${settlement.notes || "—"}`,
+    ...(itemLines.length ? ["", "Settlement Items:", ...itemLines] : []),
+  ].join("\n");
+}
+
+// ======================================================
+// CREATE BILL IMAGE
+// ======================================================
+
+async function createSettlementBillCanvas(
+  settlement: Settlement
+): Promise<HTMLCanvasElement> {
+  const items = settlement.items || [];
+  const width = 1400;
+  const rowHeight = 58;
+  const itemRows = Math.max(items.length, 1);
+  const height = 1250 + itemRows * rowHeight;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Could not create bill image.");
+
+  const navy = "#0b1729";
+  const red = "#e23c2e";
+  const slate = "#64748b";
+  const light = "#f8fafc";
+  const border = "#e2e8f0";
+  const green = "#059669";
+
+  ctx.fillStyle = "#eef1f5";
+  ctx.fillRect(0, 0, width, height);
+
+  // Bill paper
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(55, 45, width - 110, height - 90);
+
+  const left = 105;
+  const right = width - 105;
+  let y = 125;
+
+  ctx.fillStyle = red;
+  ctx.font = "700 22px Arial";
+  ctx.fillText("ROCKET SHIPPING CARGO", left, y);
+
+  y += 55;
+  ctx.fillStyle = navy;
+  ctx.font = "700 40px Arial";
+  ctx.fillText("Settlement Bill", left, y);
+
+  ctx.fillStyle = slate;
+  ctx.font = "400 18px Arial";
+  ctx.fillText("Vendor accounting settlement", left, y + 34);
+
+  ctx.textAlign = "right";
+  ctx.fillStyle = slate;
+  ctx.font = "600 15px Arial";
+  ctx.fillText("SETTLEMENT ID", right, 125);
+  ctx.fillStyle = navy;
+  ctx.font = "600 15px monospace";
+  ctx.fillText(settlement.id, right, 151);
+  ctx.textAlign = "left";
+
+  y += 95;
+  ctx.strokeStyle = border;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(left, y);
+  ctx.lineTo(right, y);
+  ctx.stroke();
+
+  y += 50;
+
+  const boxW = (right - left - 24) / 2;
+  const boxH = 100;
+  const boxes = [
+    ["VENDOR", settlement.vendor?.companyName || "—", settlement.vendor?.contactId || ""],
+    ["STATUS", settlement.status, `Created ${formatDate(settlement.createdAt)}`],
+    ["DIRECTION", getDirectionLabel(settlement.direction), ""],
+    ["PAYMENT DATE", formatDate(settlement.paidAt), ""],
+  ];
+
+  boxes.forEach((box, index) => {
+    const col = index % 2;
+    const row = Math.floor(index / 2);
+    const x = left + col * (boxW + 24);
+    const yy = y + row * (boxH + 18);
+
+    ctx.fillStyle = light;
+    ctx.fillRect(x, yy, boxW, boxH);
+    ctx.strokeStyle = border;
+    ctx.strokeRect(x, yy, boxW, boxH);
+
+    ctx.fillStyle = slate;
+    ctx.font = "700 13px Arial";
+    ctx.fillText(box[0], x + 18, yy + 25);
+
+    ctx.fillStyle = navy;
+    ctx.font = "700 20px Arial";
+    ctx.fillText(String(box[1]).slice(0, 55), x + 18, yy + 55);
+
+    if (box[2]) {
+      ctx.fillStyle = slate;
+      ctx.font = "400 14px Arial";
+      ctx.fillText(String(box[2]).slice(0, 65), x + 18, yy + 80);
+    }
+  });
+
+  y += boxH * 2 + 18 * 2 + 40;
+
+  // Items heading
+  ctx.fillStyle = navy;
+  ctx.font = "700 21px Arial";
+  ctx.fillText("Settlement Items", left, y);
+  y += 28;
+
+  const tableX = left;
+  const tableW = right - left;
+  const colX = [tableX, tableX + 220, tableX + 470, tableX + 1040];
+  const headerH = 44;
+
+  ctx.fillStyle = light;
+  ctx.fillRect(tableX, y, tableW, headerH);
+  ctx.strokeStyle = border;
+  ctx.strokeRect(tableX, y, tableW, headerH);
+
+  ctx.fillStyle = slate;
+  ctx.font = "700 13px Arial";
+  ctx.fillText("TRACKING", colX[0] + 12, y + 28);
+  ctx.fillText("TYPE", colX[1] + 12, y + 28);
+  ctx.fillText("DESCRIPTION", colX[2] + 12, y + 28);
+  ctx.textAlign = "right";
+  ctx.fillText("AMOUNT", right - 12, y + 28);
+  ctx.textAlign = "left";
+
+  y += headerH;
+
+  const rows = items.length ? items : [null];
+  rows.forEach((item) => {
+    ctx.strokeStyle = border;
+    ctx.strokeRect(tableX, y, tableW, rowHeight);
+
+    if (!item) {
+      ctx.fillStyle = slate;
+      ctx.font = "400 14px Arial";
+      ctx.fillText("No item-level entries were returned by the settlement API.", tableX + 14, y + 35);
+    } else {
+      const entry = item.accountingEntry;
+      const tracking = entry?.shipment?.trackingNumber || "—";
+      const type = entry ? getTypeLabel(entry.type) : "Accounting Entry";
+      const description = entry?.description || "—";
+      const amount = formatMoney(item.amount);
+
+      ctx.fillStyle = navy;
+      ctx.font = "600 14px monospace";
+      ctx.fillText(tracking.slice(0, 27), colX[0] + 12, y + 35);
+
+      ctx.font = "600 14px Arial";
+      ctx.fillText(type.slice(0, 28), colX[1] + 12, y + 35);
+
+      ctx.fillStyle = slate;
+      ctx.font = "400 14px Arial";
+      ctx.fillText(description.slice(0, 65), colX[2] + 12, y + 35);
+
+      ctx.textAlign = "right";
+      ctx.fillStyle = navy;
+      ctx.font = "700 14px Arial";
+      ctx.fillText(amount, right - 12, y + 35);
+      ctx.textAlign = "left";
+    }
+
+    y += rowHeight;
+  });
+
+  y += 35;
+
+  const totalsX = width - 520;
+  const totals = [
+    ["COD credits", formatMoney(settlement.totalCodAmount)],
+    ["Shipping charges", formatMoney(settlement.totalShippingCharge)],
+    ["Return charges", formatMoney(settlement.totalReturnCharge)],
+    ["Other charges", formatMoney(settlement.totalOtherCharges)],
+    ["Total credits", formatMoney(settlement.totalCredits)],
+    ["Total debits", formatMoney(settlement.totalDebits)],
+  ];
+
+  totals.forEach(([label, value]) => {
+    ctx.fillStyle = slate;
+    ctx.font = "400 16px Arial";
+    ctx.fillText(label, totalsX, y);
+    ctx.textAlign = "right";
+    ctx.fillStyle = navy;
+    ctx.font = "700 16px Arial";
+    ctx.fillText(value, right, y);
+    ctx.textAlign = "left";
+    y += 31;
+  });
+
+  y += 10;
+  ctx.strokeStyle = navy;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(totalsX, y);
+  ctx.lineTo(right, y);
+  ctx.stroke();
+  y += 42;
+
+  ctx.fillStyle = navy;
+  ctx.font = "700 23px Arial";
+  ctx.fillText(getDirectionLabel(settlement.direction), totalsX, y);
+  ctx.textAlign = "right";
+  ctx.fillStyle = green;
+  ctx.font = "800 26px Arial";
+  ctx.fillText(formatMoney(settlement.netPayable), right, y);
+  ctx.textAlign = "left";
+
+  y += 60;
+  if (settlement.paymentReference || settlement.notes) {
+    ctx.fillStyle = "#fffbeb";
+    ctx.fillRect(left, y, right - left, 105);
+    ctx.strokeStyle = "#fde68a";
+    ctx.strokeRect(left, y, right - left, 105);
+
+    ctx.fillStyle = navy;
+    ctx.font = "700 16px Arial";
+    ctx.fillText("Settlement Notes", left + 18, y + 28);
+    ctx.fillStyle = slate;
+    ctx.font = "400 14px Arial";
+    ctx.fillText(`Reference: ${settlement.paymentReference || "—"}`, left + 18, y + 55);
+    ctx.fillText(`Notes: ${settlement.notes || "—"}`, left + 18, y + 80);
+  }
+
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#94a3b8";
+  ctx.font = "400 13px Arial";
+  ctx.fillText("Generated from the accounting settlement record.", width / 2, height - 65);
+  ctx.textAlign = "left";
+
+  return canvas;
+}
+
+// ======================================================
+// CREATE PDF FROM THE SAME BILL IMAGE
+// ======================================================
+
+async function createSettlementBillPdf(
+  settlement: Settlement
+): Promise<File> {
+  const canvas = await createSettlementBillCanvas(settlement);
+  const image = canvas.toDataURL("image/png", 1);
+
+  const pdf = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: "a4",
+    compress: true,
+  });
+
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const margin = 8;
+  const usableWidth = pageWidth - margin * 2;
+  const imageHeight = (canvas.height * usableWidth) / canvas.width;
+
+  let remaining = imageHeight;
+  let offset = 0;
+  const renderedPageHeight = pageHeight - margin * 2;
+
+  while (remaining > 0) {
+    pdf.addImage(
+      image,
+      "PNG",
+      margin,
+      margin - offset,
+      usableWidth,
+      imageHeight,
+      undefined,
+      "FAST"
+    );
+
+    remaining -= renderedPageHeight;
+    offset += renderedPageHeight;
+
+    if (remaining > 0) {
+      pdf.addPage();
+    }
+  }
+
+  const blob = pdf.output("blob");
+  const vendor = (settlement.vendor?.companyName || "vendor")
+    .replace(/[^a-z0-9-_]+/gi, "-")
+    .replace(/-+/g, "-");
+
+  return new File(
+    [blob],
+    `settlement-${vendor}-${settlement.id}.pdf`,
+    { type: "application/pdf" }
+  );
+}
+
+// ======================================================
+// SHARE ACTUAL PDF + BILL IMAGE
+// ======================================================
+
+async function shareSettlementBill(settlement: Settlement) {
+  const vendor = settlement.vendor?.companyName || "Vendor";
+  const title = `Settlement Bill - ${vendor}`;
+  const text = `Settlement bill for ${vendor}. Settlement ID: ${settlement.id}. Amount: ${formatMoney(settlement.netPayable)}.`;
+
+  try {
+    const [pdfFile, canvas] = await Promise.all([
+      createSettlementBillPdf(settlement),
+      createSettlementBillCanvas(settlement),
+    ]);
+
+    const imageBlob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (blob) resolve(blob);
+        else reject(new Error("Could not create bill image."));
+      }, "image/png", 1);
+    });
+
+    const imageFile = new File(
+      [imageBlob],
+      `settlement-${settlement.id}.png`,
+      { type: "image/png" }
+    );
+
+    // Prefer the native share sheet with REAL files.
+    // WhatsApp, Gmail, Messages, Drive, etc. can appear here
+    // depending on the device/browser.
+    if (
+      typeof navigator !== "undefined" &&
+      navigator.share &&
+      navigator.canShare
+    ) {
+      const files = [pdfFile, imageFile];
+
+      if (navigator.canShare({ files })) {
+        try {
+          await navigator.share({
+            title,
+            text,
+            files,
+          });
+          return;
+        } catch (error) {
+          if (
+            error instanceof DOMException &&
+            error.name === "AbortError"
+          ) {
+            return;
+          }
+        }
+      }
+
+      if (navigator.canShare({ files: [pdfFile] })) {
+        try {
+          await navigator.share({
+            title,
+            text,
+            files: [pdfFile],
+          });
+          return;
+        } catch (error) {
+          if (
+            error instanceof DOMException &&
+            error.name === "AbortError"
+          ) {
+            return;
+          }
+        }
+      }
+    }
+
+    // Desktop fallback: download the actual PDF and PNG.
+    // These are files, not text.
+    const downloadFile = (file: File) => {
+      const url = URL.createObjectURL(file);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = file.name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    };
+
+    downloadFile(pdfFile);
+    downloadFile(imageFile);
+
+    alert(
+      "Your settlement PDF and bill image were downloaded. You can now attach either file to WhatsApp, Gmail, or another app."
+    );
+  } catch (error) {
+    console.error("Settlement sharing failed:", error);
+    alert(
+      error instanceof Error
+        ? error.message
+        : "Could not create the settlement PDF/image."
+    );
+  }
+}
+
+// ======================================================
 // SETTLEMENT BILL
 // ======================================================
 
@@ -3580,10 +4033,25 @@ ${settlement.paymentReference || settlement.notes ? `<div class="note"><strong>S
         </div>
       </div>
 
-      <button type="button" onClick={downloadBill} className="mt-5 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#e23c2e] px-4 text-sm font-semibold text-white hover:bg-[#ce3122]">
-        <Download className="h-4 w-4" />
-        Download Settlement Bill
-      </button>
+      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <button
+          type="button"
+          onClick={downloadBill}
+          className="flex h-11 items-center justify-center gap-2 rounded-xl bg-[#e23c2e] px-4 text-sm font-semibold text-white hover:bg-[#ce3122]"
+        >
+          <Download className="h-4 w-4" />
+          Download Bill
+        </button>
+
+        <button
+          type="button"
+          onClick={() => void shareSettlementBill(settlement)}
+          className="flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+        >
+          <Share2 className="h-4 w-4" />
+          Share Bill
+        </button>
+      </div>
     </Modal>
   );
 }
