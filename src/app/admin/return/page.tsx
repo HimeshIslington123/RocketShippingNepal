@@ -18,12 +18,9 @@ import {
 
 import {
   AlertCircle,
-  CheckCircle2,
-  Clock3,
   PackageCheck,
   RefreshCw,
   Search,
-  Truck,
   X,
 } from "lucide-react";
 
@@ -67,9 +64,7 @@ function getCachedReturns(): ReturnRequest[] | null {
       Date.now() -
       Number(cachedTime);
 
-    if (
-      age > CACHE_DURATION
-    ) {
+    if (age > CACHE_DURATION) {
       return null;
     }
 
@@ -603,7 +598,10 @@ export default function ReturnsPage() {
       const currentStatus =
         selectedReturn.status;
 
+      // ------------------------------------------------------
       // REQUESTED
+      // ------------------------------------------------------
+
       if (
         currentStatus ===
         "REQUESTED"
@@ -628,7 +626,10 @@ export default function ReturnsPage() {
         }
       }
 
+      // ------------------------------------------------------
       // ASSIGNED
+      // ------------------------------------------------------
+
       if (
         currentStatus ===
         "ASSIGNED_TO_RIDER"
@@ -644,7 +645,10 @@ export default function ReturnsPage() {
         }
       }
 
+      // ------------------------------------------------------
       // PICKED UP
+      // ------------------------------------------------------
+
       if (
         currentStatus ===
         "PICKED_UP_FROM_CUSTOMER"
@@ -660,7 +664,10 @@ export default function ReturnsPage() {
         }
       }
 
+      // ------------------------------------------------------
       // IN WAREHOUSE
+      // ------------------------------------------------------
+
       if (
         currentStatus ===
         "IN_WAREHOUSE"
@@ -714,7 +721,10 @@ export default function ReturnsPage() {
         }
       }
 
+      // ------------------------------------------------------
       // OUT FOR RETURN
+      // ------------------------------------------------------
+
       if (
         currentStatus ===
         "OUT_FOR_RETURN"
@@ -738,6 +748,10 @@ export default function ReturnsPage() {
           return;
         }
       }
+
+      // ------------------------------------------------------
+      // UPDATE
+      // ------------------------------------------------------
 
       setUpdatingStatus(true);
 
@@ -865,6 +879,10 @@ export default function ReturnsPage() {
               ?.trackingNumber
               ?.toLowerCase() || "";
 
+          const shipmentId =
+            item.shipment?.id
+              ?.toLowerCase() || "";
+
           const vendor =
             item.shipment
               ?.vendor?.companyName
@@ -875,12 +893,24 @@ export default function ReturnsPage() {
               ?.receiverName
               ?.toLowerCase() || "";
 
+          const phone =
+            item.shipment
+              ?.receiverPhone
+              ?.toLowerCase() || "";
+
           const reason =
             item.reason
               ?.toLowerCase() || "";
 
+          const status =
+            item.status
+              ?.toLowerCase() || "";
+
           return (
             tracking.includes(
+              searchValue
+            ) ||
+            shipmentId.includes(
               searchValue
             ) ||
             vendor.includes(
@@ -889,7 +919,13 @@ export default function ReturnsPage() {
             customer.includes(
               searchValue
             ) ||
+            phone.includes(
+              searchValue
+            ) ||
             reason.includes(
+              searchValue
+            ) ||
+            status.includes(
               searchValue
             )
           );
@@ -902,48 +938,11 @@ export default function ReturnsPage() {
     ]);
 
   // ==========================================================
-  // SUMMARY
-  // ==========================================================
-
-  const totalReturns =
-    returns.length;
-
-  const requestedReturns =
-    returns.filter(
-      (item) =>
-        item.status ===
-        "REQUESTED"
-    ).length;
-
-  const warehouseReturns =
-    returns.filter(
-      (item) =>
-        item.status ===
-        "IN_WAREHOUSE"
-    ).length;
-
-  const completedReturns =
-    returns.filter(
-      (item) =>
-        item.status ===
-        "RETURNED_TO_VENDOR"
-    ).length;
-
-  const activeReturns =
-    returns.filter(
-      (item) =>
-        ![
-          "RETURNED_TO_VENDOR",
-          "CANCELLED",
-        ].includes(item.status)
-    ).length;
-
-  // ==========================================================
   // RETURN
   // ==========================================================
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen ">
       <div className="mx-auto max-w-[1600px] px-5 py-7 sm:px-7 lg:px-10">
 
         {/* ================================================== */}
@@ -1010,6 +1009,7 @@ export default function ReturnsPage() {
         {error && (
           <div className="mb-6 rounded-xl border border-red-200 bg-white">
             <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+
               <div className="flex items-start gap-3">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#fff1ef]">
                   <AlertCircle
@@ -1038,76 +1038,23 @@ export default function ReturnsPage() {
                 <RefreshCw size={14} />
                 Try again
               </button>
+
             </div>
           </div>
         )}
 
         {/* ================================================== */}
-        {/* KPI */}
-        {/* ================================================== */}
-
-        {loading &&
-        returns.length === 0 ? (
-          <MetricSkeleton />
-        ) : (
-          <div className="mb-7 overflow-hidden rounded-xl border border-[#e6e9ee] bg-white">
-            <div className="grid grid-cols-2 divide-x divide-y divide-[#edf0f3] lg:grid-cols-5 lg:divide-y-0">
-
-              <Metric
-                label="Total returns"
-                value={totalReturns}
-                icon={
-                  <PackageCheck size={17} />
-                }
-              />
-
-              <Metric
-                label="Awaiting assignment"
-                value={requestedReturns}
-                icon={
-                  <Clock3 size={17} />
-                }
-                accent="red"
-              />
-
-              <Metric
-                label="In warehouse"
-                value={warehouseReturns}
-                icon={
-                  <Truck size={17} />
-                }
-                accent="green"
-              />
-
-              <Metric
-                label="Active"
-                value={activeReturns}
-                icon={
-                  <RefreshCw size={17} />
-                }
-              />
-
-              <Metric
-                label="Completed"
-                value={completedReturns}
-                icon={
-                  <CheckCircle2 size={17} />
-                }
-                accent="green"
-              />
-            </div>
-          </div>
-        )}
-
-        {/* ================================================== */}
-        {/* CONTENT */}
+        {/* RETURN TABLE */}
         {/* ================================================== */}
 
         <div className="overflow-hidden rounded-xl border border-[#e6e9ee] bg-white">
 
+          {/* ================================================== */}
           {/* TOOLBAR */}
+          {/* ================================================== */}
 
           <div className="border-b border-[#edf0f3] px-5 py-4 sm:px-6">
+
             <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
 
               <div>
@@ -1130,7 +1077,9 @@ export default function ReturnsPage() {
 
               <div className="flex flex-col gap-3 sm:flex-row">
 
+                {/* ================================================== */}
                 {/* SEARCH */}
+                {/* ================================================== */}
 
                 <div className="relative">
                   <Search
@@ -1162,7 +1111,9 @@ export default function ReturnsPage() {
                   )}
                 </div>
 
+                {/* ================================================== */}
                 {/* STATUS */}
+                {/* ================================================== */}
 
                 <select
                   value={statusFilter}
@@ -1205,11 +1156,14 @@ export default function ReturnsPage() {
                     Cancelled
                   </option>
                 </select>
+
               </div>
             </div>
           </div>
 
+          {/* ================================================== */}
           {/* ACTIVE FILTER */}
+          {/* ================================================== */}
 
           {(search ||
             statusFilter !==
@@ -1261,10 +1215,13 @@ export default function ReturnsPage() {
               >
                 Clear all
               </button>
+
             </div>
           )}
 
+          {/* ================================================== */}
           {/* TABLE */}
+          {/* ================================================== */}
 
           <ReturnTable
             returns={filteredReturns}
@@ -1280,6 +1237,7 @@ export default function ReturnsPage() {
               openReturn
             }
           />
+
         </div>
       </div>
 
@@ -1292,122 +1250,58 @@ export default function ReturnsPage() {
           returnRequest={
             selectedReturn
           }
+
           riders={riders}
+
           ridersLoading={
             ridersLoading
           }
+
           selectedRiderId={
             selectedRiderId
           }
+
           setSelectedRiderId={
             setSelectedRiderId
           }
+
           assigningRider={
             assigningRider
           }
+
           assignError={
             assignError
           }
+
           assignMessage={
             assignMessage
           }
+
           updatingStatus={
             updatingStatus
           }
+
           statusError={
             statusError
           }
+
           statusMessage={
             statusMessage
           }
+
           onAssignRider={
             assignReturnRider
           }
+
           onUpdateStatus={
             updateReturnStatus
           }
+
           onClose={
             closeReturn
           }
         />
       )}
-    </div>
-  );
-}
-
-// ============================================================
-// METRIC
-// ============================================================
-
-function Metric({
-  label,
-  value,
-  icon,
-  accent = "navy",
-}: {
-  label: string;
-  value: number;
-  icon: React.ReactNode;
-  accent?: "navy" | "red" | "green";
-}) {
-  const iconClass =
-    accent === "red"
-      ? "bg-[#fff1ef] text-[#e23c2e]"
-      : accent === "green"
-      ? "bg-[#edf8f2] text-[#1e8449]"
-      : "bg-[#f1f4f7] text-[#0b1729]";
-
-  return (
-    <div className="group px-5 py-5 transition-colors hover:bg-[#fafbfc] sm:px-6">
-      <div className="flex items-start justify-between">
-
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#94a3b8]">
-            {label}
-          </p>
-
-          <p className="mt-2 text-[25px] font-bold tracking-[-0.03em] text-[#0b1729]">
-            {value}
-          </p>
-        </div>
-
-        <div
-          className={`flex h-9 w-9 items-center justify-center rounded-lg ${iconClass}`}
-        >
-          {icon}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ============================================================
-// METRIC SKELETON
-// ============================================================
-
-function MetricSkeleton() {
-  return (
-    <div className="mb-7 overflow-hidden rounded-xl border border-[#e6e9ee] bg-white">
-      <div className="grid grid-cols-2 divide-x divide-y divide-[#edf0f3] lg:grid-cols-5 lg:divide-y-0">
-        {Array.from({
-          length: 5,
-        }).map((_, index) => (
-          <div
-            key={index}
-            className="px-5 py-5 sm:px-6"
-          >
-            <div className="flex items-start justify-between">
-              <div className="w-full">
-                <div className="h-3 w-24 animate-pulse rounded bg-[#edf0f3]" />
-
-                <div className="mt-3 h-7 w-12 animate-pulse rounded bg-[#e7ebef]" />
-              </div>
-
-              <div className="h-9 w-9 shrink-0 animate-pulse rounded-lg bg-[#f1f4f7]" />
-            </div>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }

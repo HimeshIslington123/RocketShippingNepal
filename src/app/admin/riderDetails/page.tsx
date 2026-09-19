@@ -46,6 +46,8 @@ interface Rider {
     id: number;
     name: string;
     email: string;
+    role?: string;
+    isActive?: boolean;
   };
 }
 
@@ -63,14 +65,33 @@ interface RiderForm {
 
 /* ============================================================
    CACHE
-   - Survives SPA navigation
-   - Resets automatically on browser hard refresh
 ============================================================ */
 
 let riderCache: Rider[] | null = null;
 let riderRequest: Promise<Rider[]> | null = null;
 
+/* ============================================================
+   API URL
+============================================================ */
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+/* ============================================================
+   GET AUTH TOKEN
+============================================================ */
+
+function getToken(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  /*
+   * Change "token" here ONLY if your login code stores
+   * the JWT under another key such as "accessToken".
+   */
+
+  return localStorage.getItem("token");
+}
 
 /* ============================================================
    FETCH RIDERS
@@ -81,23 +102,56 @@ async function fetchRiders(force = false): Promise<Rider[]> {
     return riderCache;
   }
 
-  // Prevent duplicate requests from StrictMode/remounts
+  /* Prevent duplicate requests */
   if (riderRequest) {
     return riderRequest;
   }
 
   const request = (async () => {
-    const response = await fetch(`${API_URL}/api/rider`, {
-      cache: "no-store",
-    });
+    const token = getToken();
 
-    if (!response.ok) {
-      throw new Error("Failed to fetch riders");
+    if (!token) {
+      throw new Error(
+        "Authentication token not found. Please login again."
+      );
     }
 
-    const data = await response.json();
+    const response = await fetch(`${API_URL}/api/rider`, {
+      method: "GET",
+      cache: "no-store",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    });
 
-    const riders: Rider[] = Array.isArray(data) ? data : [];
+    /*
+     * Try to read backend response even when request fails.
+     * This gives us the actual backend error instead of only
+     * "Failed to fetch riders".
+     */
+
+    const data = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      throw new Error(
+        data?.message ||
+          `Failed to fetch riders (${response.status})`
+      );
+    }
+
+    /*
+     * Backend returns:
+     *
+     * {
+     *   success: true,
+     *   riders: [...]
+     * }
+     */
+
+    const riders: Rider[] = Array.isArray(data?.riders)
+      ? data.riders
+      : [];
 
     riderCache = riders;
 
@@ -132,7 +186,9 @@ function RidersSkeleton() {
 
             <div className="relative">
               <div className="h-4 w-24 rounded bg-gray-200" />
+
               <div className="mt-4 h-8 w-20 rounded bg-gray-200" />
+
               <div className="mt-2 h-3 w-32 rounded bg-gray-200" />
             </div>
           </div>
@@ -183,7 +239,8 @@ export default function RidersPage() {
   const [refreshing, setRefreshing] = useState(false);
 
   const [location, setLocation] = useState<Location | null>(null);
-  const [selectedRider, setSelectedRider] = useState<Rider | null>(null);
+  const [selectedRider, setSelectedRider] =
+    useState<Rider | null>(null);
 
   const [showModal, setShowModal] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -248,7 +305,9 @@ export default function RidersPage() {
   ========================================================== */
 
   useEffect(() => {
-    if (!success) return;
+    if (!success) {
+      return;
+    }
 
     const timer = setTimeout(() => {
       setSuccess("");
@@ -285,8 +344,12 @@ export default function RidersPage() {
 
     return riders.filter((rider) => {
       return (
-        rider.user?.name?.toLowerCase().includes(query) ||
-        rider.user?.email?.toLowerCase().includes(query) ||
+        rider.user?.name
+          ?.toLowerCase()
+          .includes(query) ||
+        rider.user?.email
+          ?.toLowerCase()
+          .includes(query) ||
         rider.phone?.toLowerCase().includes(query) ||
         String(rider.id).includes(query)
       );
@@ -299,7 +362,9 @@ export default function RidersPage() {
 
   const totalPages = Math.max(
     1,
-    Math.ceil(filteredRiders.length / ITEMS_PER_PAGE)
+    Math.ceil(
+      filteredRiders.length / ITEMS_PER_PAGE
+    )
   );
 
   const safeCurrentPage = Math.min(
@@ -351,22 +416,32 @@ export default function RidersPage() {
       setCreating(true);
       setError("");
 
+      const token = getToken();
+
+      if (!token) {
+        throw new Error(
+          "Authentication token not found. Please login again."
+        );
+      }
+
       const response = await fetch(
         `${API_URL}/api/rider`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify(form),
         }
       );
 
-      const data = await response.json();
+      const data = await response.json().catch(() => null);
 
       if (!response.ok) {
         throw new Error(
-          data.message || "Failed to create rider"
+          data?.message ||
+            `Failed to create rider (${response.status})`
         );
       }
 
@@ -383,7 +458,10 @@ export default function RidersPage() {
 
       setShowModal(false);
 
-      setSuccess("Rider created successfully.");
+      setSuccess(
+        data?.message ||
+          "Rider created successfully."
+      );
 
       /* Force fresh data */
       await loadRiders(true);
@@ -410,7 +488,9 @@ export default function RidersPage() {
       rider.longitude === null
     ) {
       setError(
-        `${rider.user?.name || "This rider"} does not have a location available.`
+        `${
+          rider.user?.name || "This rider"
+        } does not have a location available.`
       );
 
       return;
@@ -426,6 +506,7 @@ export default function RidersPage() {
     });
 
     /* Smooth scroll toward map */
+
     setTimeout(() => {
       document
         .getElementById("rider-location")
@@ -450,7 +531,9 @@ export default function RidersPage() {
   ========================================================== */
 
   const closeModal = () => {
-    if (creating) return;
+    if (creating) {
+      return;
+    }
 
     setShowModal(false);
 
@@ -467,8 +550,7 @@ export default function RidersPage() {
   ========================================================== */
 
   return (
-    <div className="min-h-screen  p-4 text-[#0b1729] sm:p-6 lg:p-8">
-
+    <div className="min-h-screen p-4 text-[#0b1729] sm:p-6 lg:p-8">
       {/* ======================================================
           GLOBAL SHIMMER
       ====================================================== */}
@@ -483,6 +565,7 @@ export default function RidersPage() {
             rgba(255, 255, 255, 0.7) 55%,
             transparent 75%
           );
+
           background-size: 250% 100%;
           animation: management-shimmer 1.7s linear infinite;
           pointer-events: none;
@@ -500,13 +583,11 @@ export default function RidersPage() {
       `}</style>
 
       <div className="mx-auto max-w-[1500px] space-y-6">
-
         {/* ====================================================
             HEADER
         ==================================================== */}
 
         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-
           <div>
             <div className="flex items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#0b1729] text-white shadow-sm">
@@ -519,14 +600,14 @@ export default function RidersPage() {
                 </h1>
 
                 <p className="mt-1 text-sm text-gray-500">
-                  Manage delivery riders and monitor their current locations.
+                  Manage delivery riders and monitor
+                  their current locations.
                 </p>
               </div>
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-
             {/* REFRESH */}
 
             <button
@@ -542,7 +623,9 @@ export default function RidersPage() {
                 }
               />
 
-              {refreshing ? "Refreshing..." : "Refresh"}
+              {refreshing
+                ? "Refreshing..."
+                : "Refresh"}
             </button>
 
             {/* ADD RIDER */}
@@ -556,9 +639,9 @@ export default function RidersPage() {
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#E23C2E] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#CE3122]"
             >
               <Plus size={18} />
+
               Add New Rider
             </button>
-
           </div>
         </div>
 
@@ -603,7 +686,7 @@ export default function RidersPage() {
         )}
 
         {/* ====================================================
-            LOADING SKELETON
+            LOADING
         ==================================================== */}
 
         {loading ? (
@@ -615,12 +698,10 @@ export default function RidersPage() {
             ================================================== */}
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-
               {/* TOTAL */}
 
               <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
                 <div className="flex items-center justify-between">
-
                   <div>
                     <p className="text-sm font-medium text-gray-500">
                       Total Riders
@@ -634,7 +715,6 @@ export default function RidersPage() {
                   <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#0b1729] text-white">
                     <Users size={20} />
                   </div>
-
                 </div>
               </div>
 
@@ -642,7 +722,6 @@ export default function RidersPage() {
 
               <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
                 <div className="flex items-center justify-between">
-
                   <div>
                     <p className="text-sm font-medium text-gray-500">
                       Available
@@ -656,7 +735,6 @@ export default function RidersPage() {
                   <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-green-50 text-green-600">
                     <CheckCircle2 size={20} />
                   </div>
-
                 </div>
               </div>
 
@@ -664,7 +742,6 @@ export default function RidersPage() {
 
               <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
                 <div className="flex items-center justify-between">
-
                   <div>
                     <p className="text-sm font-medium text-gray-500">
                       Unavailable
@@ -678,7 +755,6 @@ export default function RidersPage() {
                   <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100 text-gray-600">
                     <XCircle size={20} />
                   </div>
-
                 </div>
               </div>
 
@@ -686,7 +762,6 @@ export default function RidersPage() {
 
               <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
                 <div className="flex items-center justify-between">
-
                   <div>
                     <p className="text-sm font-medium text-gray-500">
                       With Location
@@ -700,10 +775,8 @@ export default function RidersPage() {
                   <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-50 text-[#E23C2E]">
                     <MapPin size={20} />
                   </div>
-
                 </div>
               </div>
-
             </div>
 
             {/* ==================================================
@@ -711,11 +784,8 @@ export default function RidersPage() {
             ================================================== */}
 
             <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-
                 <div className="relative w-full lg:max-w-md">
-
                   <Search
                     size={18}
                     className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
@@ -740,7 +810,6 @@ export default function RidersPage() {
                       <X size={17} />
                     </button>
                   )}
-
                 </div>
 
                 <p className="text-sm text-gray-500">
@@ -753,9 +822,7 @@ export default function RidersPage() {
                     ? ""
                     : "s"}
                 </p>
-
               </div>
-
             </div>
 
             {/* ==================================================
@@ -763,15 +830,10 @@ export default function RidersPage() {
             ================================================== */}
 
             <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-
               <div className="overflow-x-auto">
-
                 <table className="w-full min-w-[850px] text-sm">
-
                   <thead className="border-b border-gray-200 bg-gray-50">
-
                     <tr>
-
                       <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                         Rider
                       </th>
@@ -787,13 +849,10 @@ export default function RidersPage() {
                       <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                         Location
                       </th>
-
                     </tr>
-
                   </thead>
 
                   <tbody>
-
                     {paginatedRiders.length === 0 ? (
                       <tr>
                         <td
@@ -801,7 +860,6 @@ export default function RidersPage() {
                           className="px-6 py-16 text-center"
                         >
                           <div className="mx-auto flex max-w-sm flex-col items-center">
-
                             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-100 text-gray-400">
                               <Users size={24} />
                             </div>
@@ -815,7 +873,6 @@ export default function RidersPage() {
                                 ? "Try changing your search."
                                 : "There are no riders available yet."}
                             </p>
-
                           </div>
                         </td>
                       </tr>
@@ -825,21 +882,18 @@ export default function RidersPage() {
                           key={rider.id}
                           className="border-b border-gray-100 transition last:border-0 hover:bg-gray-50/80"
                         >
-
                           {/* RIDER */}
 
                           <td className="px-6 py-5">
-
                             <div className="flex items-center gap-3">
-
                               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#0b1729] text-sm font-bold text-white">
                                 {rider.user?.name
                                   ?.charAt(0)
-                                  ?.toUpperCase() || "R"}
+                                  ?.toUpperCase() ||
+                                  "R"}
                               </div>
 
                               <div className="min-w-0">
-
                                 <p className="truncate font-semibold text-[#0b1729]">
                                   {rider.user?.name ||
                                     "Unknown Rider"}
@@ -849,11 +903,8 @@ export default function RidersPage() {
                                   {rider.user?.email ||
                                     "No email"}
                                 </p>
-
                               </div>
-
                             </div>
-
                           </td>
 
                           {/* PHONE */}
@@ -865,7 +916,6 @@ export default function RidersPage() {
                           {/* STATUS */}
 
                           <td className="px-6 py-5">
-
                             <span
                               className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold ${
                                 rider.isAvailable
@@ -873,7 +923,6 @@ export default function RidersPage() {
                                   : "bg-gray-100 text-gray-600"
                               }`}
                             >
-
                               <span
                                 className={`h-1.5 w-1.5 rounded-full ${
                                   rider.isAvailable
@@ -885,57 +934,45 @@ export default function RidersPage() {
                               {rider.isAvailable
                                 ? "Available"
                                 : "Unavailable"}
-
                             </span>
-
                           </td>
 
                           {/* LOCATION */}
 
                           <td className="px-6 py-5">
-
                             <button
                               type="button"
                               onClick={() =>
                                 handleViewLocation(rider)
                               }
                               disabled={
-                                rider.latitude ===
-                                  null ||
-                                rider.longitude ===
-                                  null
+                                rider.latitude === null ||
+                                rider.longitude === null
                               }
                               className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3.5 py-2 text-sm font-medium text-[#0b1729] transition hover:border-[#E23C2E] hover:text-[#E23C2E] disabled:cursor-not-allowed disabled:opacity-40"
                             >
-
                               <MapPin size={16} />
 
                               {rider.latitude === null ||
                               rider.longitude === null
                                 ? "No Location"
                                 : "View Location"}
-
                             </button>
-
                           </td>
-
                         </tr>
                       ))
                     )}
-
                   </tbody>
-
                 </table>
-
               </div>
 
               {/* ==================================================
                   PAGINATION
               ================================================== */}
 
-              {filteredRiders.length > ITEMS_PER_PAGE && (
+              {filteredRiders.length >
+                ITEMS_PER_PAGE && (
                 <div className="flex flex-col gap-3 border-t border-gray-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-
                   <p className="text-sm text-gray-500">
                     Page{" "}
                     <span className="font-semibold text-[#0b1729]">
@@ -948,7 +985,6 @@ export default function RidersPage() {
                   </p>
 
                   <div className="flex items-center gap-2">
-
                     <button
                       type="button"
                       onClick={() =>
@@ -979,12 +1015,9 @@ export default function RidersPage() {
                     >
                       <ChevronRight size={17} />
                     </button>
-
                   </div>
-
                 </div>
               )}
-
             </div>
 
             {/* ==================================================
@@ -996,28 +1029,23 @@ export default function RidersPage() {
                 id="rider-location"
                 className="scroll-mt-6 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm"
               >
-
                 <div className="flex flex-col gap-4 border-b border-gray-200 p-5 sm:flex-row sm:items-center sm:justify-between">
-
                   <div className="flex items-center gap-3">
-
                     <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-50 text-[#E23C2E]">
                       <MapPin size={20} />
                     </div>
 
                     <div>
-
                       <h2 className="font-semibold text-[#0b1729]">
-                        {selectedRider.user?.name}'s Location
+                        {selectedRider.user?.name}'s
+                        Location
                       </h2>
 
                       <p className="mt-1 text-xs text-gray-500">
                         {location.latitude},{" "}
                         {location.longitude}
                       </p>
-
                     </div>
-
                   </div>
 
                   <button
@@ -1027,7 +1055,6 @@ export default function RidersPage() {
                   >
                     <X size={18} />
                   </button>
-
                 </div>
 
                 <div className="p-4 sm:p-5">
@@ -1036,13 +1063,10 @@ export default function RidersPage() {
                     longitude={location.longitude}
                   />
                 </div>
-
               </div>
             )}
-
           </>
         )}
-
       </div>
 
       {/* ======================================================
@@ -1061,21 +1085,16 @@ export default function RidersPage() {
             }
           }}
         >
-
           <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white shadow-2xl">
-
             {/* MODAL HEADER */}
 
             <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-200 bg-white px-6 py-5">
-
               <div className="flex items-center gap-3">
-
                 <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#0b1729] text-white">
                   <UserPlus size={20} />
                 </div>
 
                 <div>
-
                   <h2 className="text-lg font-bold text-[#0b1729]">
                     Add New Rider
                   </h2>
@@ -1083,9 +1102,7 @@ export default function RidersPage() {
                   <p className="text-xs text-gray-500">
                     Create a rider account.
                   </p>
-
                 </div>
-
               </div>
 
               <button
@@ -1096,7 +1113,6 @@ export default function RidersPage() {
               >
                 <X size={20} />
               </button>
-
             </div>
 
             {/* MODAL BODY */}
@@ -1105,26 +1121,22 @@ export default function RidersPage() {
               onSubmit={handleCreateRider}
               className="space-y-5 p-6"
             >
-
               {/* MODAL ERROR */}
 
               {error && (
                 <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-
                   <XCircle
                     size={18}
                     className="mt-0.5 shrink-0"
                   />
 
                   <span>{error}</span>
-
                 </div>
               )}
 
               {/* NAME */}
 
               <div>
-
                 <label className="mb-2 block text-sm font-semibold text-[#0b1729]">
                   Full Name
                 </label>
@@ -1139,13 +1151,11 @@ export default function RidersPage() {
                   autoComplete="name"
                   className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none transition placeholder:text-gray-400 focus:border-[#E23C2E] focus:bg-white focus:ring-2 focus:ring-[#E23C2E]/10"
                 />
-
               </div>
 
               {/* EMAIL */}
 
               <div>
-
                 <label className="mb-2 block text-sm font-semibold text-[#0b1729]">
                   Email
                 </label>
@@ -1160,13 +1170,11 @@ export default function RidersPage() {
                   autoComplete="email"
                   className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none transition placeholder:text-gray-400 focus:border-[#E23C2E] focus:bg-white focus:ring-2 focus:ring-[#E23C2E]/10"
                 />
-
               </div>
 
               {/* PASSWORD */}
 
               <div>
-
                 <label className="mb-2 block text-sm font-semibold text-[#0b1729]">
                   Password
                 </label>
@@ -1186,13 +1194,11 @@ export default function RidersPage() {
                 <p className="mt-1.5 text-xs text-gray-400">
                   Minimum 6 characters.
                 </p>
-
               </div>
 
               {/* PHONE */}
 
               <div>
-
                 <label className="mb-2 block text-sm font-semibold text-[#0b1729]">
                   Phone Number
                 </label>
@@ -1207,13 +1213,11 @@ export default function RidersPage() {
                   autoComplete="tel"
                   className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none transition placeholder:text-gray-400 focus:border-[#E23C2E] focus:bg-white focus:ring-2 focus:ring-[#E23C2E]/10"
                 />
-
               </div>
 
               {/* BUTTONS */}
 
               <div className="flex flex-col-reverse gap-3 border-t border-gray-100 pt-5 sm:flex-row">
-
                 <button
                   type="button"
                   onClick={closeModal}
@@ -1228,33 +1232,28 @@ export default function RidersPage() {
                   disabled={creating}
                   className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#E23C2E] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#CE3122] disabled:cursor-not-allowed disabled:opacity-60"
                 >
-
                   {creating ? (
                     <>
                       <Loader2
                         size={18}
                         className="animate-spin"
                       />
+
                       Creating...
                     </>
                   ) : (
                     <>
                       <UserPlus size={18} />
+
                       Create Rider
                     </>
                   )}
-
                 </button>
-
               </div>
-
             </form>
-
           </div>
-
         </div>
       )}
-
     </div>
   );
 }

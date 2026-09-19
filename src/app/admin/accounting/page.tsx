@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   ArrowDownRight,
@@ -11,6 +11,7 @@ import {
   ChevronRight,
   CircleDollarSign,
   Clock3,
+  Download,
   FileText,
   Loader2,
   RefreshCw,
@@ -30,11 +31,14 @@ type Tab =
   | "transactions"
   | "vendors"
   | "cod"
+  | "pending-cod"
   | "settlements";
 
 type Direction = "CREDIT" | "DEBIT";
 
-type SettlementDirection = "PAY_VENDOR" | "COLLECT_FROM_VENDOR";
+type SettlementDirection =
+  | "PAY_VENDOR"
+  | "COLLECT_FROM_VENDOR";
 
 type AccountingType =
   | "COD_COLLECTION"
@@ -52,12 +56,23 @@ type SettlementStatus =
   | "PAID"
   | "CANCELLED";
 
-type CodStatus = "PENDING" | "COLLECTED" | "FAILED" | "CANCELLED";
+type CodStatus =
+  | "PENDING"
+  | "COLLECTED"
+  | "FAILED"
+  | "CANCELLED";
+
+// ======================================================
+// DASHBOARD
+// ======================================================
 
 interface DashboardData {
   totalCredits: number;
   totalDebits: number;
   netBalance: number;
+
+  // Company earnings from vendor charges
+  companyEarnings?: number;
 
   cod: {
     pending: number;
@@ -77,6 +92,10 @@ interface DashboardData {
   };
 }
 
+// ======================================================
+// VENDOR
+// ======================================================
+
 interface Vendor {
   id: number;
   companyName: string;
@@ -91,14 +110,23 @@ interface Vendor {
 
   totalCredits: number;
   totalDebits: number;
+
   availableCredits: number;
   availableDebits: number;
+
   balance: number;
+
   direction: SettlementDirection | null;
+
   settlementAmount: number;
   outstandingSettlement: number;
+
   pendingSettlementCount: number;
 }
+
+// ======================================================
+// SHIPMENT
+// ======================================================
 
 interface ShipmentInfo {
   id: string;
@@ -108,26 +136,45 @@ interface ShipmentInfo {
   shippingCharge?: number;
 }
 
+// ======================================================
+// UNSETTLED ENTRY
+// ======================================================
+
 interface UnsettledEntry {
   id: string;
+
   type: AccountingType;
   direction: Direction;
+
   amount: number;
   allocatedAmount: number;
   remainingAmount: number;
+
   description: string | null;
+
   shipment: ShipmentInfo | null;
-  returnRequest: { id: string; reason: string } | null;
+
+  returnRequest: {
+    id: string;
+    reason: string;
+  } | null;
+
   createdAt: string;
 }
+
+// ======================================================
+// UNSETTLED DATA
+// ======================================================
 
 interface UnsettledData {
   vendor: {
     id: number;
     companyName: string;
   };
+
   credits: UnsettledEntry[];
   debits: UnsettledEntry[];
+
   summary: {
     totalCredits: number;
     totalDebits: number;
@@ -136,6 +183,10 @@ interface UnsettledData {
     settlementAmount: number;
   };
 }
+
+// ======================================================
+// ACCOUNTING ENTRY
+// ======================================================
 
 interface AccountingEntry {
   id: string;
@@ -148,11 +199,19 @@ interface AccountingEntry {
   shipment: ShipmentInfo | null;
 
   type: AccountingType;
+
   direction: Direction;
+
   amount: number;
+
   description: string | null;
+
   createdAt: string;
 }
+
+// ======================================================
+// COD
+// ======================================================
 
 interface CodCollection {
   id: string;
@@ -162,6 +221,7 @@ interface CodCollection {
     trackingNumber: string;
     receiverName: string;
     receiverPhone: string;
+
     codAmount: number;
 
     vendor: {
@@ -173,14 +233,44 @@ interface CodCollection {
   rider: {
     id: number;
     phone: string;
-    user: { name: string };
+
+    user: {
+      name: string;
+    };
   } | null;
 
   amount: number;
+
   status: CodStatus;
+
   collectedAt: string | null;
+
   createdAt: string;
 }
+
+// ======================================================
+// SETTLEMENT ITEM
+// ======================================================
+
+interface SettlementItem {
+  id: string;
+  amount: number;
+  createdAt: string;
+  accountingEntry?: {
+    id: string;
+    type: AccountingType;
+    direction: Direction;
+    amount: number;
+    description: string | null;
+    shipment?: {
+      trackingNumber: string;
+    } | null;
+  } | null;
+}
+
+// ======================================================
+// SETTLEMENT
+// ======================================================
 
 interface Settlement {
   id: string;
@@ -195,20 +285,30 @@ interface Settlement {
   totalShippingCharge: number;
   totalReturnCharge: number;
   totalOtherCharges: number;
+
   totalCredits: number;
   totalDebits: number;
+
   netPayable: number;
 
   direction: SettlementDirection;
+
   status: SettlementStatus;
 
   paidAt: string | null;
+
   paymentReference: string | null;
+
   notes: string | null;
 
   createdAt: string;
   updatedAt: string;
+  items?: SettlementItem[];
 }
+
+// ======================================================
+// PAGINATION
+// ======================================================
 
 interface PageInfo {
   page: number;
@@ -218,22 +318,49 @@ interface PageInfo {
 }
 
 // ======================================================
+// PAGE CACHE
+//
+// This lives OUTSIDE the React component intentionally.
+// It survives Next.js client-side navigation away from this page.
+// A browser refresh clears the module and therefore fetches fresh data.
+// ======================================================
+
+interface PageCache {
+  dashboard: DashboardData | null;
+  entries: AccountingEntry[];
+  vendors: Vendor[];
+  codCollections: CodCollection[];
+  settlements: Settlement[];
+}
+
+let pageCache: PageCache | null = null;
+let pageRequest: Promise<PageCache> | null = null;
+
+// ======================================================
 // HELPERS
 // ======================================================
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
-const formatMoney = (amount: number) =>
+const formatMoney = (amount: number | null | undefined) =>
   new Intl.NumberFormat("en-NP", {
     style: "currency",
     currency: "NPR",
     maximumFractionDigits: 2,
-  }).format(amount || 0);
+  }).format(Number(amount || 0));
 
-const formatDate = (value: string | null | undefined) => {
+const formatDate = (
+  value: string | null | undefined
+) => {
   if (!value) return "—";
 
-  return new Date(value).toLocaleDateString("en-NP", {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "—";
+  }
+
+  return date.toLocaleDateString("en-NP", {
     year: "numeric",
     month: "short",
     day: "numeric",
@@ -241,66 +368,117 @@ const formatDate = (value: string | null | undefined) => {
 };
 
 const getToken = () => {
-  if (typeof window === "undefined") return null;
+  if (typeof window === "undefined") {
+    return null;
+  }
+
   return localStorage.getItem("token");
 };
 
-const getErrorMessage = async (response: Response) => {
+const getErrorMessage = async (
+  response: Response
+) => {
   try {
     const data = await response.json();
-    return data?.message || "Something went wrong";
+
+    return (
+      data?.message ||
+      data?.error ||
+      "Something went wrong"
+    );
   } catch {
     return "Something went wrong";
   }
 };
 
-const getTypeLabel = (type: AccountingType) => {
+// ======================================================
+// ACCOUNTING TYPE LABEL
+// ======================================================
+
+const getTypeLabel = (
+  type: AccountingType
+) => {
   switch (type) {
     case "COD_COLLECTION":
       return "COD Collection";
+
     case "SHIPPING_CHARGE":
       return "Shipping Charge";
+
     case "RETURN_CHARGE":
       return "Return Charge";
+
     case "PICKUP_CHARGE":
       return "Pickup Charge";
+
     case "STORAGE_CHARGE":
       return "Storage Charge";
+
     case "OTHER_CHARGE":
       return "Other Charge";
+
     case "REFUND":
       return "Refund";
+
     case "VENDOR_SETTLEMENT":
       return "Vendor Settlement";
+
     default:
       return type;
   }
 };
 
+// ======================================================
+// DIRECTION LABEL
+// ======================================================
+
 const getDirectionLabel = (
-  direction: SettlementDirection | null | undefined
+  direction:
+    | SettlementDirection
+    | null
+    | undefined
 ) => {
-  if (direction === "PAY_VENDOR") return "Pay vendor";
-  if (direction === "COLLECT_FROM_VENDOR") return "Collect from vendor";
+  if (direction === "PAY_VENDOR") {
+    return "Pay vendor";
+  }
+
+  if (direction === "COLLECT_FROM_VENDOR") {
+    return "Collect from vendor";
+  }
+
   return "Settled";
 };
 
-const getStatusClasses = (status: string) => {
+// ======================================================
+// STATUS
+// ======================================================
+
+const getStatusClasses = (
+  status: string
+) => {
   switch (status) {
     case "PAID":
     case "COLLECTED":
       return "bg-emerald-50 text-emerald-700 border-emerald-200";
+
     case "PROCESSING":
       return "bg-blue-50 text-blue-700 border-blue-200";
+
     case "PENDING":
       return "bg-amber-50 text-amber-700 border-amber-200";
+
     case "FAILED":
     case "CANCELLED":
       return "bg-red-50 text-red-700 border-red-200";
+
     default:
       return "bg-slate-50 text-slate-600 border-slate-200";
   }
 };
+
+// ======================================================
+// EMPTY PAGE
+// ======================================================
 
 const emptyPage: PageInfo = {
   page: 1,
@@ -318,67 +496,122 @@ export default function AdminAccountingPage() {
   // STATE
   // ====================================================
 
-  const [activeTab, setActiveTab] = useState<Tab>("overview");
+  const [activeTab, setActiveTab] =
+    useState<Tab>("overview");
 
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState("");
+  const [loading, setLoading] =
+    useState(!pageCache);
 
-  const [dashboard, setDashboard] = useState<DashboardData | null>(null);
-  const [entries, setEntries] = useState<AccountingEntry[]>([]);
-  const [vendors, setVendors] = useState<Vendor[]>([]);
-  const [codCollections, setCodCollections] = useState<CodCollection[]>([]);
-  const [settlements, setSettlements] = useState<Settlement[]>([]);
+  const [refreshing, setRefreshing] =
+    useState(false);
 
-  const [entriesPage, setEntriesPage] = useState<PageInfo>(emptyPage);
-  const [codPage, setCodPage] = useState<PageInfo>(emptyPage);
-  const [settlementsPage, setSettlementsPage] = useState<PageInfo>(emptyPage);
+  const [error, setError] =
+    useState("");
 
-  // Filters
+  const [dashboard, setDashboard] =
+    useState<DashboardData | null>(null);
 
-  const [entrySearch, setEntrySearch] = useState("");
-  const [entryType, setEntryType] = useState("");
-  const [entryDirection, setEntryDirection] = useState("");
-  const [entryVendorId, setEntryVendorId] = useState("");
+  const [entries, setEntries] =
+    useState<AccountingEntry[]>([]);
 
-  const [codStatus, setCodStatus] = useState("");
-  const [codVendorId, setCodVendorId] = useState("");
+  const [vendors, setVendors] =
+    useState<Vendor[]>([]);
 
-  const [settlementStatus, setSettlementStatus] = useState("");
-  const [settlementVendorId, setSettlementVendorId] = useState("");
+  const [codCollections, setCodCollections] =
+    useState<CodCollection[]>([]);
 
-  // Modals
+  const [settlements, setSettlements] =
+    useState<Settlement[]>([]);
 
-  const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
+
+
+
+  // ====================================================
+  // FILTERS
+  // ====================================================
+
+  const [entrySearch, setEntrySearch] =
+    useState("");
+
+  const [entryType, setEntryType] =
+    useState("");
+
+  const [entryDirection, setEntryDirection] =
+    useState("");
+
+  const [entryVendorId, setEntryVendorId] =
+    useState("");
+
+  const [codStatus, setCodStatus] =
+    useState("");
+
+  const [codVendorId, setCodVendorId] =
+    useState("");
+
+  const [settlementStatus, setSettlementStatus] =
+    useState("");
+
+  const [settlementVendorId, setSettlementVendorId] =
+    useState("");
+
+  // ====================================================
+  // MODALS
+  // ====================================================
+
+  const [selectedVendor, setSelectedVendor] =
+    useState<Vendor | null>(null);
+
   const [selectedSettlement, setSelectedSettlement] =
     useState<Settlement | null>(null);
 
-  const [showCreateSettlement, setShowCreateSettlement] = useState(false);
-  const [unsettled, setUnsettled] = useState<UnsettledData | null>(null);
-  const [unsettledLoading, setUnsettledLoading] = useState(false);
-  const [unsettledError, setUnsettledError] = useState("");
-  const [selectedEntryIds, setSelectedEntryIds] = useState<string[]>([]);
-  const [settlementNotes, setSettlementNotes] = useState("");
+  const [billSettlement, setBillSettlement] =
+    useState<Settlement | null>(null);
 
-  const [paymentReference, setPaymentReference] = useState("");
-  const [paymentNotes, setPaymentNotes] = useState("");
+  const [showCreateSettlement, setShowCreateSettlement] =
+    useState(false);
 
-  const [actionLoading, setActionLoading] = useState(false);
+  const [unsettled, setUnsettled] =
+    useState<UnsettledData | null>(null);
+
+  const [unsettledLoading, setUnsettledLoading] =
+    useState(false);
+
+  const [unsettledError, setUnsettledError] =
+    useState("");
+
+  const [selectedEntryIds, setSelectedEntryIds] =
+    useState<string[]>([]);
+
+  const [settlementNotes, setSettlementNotes] =
+    useState("");
+
+  const [paymentReference, setPaymentReference] =
+    useState("");
+
+  const [paymentNotes, setPaymentNotes] =
+    useState("");
+
+  const [actionLoading, setActionLoading] =
+    useState(false);
 
   // ====================================================
-  // API HELPER
+  // API
   // ====================================================
 
   const apiFetch = useCallback(
-    async (endpoint: string, options: RequestInit = {}) => {
+    async (
+      endpoint: string,
+      options: RequestInit = {}
+    ) => {
       const token = getToken();
 
       const response = await fetch(`${API_URL}${endpoint}`, {
         ...options,
-
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(token
+            ? { Authorization: `Bearer ${token}` }
+            : {}),
           ...(options.headers || {}),
         },
       });
@@ -393,103 +626,113 @@ export default function AdminAccountingPage() {
   );
 
   // ====================================================
-  // FETCHERS
+  // FETCH ALL DATA — ONE GET BATCH + PERSISTENT PAGE CACHE
+  //
+  // This is the important part: after the first successful load,
+  // navigating away and coming back to this page uses pageCache.
+  // No GET request is made again.
+  // A browser refresh clears the module cache, so GETs run once again.
+  // force=true is used only by the explicit Refresh button.
   // ====================================================
 
-  const fetchDashboard = useCallback(async () => {
-    const response = await apiFetch("/api/admin/accounting/dashboard");
-    setDashboard(response.data);
-  }, [apiFetch]);
+  const fetchAllData = useCallback(
+    async (force = false): Promise<PageCache> => {
+      if (!force && pageCache) {
+        return pageCache;
+      }
 
-  const fetchEntries = useCallback(
-    async (page = 1) => {
-      const params = new URLSearchParams();
+      if (pageRequest) {
+        return pageRequest;
+      }
 
-      params.set("page", String(page));
-      params.set("limit", "15");
+      if (force) {
+        pageCache = null;
+      }
 
-      if (entrySearch.trim()) params.set("search", entrySearch.trim());
-      if (entryType) params.set("type", entryType);
-      if (entryDirection) params.set("direction", entryDirection);
-      if (entryVendorId) params.set("vendorId", entryVendorId);
+      const request = (async () => {
+        const [
+          dashboardResponse,
+          entriesResponse,
+          vendorsResponse,
+          codResponse,
+          settlementsResponse,
+        ] = await Promise.all([
+          apiFetch("/api/admin/accounting/dashboard"),
+          apiFetch("/api/admin/accounting/entries?page=1&limit=1000"),
+          apiFetch("/api/admin/accounting/vendors"),
+          apiFetch("/api/admin/accounting/cod?page=1&limit=1000"),
+          apiFetch("/api/admin/accounting/settlements?page=1&limit=1000"),
+        ]);
 
-      const response = await apiFetch(
-        `/api/admin/accounting/entries?${params.toString()}`
-      );
+        const result: PageCache = {
+          dashboard: dashboardResponse?.data || null,
+          entries: Array.isArray(entriesResponse?.data)
+            ? entriesResponse.data
+            : [],
+          vendors: Array.isArray(vendorsResponse?.data)
+            ? vendorsResponse.data
+            : [],
+          codCollections: Array.isArray(codResponse?.data)
+            ? codResponse.data
+            : [],
+          settlements: Array.isArray(settlementsResponse?.data)
+            ? settlementsResponse.data
+            : [],
+        };
 
-      setEntries(response.data || []);
-      setEntriesPage(response.pagination || emptyPage);
+        pageCache = result;
+        return result;
+      })();
+
+      pageRequest = request;
+
+      try {
+        return await request;
+      } finally {
+        if (pageRequest === request) {
+          pageRequest = null;
+        }
+      }
     },
-    [apiFetch, entrySearch, entryType, entryDirection, entryVendorId]
+    [apiFetch]
   );
 
-  const fetchVendors = useCallback(async () => {
-    const response = await apiFetch("/api/admin/accounting/vendors");
-    setVendors(response.data || []);
-  }, [apiFetch]);
-
-  const fetchCod = useCallback(
-    async (page = 1) => {
-      const params = new URLSearchParams();
-
-      params.set("page", String(page));
-      params.set("limit", "15");
-
-      if (codStatus) params.set("status", codStatus);
-      if (codVendorId) params.set("vendorId", codVendorId);
-
-      const response = await apiFetch(
-        `/api/admin/accounting/cod?${params.toString()}`
-      );
-
-      setCodCollections(response.data || []);
-      setCodPage(response.pagination || emptyPage);
-    },
-    [apiFetch, codStatus, codVendorId]
-  );
-
-  const fetchSettlements = useCallback(
-    async (page = 1) => {
-      const params = new URLSearchParams();
-
-      params.set("page", String(page));
-      params.set("limit", "15");
-
-      if (settlementStatus) params.set("status", settlementStatus);
-      if (settlementVendorId) params.set("vendorId", settlementVendorId);
-
-      const response = await apiFetch(
-        `/api/admin/accounting/settlements?${params.toString()}`
-      );
-
-      setSettlements(response.data || []);
-      setSettlementsPage(response.pagination || emptyPage);
-    },
-    [apiFetch, settlementStatus, settlementVendorId]
-  );
+  const applyPageCache = useCallback((data: PageCache) => {
+    setDashboard(data.dashboard);
+    setEntries(data.entries);
+    setVendors(data.vendors);
+    setCodCollections(data.codCollections);
+    setSettlements(data.settlements);
+  }, []);
 
   // ====================================================
   // INITIAL LOAD
+  //
+  // If pageCache exists, this does ZERO GET requests.
   // ====================================================
 
-  const loadAll = useCallback(
-    async (showSpinner = true) => {
-      try {
-        if (showSpinner) setLoading(true);
-        else setRefreshing(true);
+  const initialLoadRef = useRef(false);
 
+  useEffect(() => {
+    if (initialLoadRef.current) return;
+    initialLoadRef.current = true;
+
+    const run = async () => {
+      try {
         setError("");
 
-        await Promise.all([
-          fetchDashboard(),
-          fetchEntries(1),
-          fetchVendors(),
-          fetchCod(1),
-          fetchSettlements(1),
-        ]);
+        const cached = pageCache;
+        if (cached) {
+          applyPageCache(cached);
+          setLoading(false);
+          return;
+        }
+
+        setLoading(true);
+        const data = await fetchAllData(false);
+        applyPageCache(data);
       } catch (err) {
         console.error(err);
-
         setError(
           err instanceof Error
             ? err.message
@@ -497,309 +740,501 @@ export default function AdminAccountingPage() {
         );
       } finally {
         setLoading(false);
-        setRefreshing(false);
       }
-    },
-    [fetchDashboard, fetchEntries, fetchVendors, fetchCod, fetchSettlements]
-  );
+    };
 
-  useEffect(() => {
-    loadAll();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    void run();
+  }, [applyPageCache, fetchAllData]);
+
+  // ====================================================
+  // REFRESH — INTENTIONALLY FETCHES GET DATA AGAIN
+  // ====================================================
 
   const handleRefresh = async () => {
-    await loadAll(false);
+    try {
+      setRefreshing(true);
+      setError("");
+      const data = await fetchAllData(true);
+      applyPageCache(data);
+    } catch (err) {
+      console.error(err);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to refresh accounting data"
+      );
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   // ====================================================
-  // FILTER EFFECTS
+  // CLIENT-SIDE FILTERING — NO API CALLS
   // ====================================================
 
-  useEffect(() => {
-    if (activeTab !== "transactions") return;
+  const filteredEntries = useMemo(() => {
+    const search = entrySearch.trim().toLowerCase();
 
-    const timeout = setTimeout(() => {
-      fetchEntries(1).catch(console.error);
-    }, 350);
+    return entries.filter((entry) => {
+      const matchesSearch =
+        !search ||
+        [
+          entry.vendor?.companyName,
+          entry.shipment?.trackingNumber,
+          entry.shipment?.receiverName,
+          entry.description,
+          getTypeLabel(entry.type),
+        ].some((value) =>
+          String(value || "").toLowerCase().includes(search)
+        );
 
-    return () => clearTimeout(timeout);
-  }, [
-    activeTab,
-    entrySearch,
-    entryType,
-    entryDirection,
-    entryVendorId,
-    fetchEntries,
-  ]);
+      const matchesType = !entryType || entry.type === entryType;
+      const matchesDirection =
+        !entryDirection || entry.direction === entryDirection;
+      const matchesVendor =
+        !entryVendorId ||
+        String(entry.vendor?.id) === String(entryVendorId);
 
-  useEffect(() => {
-    if (activeTab !== "cod") return;
-    fetchCod(1).catch(console.error);
-  }, [activeTab, codStatus, codVendorId, fetchCod]);
+      return (
+        matchesSearch &&
+        matchesType &&
+        matchesDirection &&
+        matchesVendor
+      );
+    });
+  }, [entries, entrySearch, entryType, entryDirection, entryVendorId]);
 
-  useEffect(() => {
-    if (activeTab !== "settlements") return;
-    fetchSettlements(1).catch(console.error);
-  }, [activeTab, settlementStatus, settlementVendorId, fetchSettlements]);
+  const filteredCodCollections = useMemo(() => {
+    return codCollections.filter((collection) => {
+      const matchesStatus =
+        !codStatus || collection.status === codStatus;
+      const matchesVendor =
+        !codVendorId ||
+        String(collection.shipment?.vendor?.id) === String(codVendorId);
+
+      return matchesStatus && matchesVendor;
+    });
+  }, [codCollections, codStatus, codVendorId]);
+
+  const pendingCodCollections = useMemo(
+    () => codCollections.filter((collection) => collection.status === "PENDING"),
+    [codCollections]
+  );
+
+  const filteredSettlements = useMemo(() => {
+    return settlements.filter((settlement) => {
+      const matchesStatus =
+        !settlementStatus || settlement.status === settlementStatus;
+      const matchesVendor =
+        !settlementVendorId ||
+        String(settlement.vendor?.id) === String(settlementVendorId);
+
+      return matchesStatus && matchesVendor;
+    });
+  }, [settlements, settlementStatus, settlementVendorId]);
 
   // ====================================================
   // OPEN SETTLEMENT BUILDER
   // ====================================================
 
-  const openSettlementBuilder = async (vendor: Vendor) => {
-    setSelectedVendor(vendor);
-    setShowCreateSettlement(true);
-    setSettlementNotes("");
-    setUnsettled(null);
-    setUnsettledError("");
-    setSelectedEntryIds([]);
-    setUnsettledLoading(true);
+  const openSettlementBuilder =
+    async (
+      vendor: Vendor
+    ) => {
+      setSelectedVendor(vendor);
 
-    try {
-      const response = await apiFetch(
-        `/api/admin/accounting/vendors/${vendor.id}/unsettled`
+      setShowCreateSettlement(
+        true
       );
 
-      const data: UnsettledData = response.data;
+      setSettlementNotes("");
 
-      setUnsettled(data);
+      setUnsettled(null);
 
-      // Everything unsettled is selected by default.
-      setSelectedEntryIds([
-        ...data.credits.map((entry) => entry.id),
-        ...data.debits.map((entry) => entry.id),
-      ]);
-    } catch (err) {
-      setUnsettledError(
-        err instanceof Error ? err.message : "Failed to load vendor entries"
-      );
-    } finally {
-      setUnsettledLoading(false);
-    }
-  };
+      setUnsettledError("");
 
-  const closeSettlementBuilder = () => {
-    setShowCreateSettlement(false);
-    setUnsettled(null);
-    setUnsettledError("");
-    setSelectedEntryIds([]);
-    setSettlementNotes("");
-  };
+      setSelectedEntryIds([]);
 
-  const toggleEntry = (id: string) => {
-    setSelectedEntryIds((current) =>
-      current.includes(id)
-        ? current.filter((value) => value !== id)
-        : [...current, id]
+      setUnsettledLoading(true);
+
+      try {
+        const response =
+          await apiFetch(
+            `/api/admin/accounting/vendors/${vendor.id}/unsettled`
+          );
+
+        const data: UnsettledData =
+          response.data;
+
+        setUnsettled(data);
+
+        setSelectedEntryIds([
+          ...data.credits.map(
+            (entry) => entry.id
+          ),
+
+          ...data.debits.map(
+            (entry) => entry.id
+          ),
+        ]);
+      } catch (err) {
+        setUnsettledError(
+          err instanceof Error
+            ? err.message
+            : "Failed to load vendor entries"
+        );
+      } finally {
+        setUnsettledLoading(false);
+      }
+    };
+
+  // ====================================================
+  // CLOSE BUILDER
+  // ====================================================
+
+  const closeSettlementBuilder =
+    () => {
+      setShowCreateSettlement(false);
+
+      setUnsettled(null);
+
+      setUnsettledError("");
+
+      setSelectedEntryIds([]);
+
+      setSettlementNotes("");
+    };
+
+  // ====================================================
+  // TOGGLE ENTRY
+  // ====================================================
+
+  const toggleEntry = (
+    id: string
+  ) => {
+    setSelectedEntryIds(
+      (current) =>
+        current.includes(id)
+          ? current.filter(
+              (value) =>
+                value !== id
+            )
+          : [
+              ...current,
+              id,
+            ]
     );
   };
 
-  const allUnsettledEntries = useMemo(() => {
-    if (!unsettled) return [] as UnsettledEntry[];
-    return [...unsettled.credits, ...unsettled.debits];
-  }, [unsettled]);
+  // ====================================================
+  // ALL UNSETTLED
+  // ====================================================
 
-  // Live totals for whatever is ticked right now.
-  const selection = useMemo(() => {
-    let credits = 0;
-    let debits = 0;
+  const allUnsettledEntries =
+    useMemo(() => {
+      if (!unsettled) {
+        return [] as UnsettledEntry[];
+      }
 
-    for (const entry of allUnsettledEntries) {
-      if (!selectedEntryIds.includes(entry.id)) continue;
+      return [
+        ...unsettled.credits,
+        ...unsettled.debits,
+      ];
+    }, [unsettled]);
 
-      if (entry.direction === "CREDIT") credits += entry.remainingAmount;
-      else debits += entry.remainingAmount;
-    }
+  // ====================================================
+  // LIVE SELECTION
+  // ====================================================
 
-    credits = Math.round(credits * 100) / 100;
-    debits = Math.round(debits * 100) / 100;
+  const selection =
+    useMemo(() => {
+      let credits = 0;
+      let debits = 0;
 
-    const net = Math.round((credits - debits) * 100) / 100;
+      for (const entry of allUnsettledEntries) {
+        if (
+          !selectedEntryIds.includes(
+            entry.id
+          )
+        ) {
+          continue;
+        }
 
-    return {
-      credits,
-      debits,
-      net,
-      amount: Math.abs(net),
-      direction:
-        net > 0
-          ? ("PAY_VENDOR" as SettlementDirection)
-          : net < 0
-            ? ("COLLECT_FROM_VENDOR" as SettlementDirection)
-            : null,
-      count: selectedEntryIds.length,
-    };
-  }, [allUnsettledEntries, selectedEntryIds]);
+        if (
+          entry.direction ===
+          "CREDIT"
+        ) {
+          credits +=
+            entry.remainingAmount;
+        } else {
+          debits +=
+            entry.remainingAmount;
+        }
+      }
+
+      credits =
+        Math.round(
+          credits * 100
+        ) / 100;
+
+      debits =
+        Math.round(
+          debits * 100
+        ) / 100;
+
+      const net =
+        Math.round(
+          (credits - debits) *
+            100
+        ) / 100;
+
+      return {
+        credits,
+        debits,
+        net,
+
+        amount: Math.abs(net),
+
+        direction:
+          net > 0
+            ? ("PAY_VENDOR" as SettlementDirection)
+            : net < 0
+              ? ("COLLECT_FROM_VENDOR" as SettlementDirection)
+              : null,
+
+        count:
+          selectedEntryIds.length,
+      };
+    }, [
+      allUnsettledEntries,
+      selectedEntryIds,
+    ]);
 
   // ====================================================
   // CREATE SETTLEMENT
   // ====================================================
 
-  const handleCreateSettlement = async () => {
-    if (!selectedVendor || !unsettled) return;
+  const handleCreateSettlement =
+    async () => {
+      if (
+        !selectedVendor ||
+        !unsettled
+      ) {
+        return;
+      }
 
-    if (selection.count === 0) {
-      alert("Select at least one entry.");
-      return;
-    }
+      if (
+        selection.count === 0
+      ) {
+        alert(
+          "Select at least one entry."
+        );
 
-    if (selection.net === 0) {
-      alert("Selected entries cancel out to zero. Adjust the selection.");
-      return;
-    }
+        return;
+      }
 
-    const items = allUnsettledEntries
-      .filter((entry) => selectedEntryIds.includes(entry.id))
-      .map((entry) => ({
-        accountingEntryId: entry.id,
-        amount: entry.remainingAmount,
-      }));
+      if (
+        selection.net === 0
+      ) {
+        alert(
+          "Selected entries cancel out to zero. Adjust the selection."
+        );
 
-    try {
-      setActionLoading(true);
+        return;
+      }
 
-      await apiFetch("/api/admin/accounting/settlements", {
-        method: "POST",
+      const items =
+        allUnsettledEntries
+          .filter((entry) =>
+            selectedEntryIds.includes(
+              entry.id
+            )
+          )
+          .map((entry) => ({
+            accountingEntryId:
+              entry.id,
 
-        body: JSON.stringify({
-          vendorId: selectedVendor.id,
-          items,
-          notes: settlementNotes || null,
-        }),
-      });
+            amount:
+              entry.remainingAmount,
+          }));
 
-      closeSettlementBuilder();
-      setSelectedVendor(null);
+      try {
+        setActionLoading(true);
 
-      await Promise.all([
-        fetchDashboard(),
-        fetchVendors(),
-        fetchSettlements(1),
-      ]);
+        await apiFetch(
+          "/api/admin/accounting/settlements",
+          {
+            method: "POST",
 
-      setActiveTab("settlements");
-    } catch (err) {
-      alert(
-        err instanceof Error ? err.message : "Failed to create settlement"
-      );
-    } finally {
-      setActionLoading(false);
-    }
-  };
+            body: JSON.stringify({
+              vendorId:
+                selectedVendor.id,
+
+              items,
+
+              notes:
+                settlementNotes ||
+                null,
+            }),
+          }
+        );
+
+        closeSettlementBuilder();
+
+        setSelectedVendor(null);
+
+        // Do not refetch here.
+        // The page intentionally reloads accounting GET data only on initial
+        // load or when the user explicitly presses Refresh/browser refresh.
+        setActiveTab("settlements");
+      } catch (err) {
+        alert(
+          err instanceof Error
+            ? err.message
+            : "Failed to create settlement"
+        );
+      } finally {
+        setActionLoading(false);
+      }
+    };
 
   // ====================================================
-  // PROCESS / PAY / CANCEL
+  // PROCESS SETTLEMENT
   // ====================================================
 
-  const handleProcessSettlement = async (settlement: Settlement) => {
-    if (
-      !confirm(
-        `Move settlement for ${settlement.vendor.companyName} to processing?`
-      )
-    ) {
-      return;
-    }
+  const handleProcessSettlement =
+    async (
+      settlement: Settlement
+    ) => {
+      if (
+        !confirm(
+          `Move settlement for ${settlement.vendor.companyName} to processing?`
+        )
+      ) {
+        return;
+      }
 
-    try {
-      setActionLoading(true);
+      try {
+        setActionLoading(true);
 
-      await apiFetch(
-        `/api/admin/accounting/settlements/${settlement.id}/process`,
-        { method: "PATCH" }
-      );
+        await apiFetch(
+          `/api/admin/accounting/settlements/${settlement.id}/process`,
+          {
+            method: "PATCH",
+          }
+        );
 
-      await Promise.all([
-        fetchDashboard(),
-        fetchSettlements(settlementsPage.page),
-      ]);
-    } catch (err) {
-      alert(
-        err instanceof Error ? err.message : "Failed to process settlement"
-      );
-    } finally {
-      setActionLoading(false);
-    }
-  };
+        // Do not refetch. The updated server state will be visible after
+        // an explicit Refresh or browser refresh.
+      } catch (err) {
+        alert(
+          err instanceof Error
+            ? err.message
+            : "Failed to process settlement"
+        );
+      } finally {
+        setActionLoading(false);
+      }
+    };
 
-  const handlePaySettlement = async () => {
-    if (!selectedSettlement) return;
+  // ====================================================
+  // PAY / COLLECT
+  // ====================================================
 
-    try {
-      setActionLoading(true);
+  const handlePaySettlement =
+    async () => {
+      if (
+        !selectedSettlement
+      ) {
+        return;
+      }
 
-      await apiFetch(
-        `/api/admin/accounting/settlements/${selectedSettlement.id}/pay`,
-        {
-          method: "PATCH",
+      try {
+        setActionLoading(true);
 
-          body: JSON.stringify({
-            paymentReference: paymentReference || null,
-            notes: paymentNotes || null,
-          }),
-        }
-      );
+        await apiFetch(
+          `/api/admin/accounting/settlements/${selectedSettlement.id}/pay`,
+          {
+            method: "PATCH",
 
-      setSelectedSettlement(null);
-      setPaymentReference("");
-      setPaymentNotes("");
+            body: JSON.stringify({
+              paymentReference:
+                paymentReference ||
+                null,
 
-      await Promise.all([
-        fetchDashboard(),
-        fetchSettlements(settlementsPage.page),
-        fetchEntries(1),
-        fetchVendors(),
-      ]);
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to pay settlement");
-    } finally {
-      setActionLoading(false);
-    }
-  };
+              notes:
+                paymentNotes ||
+                null,
+            }),
+          }
+        );
 
-  const handleCancelSettlement = async (settlement: Settlement) => {
-    if (!confirm(`Cancel settlement for ${settlement.vendor.companyName}?`)) {
-      return;
-    }
+        setSelectedSettlement(
+          null
+        );
 
-    try {
-      setActionLoading(true);
+        setPaymentReference("");
 
-      await apiFetch(
-        `/api/admin/accounting/settlements/${settlement.id}/cancel`,
-        { method: "PATCH" }
-      );
+        setPaymentNotes("");
 
-      await Promise.all([
-        fetchDashboard(),
-        fetchVendors(),
-        fetchSettlements(settlementsPage.page),
-      ]);
-    } catch (err) {
-      alert(
-        err instanceof Error ? err.message : "Failed to cancel settlement"
-      );
-    } finally {
-      setActionLoading(false);
-    }
-  };
+        // Do not refetch. The updated server state will be visible after
+        // an explicit Refresh or browser refresh.
+      } catch (err) {
+        alert(
+          err instanceof Error
+            ? err.message
+            : "Failed to complete settlement"
+        );
+      } finally {
+        setActionLoading(false);
+      }
+    };
+
+  // ====================================================
+  // CANCEL
+  // ====================================================
+
+  const handleCancelSettlement =
+    async (
+      settlement: Settlement
+    ) => {
+      if (
+        !confirm(
+          `Cancel settlement for ${settlement.vendor.companyName}?`
+        )
+      ) {
+        return;
+      }
+
+      try {
+        setActionLoading(true);
+
+        await apiFetch(
+          `/api/admin/accounting/settlements/${settlement.id}/cancel`,
+          {
+            method: "PATCH",
+          }
+        );
+
+        // Do not refetch. The updated server state will be visible after
+        // an explicit Refresh or browser refresh.
+      } catch (err) {
+        alert(
+          err instanceof Error
+            ? err.message
+            : "Failed to cancel settlement"
+        );
+      } finally {
+        setActionLoading(false);
+      }
+    };
 
   // ====================================================
   // LOADING
   // ====================================================
 
   if (loading) {
-    return (
-      <main className="min-h-screen bg-[#f5f6f8]">
-        <div className="mx-auto flex min-h-screen max-w-[1500px] items-center justify-center px-6">
-          <div className="flex items-center gap-3 text-[#0b1729]">
-            <Loader2 className="h-6 w-6 animate-spin" />
-
-            <span className="text-sm font-medium">Loading accounting...</span>
-          </div>
-        </div>
-      </main>
-    );
+    return <AccountingSkeleton />;
   }
 
   // ====================================================
@@ -809,7 +1244,10 @@ export default function AdminAccountingPage() {
   return (
     <main className="min-h-screen bg-[#f5f6f8] text-[#0b1729]">
       <div className="mx-auto max-w-[1500px] px-4 py-6 sm:px-6 lg:px-8">
+
+        {/* ================================================== */}
         {/* HEADER */}
+        {/* ================================================== */}
 
         <div className="mb-7 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -828,433 +1266,863 @@ export default function AdminAccountingPage() {
             </h1>
 
             <p className="mt-1 text-sm text-slate-500">
-              Manage COD collections, charges and vendor settlements.
+              Manage COD collections,
+              charges and vendor
+              settlements.
             </p>
           </div>
 
           <button
             type="button"
-            onClick={handleRefresh}
+            onClick={
+              handleRefresh
+            }
             disabled={refreshing}
             className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-[#0b1729] shadow-sm transition hover:border-[#e23c2e] hover:text-[#e23c2e] disabled:cursor-not-allowed disabled:opacity-60"
           >
             <RefreshCw
-              className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
+              className={`h-4 w-4 ${
+                refreshing
+                  ? "animate-spin"
+                  : ""
+              }`}
             />
+
             Refresh
           </button>
         </div>
 
+        {/* ================================================== */}
         {/* ERROR */}
+        {/* ================================================== */}
 
         {error && (
           <div className="mb-6 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-4 text-red-700">
             <XCircle className="mt-0.5 h-5 w-5 shrink-0" />
 
             <div>
-              <p className="text-sm font-semibold">Unable to load accounting</p>
-              <p className="mt-1 text-sm">{error}</p>
+              <p className="text-sm font-semibold">
+                Unable to load accounting
+              </p>
+
+              <p className="mt-1 text-sm">
+                {error}
+              </p>
             </div>
           </div>
         )}
 
+        {/* ================================================== */}
         {/* TOP CARDS */}
+        {/* ================================================== */}
 
         {dashboard && (
           <div className="mb-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+
             <StatCard
               title="COD Collected"
-              value={formatMoney(dashboard.cod.collected)}
+              value={formatMoney(
+                dashboard.cod
+                  .collected
+              )}
               subtitle="Successfully collected"
-              icon={<Banknote className="h-5 w-5" />}
+              icon={
+                <Banknote className="h-5 w-5" />
+              }
               positive
+              onClick={() => setActiveTab("cod")}
             />
 
             <StatCard
               title="Pending COD"
-              value={formatMoney(dashboard.cod.pending)}
+              value={formatMoney(
+                dashboard.cod
+                  .pending
+              )}
               subtitle="Awaiting collection"
-              icon={<Clock3 className="h-5 w-5" />}
+              icon={
+                <Clock3 className="h-5 w-5" />
+              }
+              onClick={() => setActiveTab("pending-cod")}
             />
 
             <StatCard
               title="Vendor Payable"
-              value={formatMoney(dashboard.settlements.totalOutstanding)}
+              value={formatMoney(
+                dashboard
+                  .settlements
+                  .totalOutstanding
+              )}
               subtitle="Pending + processing"
-              icon={<Wallet className="h-5 w-5" />}
+              icon={
+                <Wallet className="h-5 w-5" />
+              }
+              onClick={() => setActiveTab("settlements")}
             />
 
             <StatCard
               title="Settled"
-              value={formatMoney(dashboard.settlements.paid)}
+              value={formatMoney(
+                dashboard
+                  .settlements
+                  .paid
+              )}
               subtitle="Already paid"
-              icon={<CheckCircle2 className="h-5 w-5" />}
+              icon={
+                <CheckCircle2 className="h-5 w-5" />
+              }
               positive
+              onClick={() => setActiveTab("settlements")}
             />
+
           </div>
         )}
 
+        {/* ================================================== */}
         {/* SECONDARY STATS */}
+        {/* ================================================== */}
 
         {dashboard && (
           <div className="mb-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+
             <SmallStat
               label="Total Credits"
-              value={formatMoney(dashboard.totalCredits)}
-              icon={<ArrowDownRight className="h-4 w-4" />}
+              value={formatMoney(
+                dashboard.totalCredits
+              )}
+              icon={
+                <ArrowDownRight className="h-4 w-4" />
+              }
             />
 
             <SmallStat
-              label="Total Debits"
-              value={formatMoney(dashboard.totalDebits)}
-              icon={<ArrowUpRight className="h-4 w-4" />}
+              label="Total Charges"
+              value={formatMoney(
+                dashboard.totalDebits
+              )}
+              icon={
+                <ArrowUpRight className="h-4 w-4" />
+              }
             />
 
             <SmallStat
-              label="Net Balance"
-              value={formatMoney(dashboard.netBalance)}
-              icon={<CircleDollarSign className="h-4 w-4" />}
+              label="Vendor Balance"
+              value={formatMoney(
+                dashboard.netBalance
+              )}
+              icon={
+                <CircleDollarSign className="h-4 w-4" />
+              }
             />
 
             <SmallStat
-              label="Vendors"
-              value={String(dashboard.vendors.total)}
-              icon={<Store className="h-4 w-4" />}
+              label="Cargo Earnings"
+              value={formatMoney(
+                dashboard
+                  .companyEarnings ??
+                  dashboard.totalDebits
+              )}
+              icon={
+                <Banknote className="h-4 w-4" />
+              }
             />
+
           </div>
         )}
 
+        {/* ================================================== */}
         {/* TABS */}
+        {/* ================================================== */}
 
         <div className="mb-6 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
           <div className="flex min-w-max">
+
             <TabButton
-              active={activeTab === "overview"}
-              onClick={() => setActiveTab("overview")}
+              active={
+                activeTab ===
+                "overview"
+              }
+              onClick={() =>
+                setActiveTab(
+                  "overview"
+                )
+              }
             >
               Overview
             </TabButton>
 
             <TabButton
-              active={activeTab === "transactions"}
-              onClick={() => setActiveTab("transactions")}
+              active={
+                activeTab ===
+                "transactions"
+              }
+              onClick={() =>
+                setActiveTab(
+                  "transactions"
+                )
+              }
             >
               Transactions
             </TabButton>
 
             <TabButton
-              active={activeTab === "vendors"}
-              onClick={() => setActiveTab("vendors")}
+              active={
+                activeTab ===
+                "vendors"
+              }
+              onClick={() =>
+                setActiveTab(
+                  "vendors"
+                )
+              }
             >
               Vendors
             </TabButton>
 
             <TabButton
-              active={activeTab === "cod"}
-              onClick={() => setActiveTab("cod")}
+              active={
+                activeTab ===
+                "pending-cod"
+              }
+              onClick={() =>
+                setActiveTab("pending-cod")
+              }
+            >
+              Pending COD
+            </TabButton>
+
+            <TabButton
+              active={
+                activeTab ===
+                "cod"
+              }
+              onClick={() =>
+                setActiveTab("cod")
+              }
             >
               COD
             </TabButton>
 
             <TabButton
-              active={activeTab === "settlements"}
-              onClick={() => setActiveTab("settlements")}
+              active={
+                activeTab ===
+                "settlements"
+              }
+              onClick={() =>
+                setActiveTab(
+                  "settlements"
+                )
+              }
             >
               Settlements
             </TabButton>
+
           </div>
         </div>
 
+        {/* ================================================== */}
         {/* OVERVIEW */}
+        {/* ================================================== */}
 
-        {activeTab === "overview" && (
+        {activeTab ===
+          "overview" && (
           <OverviewSection
             dashboard={dashboard}
             vendors={vendors}
             settlements={settlements}
-            onVendorClick={(vendor) => setSelectedVendor(vendor)}
-            onGoToTab={(tab) => setActiveTab(tab)}
+            onVendorClick={(
+              vendor
+            ) =>
+              setSelectedVendor(
+                vendor
+              )
+            }
+            onGoToTab={(tab) =>
+              setActiveTab(tab)
+            }
           />
         )}
 
+        {/* ================================================== */}
         {/* TRANSACTIONS */}
+        {/* ================================================== */}
 
-        {activeTab === "transactions" && (
+        {activeTab ===
+          "transactions" && (
           <section>
             <SectionHeader
               title="Accounting Transactions"
-              description="Complete financial ledger."
+              description="Operational financial ledger. Vendor settlement itself is tracked separately."
             />
 
             <div className="mb-5 mt-5 grid gap-3 lg:grid-cols-[1fr_180px_180px_220px]">
+
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
 
                 <input
-                  value={entrySearch}
-                  onChange={(e) => setEntrySearch(e.target.value)}
+                  value={
+                    entrySearch
+                  }
+                  onChange={(e) =>
+                    setEntrySearch(
+                      e.target.value
+                    )
+                  }
                   placeholder="Search vendor, shipment..."
                   className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-sm outline-none transition focus:border-[#e23c2e] focus:ring-2 focus:ring-[#e23c2e]/10"
                 />
               </div>
 
               <select
-                value={entryType}
-                onChange={(e) => setEntryType(e.target.value)}
+                value={
+                  entryType
+                }
+                onChange={(e) =>
+                  setEntryType(
+                    e.target.value
+                  )
+                }
                 className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-[#e23c2e]"
               >
-                <option value="">All Types</option>
-                <option value="COD_COLLECTION">COD Collection</option>
-                <option value="SHIPPING_CHARGE">Shipping Charge</option>
-                <option value="RETURN_CHARGE">Return Charge</option>
-                <option value="PICKUP_CHARGE">Pickup Charge</option>
-                <option value="STORAGE_CHARGE">Storage Charge</option>
-                <option value="OTHER_CHARGE">Other Charge</option>
-                <option value="REFUND">Refund</option>
-                <option value="VENDOR_SETTLEMENT">Vendor Settlement</option>
+                <option value="">
+                  All Types
+                </option>
+
+                <option value="COD_COLLECTION">
+                  COD Collection
+                </option>
+
+                <option value="SHIPPING_CHARGE">
+                  Shipping Charge
+                </option>
+
+                <option value="RETURN_CHARGE">
+                  Return Charge
+                </option>
+
+                <option value="PICKUP_CHARGE">
+                  Pickup Charge
+                </option>
+
+                <option value="STORAGE_CHARGE">
+                  Storage Charge
+                </option>
+
+                <option value="OTHER_CHARGE">
+                  Other Charge
+                </option>
+
+                <option value="REFUND">
+                  Refund
+                </option>
+
+                <option value="VENDOR_SETTLEMENT">
+                  Vendor Settlement
+                </option>
               </select>
 
               <select
-                value={entryDirection}
-                onChange={(e) => setEntryDirection(e.target.value)}
+                value={
+                  entryDirection
+                }
+                onChange={(e) =>
+                  setEntryDirection(
+                    e.target.value
+                  )
+                }
                 className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-[#e23c2e]"
               >
-                <option value="">All Directions</option>
-                <option value="CREDIT">Credit</option>
-                <option value="DEBIT">Debit</option>
+                <option value="">
+                  All Directions
+                </option>
+
+                <option value="CREDIT">
+                  Credit
+                </option>
+
+                <option value="DEBIT">
+                  Debit
+                </option>
               </select>
 
               <select
-                value={entryVendorId}
-                onChange={(e) => setEntryVendorId(e.target.value)}
+                value={
+                  entryVendorId
+                }
+                onChange={(e) =>
+                  setEntryVendorId(
+                    e.target.value
+                  )
+                }
                 className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-[#e23c2e]"
               >
-                <option value="">All Vendors</option>
+                <option value="">
+                  All Vendors
+                </option>
 
-                {vendors.map((vendor) => (
-                  <option key={vendor.id} value={vendor.id}>
-                    {vendor.companyName}
-                  </option>
-                ))}
+                {vendors.map(
+                  (vendor) => (
+                    <option
+                      key={
+                        vendor.id
+                      }
+                      value={
+                        vendor.id
+                      }
+                    >
+                      {
+                        vendor.companyName
+                      }
+                    </option>
+                  )
+                )}
               </select>
+
             </div>
 
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
               <div className="overflow-x-auto">
+
                 <table className="w-full min-w-[950px] text-left">
+
                   <thead className="border-b border-slate-200 bg-slate-50">
                     <tr>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Vendor</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Shipment</TableHead>
-                      <TableHead>Direction</TableHead>
-                      <TableHead>Amount</TableHead>
-                      <TableHead>Description</TableHead>
+                      <TableHead>
+                        Date
+                      </TableHead>
+
+                      <TableHead>
+                        Vendor
+                      </TableHead>
+
+                      <TableHead>
+                        Type
+                      </TableHead>
+
+                      <TableHead>
+                        Shipment
+                      </TableHead>
+
+                      <TableHead>
+                        Direction
+                      </TableHead>
+
+                      <TableHead>
+                        Amount
+                      </TableHead>
+
+                      <TableHead>
+                        Description
+                      </TableHead>
                     </tr>
                   </thead>
 
                   <tbody className="divide-y divide-slate-100">
-                    {entries.length === 0 ? (
+
+                    {filteredEntries.length ===
+                    0 ? (
                       <EmptyTableRow
                         colSpan={7}
                         text="No accounting transactions found."
                       />
                     ) : (
-                      entries.map((entry) => (
-                        <tr
-                          key={entry.id}
-                          className="transition hover:bg-slate-50"
-                        >
-                          <TableCell>
-                            <div className="text-sm font-medium text-slate-700">
-                              {formatDate(entry.createdAt)}
-                            </div>
-                          </TableCell>
+                      filteredEntries.map(
+                        (entry) => (
+                          <tr
+                            key={
+                              entry.id
+                            }
+                            className="transition hover:bg-slate-50"
+                          >
 
-                          <TableCell>
-                            <div className="font-medium text-[#0b1729]">
-                              {entry.vendor?.companyName}
-                            </div>
-                          </TableCell>
-
-                          <TableCell>
-                            <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
-                              {getTypeLabel(entry.type)}
-                            </span>
-                          </TableCell>
-
-                          <TableCell>
-                            {entry.shipment ? (
-                              <div>
-                                <div className="font-mono text-xs font-semibold text-[#0b1729]">
-                                  {entry.shipment.trackingNumber}
-                                </div>
-
-                                <div className="mt-0.5 text-xs text-slate-400">
-                                  {entry.shipment.receiverName}
-                                </div>
+                            <TableCell>
+                              <div className="text-sm font-medium text-slate-700">
+                                {formatDate(
+                                  entry.createdAt
+                                )}
                               </div>
-                            ) : (
-                              <span className="text-sm text-slate-400">—</span>
-                            )}
-                          </TableCell>
+                            </TableCell>
 
-                          <TableCell>
-                            <span
-                              className={`inline-flex items-center gap-1.5 text-sm font-semibold ${
-                                entry.direction === "CREDIT"
-                                  ? "text-emerald-600"
-                                  : "text-red-600"
-                              }`}
-                            >
-                              {entry.direction === "CREDIT" ? (
-                                <ArrowDownRight className="h-4 w-4" />
+                            <TableCell>
+                              <div className="font-medium text-[#0b1729]">
+                                {
+                                  entry
+                                    .vendor
+                                    ?.companyName
+                                }
+                              </div>
+                            </TableCell>
+
+                            <TableCell>
+                              <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                                {getTypeLabel(
+                                  entry.type
+                                )}
+                              </span>
+                            </TableCell>
+
+                            <TableCell>
+                              {entry.shipment ? (
+                                <div>
+                                  <div className="font-mono text-xs font-semibold text-[#0b1729]">
+                                    {
+                                      entry
+                                        .shipment
+                                        .trackingNumber
+                                    }
+                                  </div>
+
+                                  <div className="mt-0.5 text-xs text-slate-400">
+                                    {
+                                      entry
+                                        .shipment
+                                        .receiverName
+                                    }
+                                  </div>
+                                </div>
                               ) : (
-                                <ArrowUpRight className="h-4 w-4" />
+                                <span className="text-sm text-slate-400">
+                                  —
+                                </span>
                               )}
-                              {entry.direction}
-                            </span>
-                          </TableCell>
+                            </TableCell>
 
-                          <TableCell>
-                            <span
-                              className={`font-semibold ${
-                                entry.direction === "CREDIT"
-                                  ? "text-emerald-600"
-                                  : "text-red-600"
-                              }`}
-                            >
-                              {entry.direction === "CREDIT" ? "+" : "-"}
-                              {formatMoney(entry.amount)}
-                            </span>
-                          </TableCell>
+                            <TableCell>
+                              <span
+                                className={`inline-flex items-center gap-1.5 text-sm font-semibold ${
+                                  entry.direction ===
+                                  "CREDIT"
+                                    ? "text-emerald-600"
+                                    : "text-red-600"
+                                }`}
+                              >
+                                {entry.direction ===
+                                "CREDIT" ? (
+                                  <ArrowDownRight className="h-4 w-4" />
+                                ) : (
+                                  <ArrowUpRight className="h-4 w-4" />
+                                )}
 
-                          <TableCell>
-                            <span className="block max-w-[240px] truncate text-sm text-slate-500">
-                              {entry.description || "—"}
-                            </span>
-                          </TableCell>
-                        </tr>
-                      ))
+                                {
+                                  entry.direction
+                                }
+                              </span>
+                            </TableCell>
+
+                            <TableCell>
+                              <span
+                                className={`font-semibold ${
+                                  entry.direction ===
+                                  "CREDIT"
+                                    ? "text-emerald-600"
+                                    : "text-red-600"
+                                }`}
+                              >
+                                {entry.direction ===
+                                "CREDIT"
+                                  ? "+"
+                                  : "-"}
+                                {formatMoney(
+                                  entry.amount
+                                )}
+                              </span>
+                            </TableCell>
+
+                            <TableCell>
+                              <span className="block max-w-[240px] truncate text-sm text-slate-500">
+                                {entry.description ||
+                                  "—"}
+                              </span>
+                            </TableCell>
+
+                          </tr>
+                        )
+                      )
                     )}
+
                   </tbody>
                 </table>
               </div>
-
-              <PaginationBar
-                pagination={entriesPage}
-                onPrevious={() => fetchEntries(entriesPage.page - 1)}
-                onNext={() => fetchEntries(entriesPage.page + 1)}
-              />
             </div>
           </section>
         )}
 
+        {/* ================================================== */}
         {/* VENDORS */}
+        {/* ================================================== */}
 
-        {activeTab === "vendors" && (
+        {activeTab ===
+          "vendors" && (
           <section>
+
             <SectionHeader
               title="Vendor Accounting"
-              description="Positive balance means you owe the vendor. Negative means the vendor owes you."
+              description="Unsettled COD credits minus vendor charges."
             />
 
             <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
               <div className="overflow-x-auto">
+
                 <table className="w-full min-w-[1000px] text-left">
+
                   <thead className="border-b border-slate-200 bg-slate-50">
                     <tr>
-                      <TableHead>Vendor</TableHead>
-                      <TableHead>Shipments</TableHead>
-                      <TableHead>Unsettled Credits</TableHead>
-                      <TableHead>Unsettled Charges</TableHead>
-                      <TableHead>Balance</TableHead>
-                      <TableHead>Open Settlement</TableHead>
-                      <TableHead>Action</TableHead>
+                      <TableHead>
+                        Vendor
+                      </TableHead>
+
+                      <TableHead>
+                        Shipments
+                      </TableHead>
+
+                      <TableHead>
+                        Unsettled Credits
+                      </TableHead>
+
+                      <TableHead>
+                        Unsettled Charges
+                      </TableHead>
+
+                      <TableHead>
+                        Balance
+                      </TableHead>
+
+                      <TableHead>
+                        Open Settlement
+                      </TableHead>
+
+                      <TableHead>
+                        Action
+                      </TableHead>
                     </tr>
                   </thead>
 
                   <tbody className="divide-y divide-slate-100">
-                    {vendors.length === 0 ? (
-                      <EmptyTableRow colSpan={7} text="No vendors found." />
+
+                    {vendors.length ===
+                    0 ? (
+                      <EmptyTableRow
+                        colSpan={7}
+                        text="No vendors found."
+                      />
                     ) : (
-                      vendors.map((vendor) => (
-                        <tr
-                          key={vendor.id}
-                          className="transition hover:bg-slate-50"
-                        >
-                          <TableCell>
-                            <div className="flex items-center gap-3">
-                              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#0b1729] text-sm font-bold text-white">
-                                {vendor.companyName.slice(0, 1).toUpperCase()}
-                              </div>
+                      vendors.map(
+                        (vendor) => (
+                          <tr
+                            key={
+                              vendor.id
+                            }
+                            className="transition hover:bg-slate-50"
+                          >
 
-                              <div>
-                                <div className="font-semibold text-[#0b1729]">
-                                  {vendor.companyName}
+                            <TableCell>
+                              <div className="flex items-center gap-3">
+
+                                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#0b1729] text-sm font-bold text-white">
+                                  {vendor.companyName
+                                    .slice(
+                                      0,
+                                      1
+                                    )
+                                    .toUpperCase()}
                                 </div>
 
-                                <div className="text-xs text-slate-400">
-                                  {vendor.location}
+                                <div>
+                                  <div className="font-semibold text-[#0b1729]">
+                                    {
+                                      vendor.companyName
+                                    }
+                                  </div>
+
+                                  <div className="text-xs text-slate-400">
+                                    {
+                                      vendor.location
+                                    }
+                                  </div>
                                 </div>
+
                               </div>
-                            </div>
-                          </TableCell>
+                            </TableCell>
 
-                          <TableCell>{vendor._count?.shipments ?? 0}</TableCell>
+                            <TableCell>
+                              {
+                                vendor
+                                  ._count
+                                  ?.shipments ??
+                                0
+                              }
+                            </TableCell>
 
-                          <TableCell>
-                            <span className="font-semibold text-emerald-600">
-                              {formatMoney(vendor.availableCredits)}
-                            </span>
-                          </TableCell>
-
-                          <TableCell>
-                            <span className="font-semibold text-red-600">
-                              {formatMoney(vendor.availableDebits)}
-                            </span>
-                          </TableCell>
-
-                          <TableCell>
-                            <div className="font-bold text-[#0b1729]">
-                              {formatMoney(vendor.balance)}
-                            </div>
-
-                            <div className="text-xs text-slate-400">
-                              {getDirectionLabel(vendor.direction)}
-                            </div>
-                          </TableCell>
-
-                          <TableCell>
-                            {vendor.outstandingSettlement > 0 ? (
-                              <span className="font-semibold text-amber-600">
-                                {formatMoney(vendor.outstandingSettlement)}
+                            <TableCell>
+                              <span className="font-semibold text-emerald-600">
+                                {formatMoney(
+                                  vendor.availableCredits
+                                )}
                               </span>
-                            ) : (
-                              <span className="text-sm text-slate-400">—</span>
-                            )}
-                          </TableCell>
+                            </TableCell>
 
+                            <TableCell>
+                              <span className="font-semibold text-red-600">
+                                {formatMoney(
+                                  vendor.availableDebits
+                                )}
+                              </span>
+                            </TableCell>
+
+                            <TableCell>
+                              <div className="font-bold text-[#0b1729]">
+                                {formatMoney(
+                                  vendor.balance
+                                )}
+                              </div>
+
+                              <div
+                                className={`text-xs font-semibold ${
+                                  vendor.direction ===
+                                  "PAY_VENDOR"
+                                    ? "text-emerald-600"
+                                    : vendor.direction ===
+                                        "COLLECT_FROM_VENDOR"
+                                      ? "text-amber-600"
+                                      : "text-slate-400"
+                                }`}
+                              >
+                                {getDirectionLabel(
+                                  vendor.direction
+                                )}
+                              </div>
+                            </TableCell>
+
+                            <TableCell>
+                              {vendor.outstandingSettlement >
+                              0 ? (
+                                <span className="font-semibold text-amber-600">
+                                  {formatMoney(
+                                    vendor.outstandingSettlement
+                                  )}
+                                </span>
+                              ) : (
+                                <span className="text-sm text-slate-400">
+                                  —
+                                </span>
+                              )}
+                            </TableCell>
+
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setSelectedVendor(
+                                      vendor
+                                    )
+                                  }
+                                  className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-[#0b1729] transition hover:border-[#e23c2e] hover:text-[#e23c2e]"
+                                >
+                                  View
+                                </button>
+
+                                <button
+                                  type="button"
+                                  disabled={
+                                    vendor.pendingSettlementCount >
+                                    0 ||
+                                    vendor.balance ===
+                                      0
+                                  }
+                                  onClick={() =>
+                                    openSettlementBuilder(
+                                      vendor
+                                    )
+                                  }
+                                  className="rounded-lg bg-[#e23c2e] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#ce3122] disabled:cursor-not-allowed disabled:opacity-40"
+                                >
+                                  Settle
+                                </button>
+
+                              </div>
+                            </TableCell>
+
+                          </tr>
+                        )
+                      )
+                    )}
+
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* ================================================== */}
+        {/* PENDING COD */}
+        {/* ================================================== */}
+
+        {activeTab === "pending-cod" && (
+          <section>
+            <SectionHeader
+              title="Pending COD"
+              description="COD amounts that are still awaiting collection."
+            />
+
+            <div className="mt-5 overflow-hidden rounded-2xl border border-amber-200 bg-white shadow-sm">
+              <div className="flex items-center justify-between border-b border-amber-100 bg-amber-50 px-5 py-4">
+                <div>
+                  <p className="text-sm font-bold text-amber-900">
+                    Awaiting collection
+                  </p>
+                  <p className="mt-1 text-xs text-amber-700">
+                    {pendingCodCollections.length} pending COD record{pendingCodCollections.length === 1 ? "" : "s"}
+                  </p>
+                </div>
+                <p className="text-lg font-bold text-amber-900">
+                  {formatMoney(
+                    pendingCodCollections.reduce((sum, item) => sum + Number(item.amount || 0), 0)
+                  )}
+                </p>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[950px] text-left">
+                  <thead className="border-b border-slate-200 bg-slate-50">
+                    <tr>
+                      <TableHead>Tracking</TableHead>
+                      <TableHead>Receiver</TableHead>
+                      <TableHead>Vendor</TableHead>
+                      <TableHead>Rider</TableHead>
+                      <TableHead>COD Amount</TableHead>
+                      <TableHead>Created</TableHead>
+                      <TableHead>Status</TableHead>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {pendingCodCollections.length === 0 ? (
+                      <EmptyTableRow colSpan={7} text="No pending COD collections." />
+                    ) : (
+                      pendingCodCollections.map((collection) => (
+                        <tr key={collection.id} className="hover:bg-slate-50">
                           <TableCell>
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => setSelectedVendor(vendor)}
-                                className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-[#0b1729] transition hover:border-[#e23c2e] hover:text-[#e23c2e]"
-                              >
-                                View
-                              </button>
-
-                              <button
-                                type="button"
-                                disabled={vendor.pendingSettlementCount > 0}
-                                onClick={() => openSettlementBuilder(vendor)}
-                                className="rounded-lg bg-[#e23c2e] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#ce3122] disabled:cursor-not-allowed disabled:opacity-40"
-                              >
-                                Settle
-                              </button>
-                            </div>
+                            <span className="font-mono text-xs font-semibold">
+                              {collection.shipment?.trackingNumber || "—"}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <div className="font-semibold">{collection.shipment?.receiverName || "—"}</div>
+                            <div className="mt-1 text-xs text-slate-400">{collection.shipment?.receiverPhone || "—"}</div>
+                          </TableCell>
+                          <TableCell>{collection.shipment?.vendor?.companyName || "—"}</TableCell>
+                          <TableCell>{collection.rider?.user?.name || "Not assigned"}</TableCell>
+                          <TableCell>
+                            <span className="font-bold text-amber-700">{formatMoney(collection.amount)}</span>
+                          </TableCell>
+                          <TableCell>{formatDate(collection.createdAt)}</TableCell>
+                          <TableCell>
+                            <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                              PENDING
+                            </span>
                           </TableCell>
                         </tr>
                       ))
@@ -1266,355 +2134,612 @@ export default function AdminAccountingPage() {
           </section>
         )}
 
+        {/* ================================================== */}
         {/* COD */}
+        {/* ================================================== */}
 
         {activeTab === "cod" && (
           <section>
+
             <SectionHeader
               title="COD Collections"
               description="Track money collected by riders."
             />
 
             <div className="mb-5 mt-5 grid gap-3 sm:grid-cols-2">
+
               <select
-                value={codStatus}
-                onChange={(e) => setCodStatus(e.target.value)}
+                value={
+                  codStatus
+                }
+                onChange={(e) =>
+                  setCodStatus(
+                    e.target.value
+                  )
+                }
                 className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-[#e23c2e]"
               >
-                <option value="">All Statuses</option>
-                <option value="PENDING">Pending</option>
-                <option value="COLLECTED">Collected</option>
-                <option value="FAILED">Failed</option>
-                <option value="CANCELLED">Cancelled</option>
+                <option value="">
+                  All Statuses
+                </option>
+
+                <option value="PENDING">
+                  Pending
+                </option>
+
+                <option value="COLLECTED">
+                  Collected
+                </option>
+
+                <option value="FAILED">
+                  Failed
+                </option>
+
+                <option value="CANCELLED">
+                  Cancelled
+                </option>
               </select>
 
               <select
-                value={codVendorId}
-                onChange={(e) => setCodVendorId(e.target.value)}
+                value={
+                  codVendorId
+                }
+                onChange={(e) =>
+                  setCodVendorId(
+                    e.target.value
+                  )
+                }
                 className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-[#e23c2e]"
               >
-                <option value="">All Vendors</option>
+                <option value="">
+                  All Vendors
+                </option>
 
-                {vendors.map((vendor) => (
-                  <option key={vendor.id} value={vendor.id}>
-                    {vendor.companyName}
-                  </option>
-                ))}
+                {vendors.map(
+                  (vendor) => (
+                    <option
+                      key={
+                        vendor.id
+                      }
+                      value={
+                        vendor.id
+                      }
+                    >
+                      {
+                        vendor.companyName
+                      }
+                    </option>
+                  )
+                )}
               </select>
+
             </div>
 
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
               <div className="overflow-x-auto">
+
                 <table className="w-full min-w-[900px] text-left">
+
                   <thead className="border-b border-slate-200 bg-slate-50">
                     <tr>
-                      <TableHead>Shipment</TableHead>
-                      <TableHead>Vendor</TableHead>
-                      <TableHead>Rider</TableHead>
-                      <TableHead>Expected</TableHead>
-                      <TableHead>Collected</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Date</TableHead>
+                      <TableHead>
+                        Shipment
+                      </TableHead>
+
+                      <TableHead>
+                        Vendor
+                      </TableHead>
+
+                      <TableHead>
+                        Rider
+                      </TableHead>
+
+                      <TableHead>
+                        Expected
+                      </TableHead>
+
+                      <TableHead>
+                        Collected
+                      </TableHead>
+
+                      <TableHead>
+                        Status
+                      </TableHead>
+
+                      <TableHead>
+                        Date
+                      </TableHead>
                     </tr>
                   </thead>
 
                   <tbody className="divide-y divide-slate-100">
-                    {codCollections.length === 0 ? (
+
+                    {filteredCodCollections.length ===
+                    0 ? (
                       <EmptyTableRow
                         colSpan={7}
                         text="No COD collections found."
                       />
                     ) : (
-                      codCollections.map((collection) => (
-                        <tr
-                          key={collection.id}
-                          className="transition hover:bg-slate-50"
-                        >
-                          <TableCell>
-                            <div className="font-mono text-xs font-semibold">
-                              {collection.shipment?.trackingNumber}
-                            </div>
+                      filteredCodCollections.map(
+                        (
+                          collection
+                        ) => (
+                          <tr
+                            key={
+                              collection.id
+                            }
+                            className="transition hover:bg-slate-50"
+                          >
 
-                            <div className="mt-1 text-xs text-slate-400">
-                              {collection.shipment?.receiverName}
-                            </div>
-                          </TableCell>
-
-                          <TableCell>
-                            <span className="font-medium">
-                              {collection.shipment?.vendor?.companyName || "—"}
-                            </span>
-                          </TableCell>
-
-                          <TableCell>
-                            {collection.rider ? (
-                              <div>
-                                <div className="font-medium">
-                                  {collection.rider.user?.name}
-                                </div>
-
-                                <div className="text-xs text-slate-400">
-                                  {collection.rider.phone}
-                                </div>
+                            <TableCell>
+                              <div className="font-mono text-xs font-semibold">
+                                {
+                                  collection
+                                    .shipment
+                                    ?.trackingNumber
+                                }
                               </div>
-                            ) : (
-                              <span className="text-sm text-slate-400">
-                                Not assigned
+
+                              <div className="mt-1 text-xs text-slate-400">
+                                {
+                                  collection
+                                    .shipment
+                                    ?.receiverName
+                                }
+                              </div>
+                            </TableCell>
+
+                            <TableCell>
+                              <span className="font-medium">
+                                {
+                                  collection
+                                    .shipment
+                                    ?.vendor
+                                    ?.companyName ||
+                                  "—"
+                                }
                               </span>
-                            )}
-                          </TableCell>
+                            </TableCell>
 
-                          <TableCell>
-                            <span className="font-medium">
-                              {formatMoney(collection.shipment?.codAmount || 0)}
-                            </span>
-                          </TableCell>
+                            <TableCell>
+                              {collection.rider ? (
+                                <div>
+                                  <div className="font-medium">
+                                    {
+                                      collection
+                                        .rider
+                                        .user
+                                        ?.name
+                                    }
+                                  </div>
 
-                          <TableCell>
-                            <span className="font-bold text-emerald-600">
-                              {formatMoney(collection.amount)}
-                            </span>
-                          </TableCell>
-
-                          <TableCell>
-                            <span
-                              className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${getStatusClasses(
-                                collection.status
-                              )}`}
-                            >
-                              {collection.status}
-                            </span>
-                          </TableCell>
-
-                          <TableCell>
-                            <div className="text-sm text-slate-600">
-                              {formatDate(
-                                collection.collectedAt || collection.createdAt
+                                  <div className="text-xs text-slate-400">
+                                    {
+                                      collection
+                                        .rider
+                                        .phone
+                                    }
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className="text-sm text-slate-400">
+                                  Not assigned
+                                </span>
                               )}
-                            </div>
-                          </TableCell>
-                        </tr>
-                      ))
+                            </TableCell>
+
+                            <TableCell>
+                              <span className="font-medium">
+                                {formatMoney(
+                                  collection
+                                    .shipment
+                                    ?.codAmount ||
+                                    0
+                                )}
+                              </span>
+                            </TableCell>
+
+                            <TableCell>
+                              <span className="font-bold text-emerald-600">
+                                {formatMoney(
+                                  collection.amount
+                                )}
+                              </span>
+                            </TableCell>
+
+                            <TableCell>
+                              <span
+                                className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${getStatusClasses(
+                                  collection.status
+                                )}`}
+                              >
+                                {
+                                  collection.status
+                                }
+                              </span>
+                            </TableCell>
+
+                            <TableCell>
+                              <div className="text-sm text-slate-600">
+                                {formatDate(
+                                  collection.collectedAt ||
+                                    collection.createdAt
+                                )}
+                              </div>
+                            </TableCell>
+
+                          </tr>
+                        )
+                      )
                     )}
+
                   </tbody>
                 </table>
               </div>
-
-              <PaginationBar
-                pagination={codPage}
-                onPrevious={() => fetchCod(codPage.page - 1)}
-                onNext={() => fetchCod(codPage.page + 1)}
-              />
             </div>
           </section>
         )}
 
+        {/* ================================================== */}
         {/* SETTLEMENTS */}
+        {/* ================================================== */}
 
-        {activeTab === "settlements" && (
+        {activeTab ===
+          "settlements" && (
           <section>
+
             <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+
               <SectionHeader
                 title="Vendor Settlements"
-                description="COD credits minus charges, settled per vendor."
+                description="COD credits minus vendor charges."
               />
 
               <button
                 type="button"
-                onClick={() => setActiveTab("vendors")}
+                onClick={() =>
+                  setActiveTab(
+                    "vendors"
+                  )
+                }
                 className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[#e23c2e] px-4 text-sm font-semibold text-white transition hover:bg-[#ce3122]"
               >
                 <Wallet className="h-4 w-4" />
+
                 Create Settlement
               </button>
+
             </div>
 
             <div className="mb-5 grid gap-3 sm:grid-cols-2">
+
               <select
-                value={settlementStatus}
-                onChange={(e) => setSettlementStatus(e.target.value)}
+                value={
+                  settlementStatus
+                }
+                onChange={(e) =>
+                  setSettlementStatus(
+                    e.target.value
+                  )
+                }
                 className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-[#e23c2e]"
               >
-                <option value="">All Statuses</option>
-                <option value="PENDING">Pending</option>
-                <option value="PROCESSING">Processing</option>
-                <option value="PAID">Paid</option>
-                <option value="CANCELLED">Cancelled</option>
+                <option value="">
+                  All Statuses
+                </option>
+
+                <option value="PENDING">
+                  Pending
+                </option>
+
+                <option value="PROCESSING">
+                  Processing
+                </option>
+
+                <option value="PAID">
+                  Paid
+                </option>
+
+                <option value="CANCELLED">
+                  Cancelled
+                </option>
               </select>
 
               <select
-                value={settlementVendorId}
-                onChange={(e) => setSettlementVendorId(e.target.value)}
+                value={
+                  settlementVendorId
+                }
+                onChange={(e) =>
+                  setSettlementVendorId(
+                    e.target.value
+                  )
+                }
                 className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-[#e23c2e]"
               >
-                <option value="">All Vendors</option>
+                <option value="">
+                  All Vendors
+                </option>
 
-                {vendors.map((vendor) => (
-                  <option key={vendor.id} value={vendor.id}>
-                    {vendor.companyName}
-                  </option>
-                ))}
+                {vendors.map(
+                  (vendor) => (
+                    <option
+                      key={
+                        vendor.id
+                      }
+                      value={
+                        vendor.id
+                      }
+                    >
+                      {
+                        vendor.companyName
+                      }
+                    </option>
+                  )
+                )}
               </select>
+
             </div>
 
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
               <div className="overflow-x-auto">
+
                 <table className="w-full min-w-[1150px] text-left">
+
                   <thead className="border-b border-slate-200 bg-slate-50">
                     <tr>
-                      <TableHead>Vendor</TableHead>
-                      <TableHead>COD</TableHead>
-                      <TableHead>Shipping</TableHead>
-                      <TableHead>Returns</TableHead>
-                      <TableHead>Other</TableHead>
-                      <TableHead>Net</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Created</TableHead>
-                      <TableHead>Action</TableHead>
+
+                      <TableHead>
+                        Vendor
+                      </TableHead>
+
+                      <TableHead>
+                        COD
+                      </TableHead>
+
+                      <TableHead>
+                        Shipping
+                      </TableHead>
+
+                      <TableHead>
+                        Returns
+                      </TableHead>
+
+                      <TableHead>
+                        Other
+                      </TableHead>
+
+                      <TableHead>
+                        Net
+                      </TableHead>
+
+                      <TableHead>
+                        Status
+                      </TableHead>
+
+                      <TableHead>
+                        Created
+                      </TableHead>
+
+                      <TableHead>
+                        Action
+                      </TableHead>
+
                     </tr>
                   </thead>
 
                   <tbody className="divide-y divide-slate-100">
-                    {settlements.length === 0 ? (
-                      <EmptyTableRow colSpan={9} text="No settlements found." />
+
+                    {filteredSettlements.length ===
+                    0 ? (
+                      <EmptyTableRow
+                        colSpan={9}
+                        text="No settlements found."
+                      />
                     ) : (
-                      settlements.map((settlement) => (
-                        <tr
-                          key={settlement.id}
-                          className="transition hover:bg-slate-50"
-                        >
-                          <TableCell>
-                            <div className="font-semibold">
-                              {settlement.vendor?.companyName}
-                            </div>
+                      filteredSettlements.map(
+                        (
+                          settlement
+                        ) => (
+                          <tr
+                            key={
+                              settlement.id
+                            }
+                            className="transition hover:bg-slate-50"
+                          >
 
-                            <div className="mt-1 font-mono text-[10px] text-slate-400">
-                              {settlement.id}
-                            </div>
-                          </TableCell>
+                            <TableCell>
+                              <div className="font-semibold">
+                                {
+                                  settlement
+                                    .vendor
+                                    ?.companyName
+                                }
+                              </div>
 
-                          <TableCell>
-                            <span className="text-emerald-600">
-                              {formatMoney(settlement.totalCodAmount)}
-                            </span>
-                          </TableCell>
+                              <div className="mt-1 font-mono text-[10px] text-slate-400">
+                                {
+                                  settlement.id
+                                }
+                              </div>
+                            </TableCell>
 
-                          <TableCell>
-                            <span className="text-red-600">
-                              {formatMoney(settlement.totalShippingCharge)}
-                            </span>
-                          </TableCell>
+                            <TableCell>
+                              <span className="text-emerald-600">
+                                {formatMoney(
+                                  settlement.totalCodAmount
+                                )}
+                              </span>
+                            </TableCell>
 
-                          <TableCell>
-                            <span className="text-red-600">
-                              {formatMoney(settlement.totalReturnCharge)}
-                            </span>
-                          </TableCell>
+                            <TableCell>
+                              <span className="text-red-600">
+                                {formatMoney(
+                                  settlement.totalShippingCharge
+                                )}
+                              </span>
+                            </TableCell>
 
-                          <TableCell>
-                            <span className="text-red-600">
-                              {formatMoney(settlement.totalOtherCharges)}
-                            </span>
-                          </TableCell>
+                            <TableCell>
+                              <span className="text-red-600">
+                                {formatMoney(
+                                  settlement.totalReturnCharge
+                                )}
+                              </span>
+                            </TableCell>
 
-                          <TableCell>
-                            <div className="font-bold text-[#0b1729]">
-                              {formatMoney(settlement.netPayable)}
-                            </div>
+                            <TableCell>
+                              <span className="text-red-600">
+                                {formatMoney(
+                                  settlement.totalOtherCharges
+                                )}
+                              </span>
+                            </TableCell>
 
-                            <div
-                              className={`text-xs font-semibold ${
-                                settlement.direction === "PAY_VENDOR"
-                                  ? "text-emerald-600"
-                                  : "text-amber-600"
-                              }`}
-                            >
-                              {getDirectionLabel(settlement.direction)}
-                            </div>
-                          </TableCell>
+                            <TableCell>
+                              <div className="font-bold text-[#0b1729]">
+                                {formatMoney(
+                                  settlement.netPayable
+                                )}
+                              </div>
 
-                          <TableCell>
-                            <span
-                              className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${getStatusClasses(
-                                settlement.status
-                              )}`}
-                            >
-                              {settlement.status}
-                            </span>
-                          </TableCell>
+                              <div
+                                className={`text-xs font-semibold ${
+                                  settlement.direction ===
+                                  "PAY_VENDOR"
+                                    ? "text-emerald-600"
+                                    : "text-amber-600"
+                                }`}
+                              >
+                                {getDirectionLabel(
+                                  settlement.direction
+                                )}
+                              </div>
+                            </TableCell>
 
-                          <TableCell>
-                            <span className="text-sm text-slate-500">
-                              {formatDate(settlement.createdAt)}
-                            </span>
-                          </TableCell>
+                            <TableCell>
+                              <span
+                                className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${getStatusClasses(
+                                  settlement.status
+                                )}`}
+                              >
+                                {
+                                  settlement.status
+                                }
+                              </span>
+                            </TableCell>
 
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              {settlement.status === "PENDING" && (
+                            <TableCell>
+                              <span className="text-sm text-slate-500">
+                                {formatDate(
+                                  settlement.createdAt
+                                )}
+                              </span>
+                            </TableCell>
+
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+
                                 <button
                                   type="button"
-                                  disabled={actionLoading}
-                                  onClick={() =>
-                                    handleProcessSettlement(settlement)
-                                  }
-                                  className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                                  onClick={() => setBillSettlement(settlement)}
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                                  title="Download settlement bill"
                                 >
-                                  Process
+                                  <Download className="h-3.5 w-3.5" />
+                                  Bill
                                 </button>
-                              )}
 
-                              {(settlement.status === "PENDING" ||
-                                settlement.status === "PROCESSING") && (
-                                <button
-                                  type="button"
-                                  disabled={actionLoading}
-                                  onClick={() => {
-                                    setSelectedSettlement(settlement);
-                                    setPaymentReference("");
-                                    setPaymentNotes("");
-                                  }}
-                                  className="rounded-lg bg-[#e23c2e] px-2.5 py-2 text-xs font-semibold text-white hover:bg-[#ce3122] disabled:opacity-50"
-                                >
-                                  {settlement.direction === "PAY_VENDOR"
-                                    ? "Pay"
-                                    : "Collect"}
-                                </button>
-                              )}
+                                {settlement.status ===
+                                  "PENDING" && (
+                                  <button
+                                    type="button"
+                                    disabled={
+                                      actionLoading
+                                    }
+                                    onClick={() =>
+                                      handleProcessSettlement(
+                                        settlement
+                                      )
+                                    }
+                                    className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                                  >
+                                    Process
+                                  </button>
+                                )}
 
-                              {(settlement.status === "PENDING" ||
-                                settlement.status === "PROCESSING") && (
-                                <button
-                                  type="button"
-                                  disabled={actionLoading}
-                                  onClick={() =>
-                                    handleCancelSettlement(settlement)
-                                  }
-                                  className="rounded-lg border border-red-200 px-2.5 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
-                                >
-                                  Cancel
-                                </button>
-                              )}
+                                {(settlement.status ===
+                                  "PENDING" ||
+                                  settlement.status ===
+                                    "PROCESSING") && (
+                                  <button
+                                    type="button"
+                                    disabled={
+                                      actionLoading
+                                    }
+                                    onClick={() => {
+                                      setSelectedSettlement(
+                                        settlement
+                                      );
 
-                              {settlement.status === "PAID" && (
-                                <span className="text-xs font-medium text-emerald-600">
-                                  Settled {formatDate(settlement.paidAt)}
-                                </span>
-                              )}
-                            </div>
-                          </TableCell>
-                        </tr>
-                      ))
+                                      setPaymentReference(
+                                        ""
+                                      );
+
+                                      setPaymentNotes(
+                                        ""
+                                      );
+                                    }}
+                                    className="rounded-lg bg-[#e23c2e] px-2.5 py-2 text-xs font-semibold text-white hover:bg-[#ce3122] disabled:opacity-50"
+                                  >
+                                    {settlement.direction ===
+                                    "PAY_VENDOR"
+                                      ? "Pay"
+                                      : "Collect"}
+                                  </button>
+                                )}
+
+                                {(settlement.status ===
+                                  "PENDING" ||
+                                  settlement.status ===
+                                    "PROCESSING") && (
+                                  <button
+                                    type="button"
+                                    disabled={
+                                      actionLoading
+                                    }
+                                    onClick={() =>
+                                      handleCancelSettlement(
+                                        settlement
+                                      )
+                                    }
+                                    className="rounded-lg border border-red-200 px-2.5 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+                                  >
+                                    Cancel
+                                  </button>
+                                )}
+
+                                {settlement.status ===
+                                  "PAID" && (
+                                  <span className="text-xs font-medium text-emerald-600">
+                                    Settled{" "}
+                                    {formatDate(
+                                      settlement.paidAt
+                                    )}
+                                  </span>
+                                )}
+
+                              </div>
+                            </TableCell>
+
+                          </tr>
+                        )
+                      )
                     )}
+
                   </tbody>
                 </table>
               </div>
-
-              <PaginationBar
-                pagination={settlementsPage}
-                onPrevious={() => fetchSettlements(settlementsPage.page - 1)}
-                onNext={() => fetchSettlements(settlementsPage.page + 1)}
-              />
             </div>
           </section>
         )}
@@ -1624,382 +2749,856 @@ export default function AdminAccountingPage() {
       {/* VENDOR MODAL */}
       {/* ================================================== */}
 
-      {selectedVendor && !showCreateSettlement && (
-        <Modal onClose={() => setSelectedVendor(null)}>
-          <div className="mb-6 flex items-start justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-[#e23c2e]">
-                Vendor
+      {selectedVendor &&
+        !showCreateSettlement && (
+          <Modal
+            onClose={() =>
+              setSelectedVendor(
+                null
+              )
+            }
+          >
+
+            <div className="mb-6 flex items-start justify-between">
+
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-[#e23c2e]">
+                  Vendor
+                </p>
+
+                <h2 className="mt-1 text-xl font-bold">
+                  {
+                    selectedVendor.companyName
+                  }
+                </h2>
+
+                <p className="mt-1 text-sm text-slate-500">
+                  {
+                    selectedVendor.location
+                  }
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setSelectedVendor(
+                    null
+                  )
+                }
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              >
+                <X className="h-5 w-5" />
+              </button>
+
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+
+              <ModalStat
+                label="Unsettled credits"
+                value={formatMoney(
+                  selectedVendor.availableCredits
+                )}
+                positive
+              />
+
+              <ModalStat
+                label="Unsettled charges"
+                value={formatMoney(
+                  selectedVendor.availableDebits
+                )}
+              />
+
+              <ModalStat
+                label="Vendor balance"
+                value={formatMoney(
+                  selectedVendor.balance
+                )}
+              />
+
+              <ModalStat
+                label="Open settlement"
+                value={formatMoney(
+                  selectedVendor.outstandingSettlement
+                )}
+              />
+
+            </div>
+
+            <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
+
+              <div className="mb-2 flex items-center justify-between">
+
+                <span className="text-sm text-slate-500">
+                  Contact
+                </span>
+
+                <span className="text-sm font-semibold">
+                  {
+                    selectedVendor.contactId
+                  }
+                </span>
+
+              </div>
+
+              <div className="flex items-center justify-between">
+
+                <span className="text-sm text-slate-500">
+                  Shipments
+                </span>
+
+                <span className="text-sm font-semibold">
+                  {
+                    selectedVendor
+                      ._count
+                      ?.shipments ??
+                    0
+                  }
+                </span>
+
+              </div>
+
+            </div>
+
+            {selectedVendor.pendingSettlementCount >
+            0 ? (
+              <p className="mt-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                This vendor already
+                has an open
+                settlement. Finish
+                or cancel it before
+                creating a new one.
               </p>
-
-              <h2 className="mt-1 text-xl font-bold">
-                {selectedVendor.companyName}
-              </h2>
-
-              <p className="mt-1 text-sm text-slate-500">
-                {selectedVendor.location}
+            ) : selectedVendor.balance ===
+              0 ? (
+              <p className="mt-6 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                There is currently
+                nothing to settle
+                for this vendor.
               </p>
-            </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() =>
+                  openSettlementBuilder(
+                    selectedVendor
+                  )
+                }
+                className="mt-6 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#e23c2e] px-4 text-sm font-semibold text-white transition hover:bg-[#ce3122]"
+              >
+                <Wallet className="h-4 w-4" />
 
-            <button
-              type="button"
-              onClick={() => setSelectedVendor(null)}
-              className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
+                Create Settlement
+              </button>
+            )}
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <ModalStat
-              label="Unsettled credits (COD etc.)"
-              value={formatMoney(selectedVendor.availableCredits)}
-              positive
-            />
-
-            <ModalStat
-              label="Unsettled charges"
-              value={formatMoney(selectedVendor.availableDebits)}
-            />
-
-            <ModalStat
-              label="Balance"
-              value={formatMoney(selectedVendor.balance)}
-            />
-
-            <ModalStat
-              label="Open settlement"
-              value={formatMoney(selectedVendor.outstandingSettlement)}
-            />
-          </div>
-
-          <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-sm text-slate-500">Contact</span>
-              <span className="text-sm font-semibold">
-                {selectedVendor.contactId}
-              </span>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-slate-500">Shipments</span>
-              <span className="text-sm font-semibold">
-                {selectedVendor._count?.shipments ?? 0}
-              </span>
-            </div>
-          </div>
-
-          {selectedVendor.pendingSettlementCount > 0 ? (
-            <p className="mt-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-              This vendor already has an open settlement. Finish or cancel it
-              before creating a new one.
-            </p>
-          ) : (
-            <button
-              type="button"
-              onClick={() => openSettlementBuilder(selectedVendor)}
-              className="mt-6 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#e23c2e] px-4 text-sm font-semibold text-white transition hover:bg-[#ce3122]"
-            >
-              <Wallet className="h-4 w-4" />
-              Create Settlement
-            </button>
-          )}
-        </Modal>
-      )}
+          </Modal>
+        )}
 
       {/* ================================================== */}
       {/* SETTLEMENT BUILDER */}
       {/* ================================================== */}
 
-      {showCreateSettlement && selectedVendor && (
-        <Modal wide onClose={closeSettlementBuilder}>
-          <div className="mb-6 flex items-start justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-[#e23c2e]">
-                Settlement
-              </p>
+      {showCreateSettlement &&
+        selectedVendor && (
+          <Modal
+            wide
+            onClose={
+              closeSettlementBuilder
+            }
+          >
 
-              <h2 className="mt-1 text-xl font-bold">Create Settlement</h2>
+            <div className="mb-6 flex items-start justify-between">
 
-              <p className="mt-1 text-sm text-slate-500">
-                {selectedVendor.companyName}
-              </p>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-[#e23c2e]">
+                  Settlement
+                </p>
+
+                <h2 className="mt-1 text-xl font-bold">
+                  Create Settlement
+                </h2>
+
+                <p className="mt-1 text-sm text-slate-500">
+                  {
+                    selectedVendor.companyName
+                  }
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={
+                  closeSettlementBuilder
+                }
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"
+              >
+                <X className="h-5 w-5" />
+              </button>
+
             </div>
 
-            <button
-              type="button"
-              onClick={closeSettlementBuilder}
-              className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
+            {unsettledLoading && (
+              <div className="flex items-center justify-center gap-3 py-12 text-slate-500">
 
-          {unsettledLoading && (
-            <div className="flex items-center justify-center gap-3 py-12 text-slate-500">
-              <Loader2 className="h-5 w-5 animate-spin" />
-              <span className="text-sm">Loading unsettled entries...</span>
-            </div>
-          )}
+                <Loader2 className="h-5 w-5 animate-spin" />
 
-          {!unsettledLoading && unsettledError && (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {unsettledError}
-            </div>
-          )}
+                <span className="text-sm">
+                  Loading unsettled
+                  entries...
+                </span>
 
-          {!unsettledLoading &&
-            !unsettledError &&
-            unsettled &&
-            allUnsettledEntries.length === 0 && (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-                Nothing left to settle for this vendor.
               </div>
             )}
 
-          {!unsettledLoading &&
-            !unsettledError &&
-            unsettled &&
-            allUnsettledEntries.length > 0 && (
-              <>
-                {/* SUMMARY */}
-
-                <div className="mb-5 grid gap-3 sm:grid-cols-3">
-                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-emerald-600">
-                      Credits (owed to vendor)
-                    </p>
-
-                    <p className="mt-1 text-lg font-bold text-emerald-700">
-                      {formatMoney(selection.credits)}
-                    </p>
-                  </div>
-
-                  <div className="rounded-xl border border-red-200 bg-red-50 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-red-600">
-                      Charges (owed to you)
-                    </p>
-
-                    <p className="mt-1 text-lg font-bold text-red-700">
-                      {formatMoney(selection.debits)}
-                    </p>
-                  </div>
-
-                  <div className="rounded-xl border border-slate-200 bg-[#0b1729] p-4 text-white">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-white/60">
-                      {selection.direction === "COLLECT_FROM_VENDOR"
-                        ? "Collect from vendor"
-                        : "Pay vendor"}
-                    </p>
-
-                    <p className="mt-1 text-lg font-bold">
-                      {formatMoney(selection.amount)}
-                    </p>
-                  </div>
-                </div>
-
-                <p className="mb-4 text-xs text-slate-500">
-                  Credits minus charges. Example: COD {formatMoney(1000)} −
-                  shipping {formatMoney(200)} = {formatMoney(800)} paid back to
-                  the vendor. Untick anything you want to leave for a later
-                  settlement.
-                </p>
-
-                {/* CREDITS */}
-
-                <EntryGroup
-                  title="Credits"
-                  subtitle="COD collected on the vendor's behalf, refunds"
-                  tone="credit"
-                  entries={unsettled.credits}
-                  selectedIds={selectedEntryIds}
-                  onToggle={toggleEntry}
-                />
-
-                {/* DEBITS */}
-
-                <EntryGroup
-                  title="Charges"
-                  subtitle="Shipping, return, pickup and other charges"
-                  tone="debit"
-                  entries={unsettled.debits}
-                  selectedIds={selectedEntryIds}
-                  onToggle={toggleEntry}
-                />
-
-                {/* NOTES */}
-
-                <div className="mt-5">
-                  <label className="mb-2 block text-sm font-semibold">
-                    Notes
-                  </label>
-
-                  <textarea
-                    value={settlementNotes}
-                    onChange={(e) => setSettlementNotes(e.target.value)}
-                    rows={3}
-                    placeholder="Optional settlement notes..."
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:border-[#e23c2e] focus:ring-2 focus:ring-[#e23c2e]/10"
-                  />
-                </div>
-
-                <button
-                  type="button"
-                  disabled={
-                    actionLoading ||
-                    selection.count === 0 ||
-                    selection.net === 0
+            {!unsettledLoading &&
+              unsettledError && (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {
+                    unsettledError
                   }
-                  onClick={handleCreateSettlement}
-                  className="mt-5 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#e23c2e] px-4 text-sm font-semibold text-white transition hover:bg-[#ce3122] disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {actionLoading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Creating...
-                    </>
-                  ) : (
-                    <>
-                      <Wallet className="h-4 w-4" />
-                      {selection.direction === "COLLECT_FROM_VENDOR"
-                        ? `Create collection of ${formatMoney(selection.amount)}`
-                        : `Create payment of ${formatMoney(selection.amount)}`}
-                    </>
-                  )}
-                </button>
+                </div>
+              )}
 
-                {selection.net === 0 && selection.count > 0 && (
-                  <p className="mt-2 text-center text-xs text-amber-600">
-                    Selected credits and charges cancel out exactly — nothing to
-                    settle.
-                  </p>
-                )}
-              </>
-            )}
-        </Modal>
+            {!unsettledLoading &&
+              !unsettledError &&
+              unsettled &&
+              allUnsettledEntries.length ===
+                0 && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                  Nothing left to
+                  settle for this
+                  vendor.
+                </div>
+              )}
+
+            {!unsettledLoading &&
+              !unsettledError &&
+              unsettled &&
+              allUnsettledEntries.length >
+                0 && (
+                <>
+                  {/* SUMMARY */}
+
+                  <div className="mb-5 grid gap-3 sm:grid-cols-3">
+
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-emerald-600">
+                        Credits
+                      </p>
+
+                      <p className="mt-1 text-lg font-bold text-emerald-700">
+                        {formatMoney(
+                          selection.credits
+                        )}
+                      </p>
+
+                      <p className="mt-1 text-[11px] text-emerald-600/70">
+                        Money held for
+                        vendor
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-red-600">
+                        Charges
+                      </p>
+
+                      <p className="mt-1 text-lg font-bold text-red-700">
+                        {formatMoney(
+                          selection.debits
+                        )}
+                      </p>
+
+                      <p className="mt-1 text-[11px] text-red-600/70">
+                        Vendor owes cargo
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200 bg-[#0b1729] p-4 text-white">
+
+                      <p className="text-xs font-semibold uppercase tracking-wider text-white/60">
+                        {selection.direction ===
+                        "COLLECT_FROM_VENDOR"
+                          ? "Collect from vendor"
+                          : "Pay vendor"}
+                      </p>
+
+                      <p className="mt-1 text-lg font-bold">
+                        {formatMoney(
+                          selection.amount
+                        )}
+                      </p>
+
+                    </div>
+
+                  </div>
+
+                  {/* EXAMPLE */}
+
+                  <div className="mb-5 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
+
+                    <p className="text-xs font-semibold uppercase tracking-wider text-blue-700">
+                      Settlement calculation
+                    </p>
+
+                    <p className="mt-1 text-sm text-blue-700">
+                      COD collected
+                      from customer −
+                      vendor charges =
+                      amount to settle.
+                    </p>
+
+                    <p className="mt-2 text-sm font-bold text-blue-900">
+                      Example:{" "}
+                      {formatMoney(
+                        20000
+                      )}{" "}
+                      −{" "}
+                      {formatMoney(
+                        200
+                      )}{" "}
+                      ={" "}
+                      {formatMoney(
+                        19800
+                      )}{" "}
+                      to vendor
+                    </p>
+
+                  </div>
+
+                  {/* CREDITS */}
+
+                  <EntryGroup
+                    title="Credits"
+                    subtitle="COD collected on the vendor's behalf and other vendor credits"
+                    tone="credit"
+                    entries={
+                      unsettled.credits
+                    }
+                    selectedIds={
+                      selectedEntryIds
+                    }
+                    onToggle={
+                      toggleEntry
+                    }
+                  />
+
+                  {/* DEBITS */}
+
+                  <EntryGroup
+                    title="Charges"
+                    subtitle="Shipping, return, pickup, storage and other vendor charges"
+                    tone="debit"
+                    entries={
+                      unsettled.debits
+                    }
+                    selectedIds={
+                      selectedEntryIds
+                    }
+                    onToggle={
+                      toggleEntry
+                    }
+                  />
+
+                  {/* NOTES */}
+
+                  <div className="mt-5">
+
+                    <label className="mb-2 block text-sm font-semibold">
+                      Notes
+                    </label>
+
+                    <textarea
+                      value={
+                        settlementNotes
+                      }
+                      onChange={(e) =>
+                        setSettlementNotes(
+                          e.target.value
+                        )
+                      }
+                      rows={3}
+                      placeholder="Optional settlement notes..."
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:border-[#e23c2e] focus:ring-2 focus:ring-[#e23c2e]/10"
+                    />
+
+                  </div>
+
+                  {/* CREATE */}
+
+                  <button
+                    type="button"
+                    disabled={
+                      actionLoading ||
+                      selection.count ===
+                        0 ||
+                      selection.net ===
+                        0
+                    }
+                    onClick={
+                      handleCreateSettlement
+                    }
+                    className="mt-5 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#e23c2e] px-4 text-sm font-semibold text-white transition hover:bg-[#ce3122] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+
+                    {actionLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+
+                        Creating...
+                      </>
+                    ) : (
+                      <>
+                        <Wallet className="h-4 w-4" />
+
+                        {selection.direction ===
+                        "COLLECT_FROM_VENDOR"
+                          ? `Create collection of ${formatMoney(
+                              selection.amount
+                            )}`
+                          : `Create payment of ${formatMoney(
+                              selection.amount
+                            )}`}
+                      </>
+                    )}
+
+                  </button>
+
+                  {selection.net ===
+                    0 &&
+                    selection.count >
+                      0 && (
+                      <p className="mt-2 text-center text-xs text-amber-600">
+                        Selected credits
+                        and charges
+                        cancel out
+                        exactly —
+                        nothing to
+                        settle.
+                      </p>
+                    )}
+
+                </>
+              )}
+
+          </Modal>
+        )}
+
+      {/* ================================================== */}
+      {/* SETTLEMENT BILL MODAL */}
+      {/* ================================================== */}
+
+      {billSettlement && (
+        <SettlementBillModal
+          settlement={billSettlement}
+          onClose={() => setBillSettlement(null)}
+        />
       )}
 
       {/* ================================================== */}
-      {/* PAY SETTLEMENT MODAL */}
+      {/* PAY / COLLECT MODAL */}
       {/* ================================================== */}
 
       {selectedSettlement && (
         <Modal
           onClose={() => {
-            setSelectedSettlement(null);
+            setSelectedSettlement(
+              null
+            );
+
             setPaymentReference("");
+
             setPaymentNotes("");
           }}
         >
+
           <div className="mb-6 flex items-start justify-between">
+
             <div>
+
               <p className="text-xs font-semibold uppercase tracking-wider text-[#e23c2e]">
-                {selectedSettlement.direction === "PAY_VENDOR"
+                {selectedSettlement.direction ===
+                "PAY_VENDOR"
                   ? "Vendor Payment"
                   : "Vendor Collection"}
               </p>
 
               <h2 className="mt-1 text-xl font-bold">
-                {selectedSettlement.direction === "PAY_VENDOR"
+                {selectedSettlement.direction ===
+                "PAY_VENDOR"
                   ? "Mark as Paid"
                   : "Mark as Collected"}
               </h2>
 
               <p className="mt-1 text-sm text-slate-500">
-                {selectedSettlement.vendor?.companyName}
+                {
+                  selectedSettlement
+                    .vendor
+                    ?.companyName
+                }
               </p>
+
             </div>
 
             <button
               type="button"
-              onClick={() => setSelectedSettlement(null)}
+              onClick={() =>
+                setSelectedSettlement(
+                  null
+                )
+              }
               className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"
             >
               <X className="h-5 w-5" />
             </button>
+
           </div>
 
+          {/* AMOUNT */}
+
           <div className="mb-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+
             <div className="flex items-center justify-between text-sm">
-              <span className="text-slate-500">Credits</span>
-              <span className="font-semibold text-emerald-600">
-                {formatMoney(selectedSettlement.totalCredits)}
+
+              <span className="text-slate-500">
+                COD credits
               </span>
+
+              <span className="font-semibold text-emerald-600">
+                {formatMoney(
+                  selectedSettlement.totalCredits
+                )}
+              </span>
+
             </div>
 
             <div className="mt-2 flex items-center justify-between text-sm">
-              <span className="text-slate-500">Charges</span>
-              <span className="font-semibold text-red-600">
-                −{formatMoney(selectedSettlement.totalDebits)}
+
+              <span className="text-slate-500">
+                Vendor charges
               </span>
+
+              <span className="font-semibold text-red-600">
+                −
+                {formatMoney(
+                  selectedSettlement.totalDebits
+                )}
+              </span>
+
             </div>
 
             <div className="mt-3 border-t border-slate-200 pt-3">
+
               <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                {selectedSettlement.direction === "PAY_VENDOR"
-                  ? "Amount to pay"
-                  : "Amount to collect"}
+                {selectedSettlement.direction ===
+                "PAY_VENDOR"
+                  ? "Amount to pay vendor"
+                  : "Amount to collect from vendor"}
               </p>
 
               <p className="mt-1 text-2xl font-bold text-[#0b1729]">
-                {formatMoney(selectedSettlement.netPayable)}
+                {formatMoney(
+                  selectedSettlement.netPayable
+                )}
               </p>
+
+              <p
+                className={`mt-1 text-xs font-semibold ${
+                  selectedSettlement.direction ===
+                  "PAY_VENDOR"
+                    ? "text-emerald-600"
+                    : "text-amber-600"
+                }`}
+              >
+                {getDirectionLabel(
+                  selectedSettlement.direction
+                )}
+              </p>
+
             </div>
+
           </div>
 
+          {/* REFERENCE */}
+
           <div className="space-y-4">
+
             <div>
+
               <label className="mb-2 block text-sm font-semibold">
                 Payment Reference
               </label>
 
               <input
-                value={paymentReference}
-                onChange={(e) => setPaymentReference(e.target.value)}
+                value={
+                  paymentReference
+                }
+                onChange={(e) =>
+                  setPaymentReference(
+                    e.target.value
+                  )
+                }
                 placeholder="Bank transfer / cheque reference..."
                 className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-[#e23c2e] focus:ring-2 focus:ring-[#e23c2e]/10"
               />
+
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-semibold">Notes</label>
+
+              <label className="mb-2 block text-sm font-semibold">
+                Notes
+              </label>
 
               <textarea
-                value={paymentNotes}
-                onChange={(e) => setPaymentNotes(e.target.value)}
+                value={
+                  paymentNotes
+                }
+                onChange={(e) =>
+                  setPaymentNotes(
+                    e.target.value
+                  )
+                }
                 rows={3}
                 placeholder="Optional payment notes..."
                 className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:border-[#e23c2e] focus:ring-2 focus:ring-[#e23c2e]/10"
               />
+
             </div>
+
           </div>
+
+          {/* CONFIRM */}
 
           <button
             type="button"
-            disabled={actionLoading}
-            onClick={handlePaySettlement}
+            disabled={
+              actionLoading
+            }
+            onClick={
+              handlePaySettlement
+            }
             className="mt-5 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#e23c2e] px-4 text-sm font-semibold text-white transition hover:bg-[#ce3122] disabled:cursor-not-allowed disabled:opacity-60"
           >
+
             {actionLoading ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
+
                 Processing...
               </>
             ) : (
               <>
                 <CheckCircle2 className="h-4 w-4" />
-                Confirm
+
+                {selectedSettlement.direction ===
+                "PAY_VENDOR"
+                  ? "Confirm Vendor Payment"
+                  : "Confirm Vendor Collection"}
               </>
             )}
+
           </button>
+
         </Modal>
       )}
+
     </main>
   );
 }
 
 // ======================================================
-// ENTRY GROUP (settlement builder)
+// SKELETON
+// ======================================================
+
+function AccountingSkeleton() {
+  return (
+    <main className="min-h-screen bg-[#f5f6f8]">
+      <div className="mx-auto max-w-[1500px] px-4 py-6 sm:px-6 lg:px-8">
+        <div className="animate-pulse space-y-7">
+          <div className="flex items-center justify-between">
+            <div className="space-y-3">
+              <div className="h-4 w-20 rounded bg-slate-200" />
+              <div className="h-8 w-48 rounded-lg bg-slate-200" />
+              <div className="h-4 w-80 max-w-full rounded bg-slate-200" />
+            </div>
+            <div className="hidden h-11 w-28 rounded-xl bg-slate-200 sm:block" />
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex justify-between">
+                  <div className="h-10 w-10 rounded-xl bg-slate-200" />
+                  <div className="h-4 w-14 rounded bg-slate-200" />
+                </div>
+                <div className="mt-5 h-4 w-28 rounded bg-slate-200" />
+                <div className="mt-2 h-7 w-36 rounded bg-slate-200" />
+                <div className="mt-2 h-3 w-32 rounded bg-slate-200" />
+              </div>
+            ))}
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="h-20 rounded-xl border border-slate-200 bg-white p-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-lg bg-slate-200" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-3 w-20 rounded bg-slate-200" />
+                    <div className="h-4 w-28 rounded bg-slate-200" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-2">
+            <div className="flex gap-2">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="h-10 w-28 rounded-xl bg-slate-200" />
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="h-6 w-52 rounded bg-slate-200" />
+            <div className="mt-2 h-4 w-80 max-w-full rounded bg-slate-200" />
+            <div className="mt-6 space-y-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="h-12 rounded-xl bg-slate-100" />
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+// ======================================================
+// SETTLEMENT BILL
+// ======================================================
+
+function SettlementBillModal({
+  settlement,
+  onClose,
+}: {
+  settlement: Settlement;
+  onClose: () => void;
+}) {
+  const downloadBill = () => {
+    const rows = (settlement.items || []).map((item) => {
+      const entry = item.accountingEntry;
+      return `
+        <tr>
+          <td>${escapeHtml(entry?.shipment?.trackingNumber || "—")}</td>
+          <td>${escapeHtml(entry ? getTypeLabel(entry.type) : "Accounting Entry")}</td>
+          <td>${escapeHtml(entry?.description || "—")}</td>
+          <td style="text-align:right">NPR ${Number(item.amount || 0).toLocaleString("en-NP", { minimumFractionDigits: 2 })}</td>
+        </tr>`;
+    }).join("");
+
+    const direction = getDirectionLabel(settlement.direction);
+    const html = `<!doctype html>
+<html><head><meta charset="utf-8"><title>Settlement Bill - ${escapeHtml(settlement.vendor?.companyName || "Vendor")}</title>
+<style>
+body{font-family:Arial,sans-serif;background:#f5f6f8;color:#0b1729;padding:32px}.bill{max-width:850px;margin:auto;background:#fff;padding:36px;border-radius:16px}.top{display:flex;justify-content:space-between;gap:24px;border-bottom:1px solid #e5e7eb;padding-bottom:22px}.brand{font-size:24px;font-weight:800}.muted{color:#64748b;font-size:13px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:24px 0}.box{background:#f8fafc;border:1px solid #e2e8f0;padding:14px;border-radius:10px}.label{font-size:11px;color:#64748b;text-transform:uppercase}.value{font-weight:700;margin-top:4px}table{width:100%;border-collapse:collapse;margin-top:24px}th,td{padding:10px;border-bottom:1px solid #e5e7eb;text-align:left;font-size:12px}th{background:#f8fafc}.totals{margin-top:24px;margin-left:auto;max-width:360px}.line{display:flex;justify-content:space-between;padding:7px 0}.grand{border-top:2px solid #0b1729;margin-top:8px;padding-top:12px;font-size:18px;font-weight:800}.note{margin-top:24px;padding:14px;background:#fffbeb;border:1px solid #fde68a;border-radius:10px}.footer{margin-top:30px;text-align:center;color:#94a3b8;font-size:11px}@media print{body{padding:0;background:#fff}.bill{box-shadow:none;max-width:none}}
+</style></head><body><div class="bill">
+<div class="top"><div><div class="brand">Settlement Bill</div><div class="muted">Vendor accounting settlement</div></div><div style="text-align:right"><div class="muted">Settlement ID</div><div style="font-family:monospace;font-size:11px">${escapeHtml(settlement.id)}</div></div></div>
+<div class="grid">
+<div class="box"><div class="label">Vendor</div><div class="value">${escapeHtml(settlement.vendor?.companyName || "—")}</div><div class="muted">${escapeHtml(settlement.vendor?.contactId || "")}</div></div>
+<div class="box"><div class="label">Status</div><div class="value">${escapeHtml(settlement.status)}</div><div class="muted">Created ${escapeHtml(formatDate(settlement.createdAt))}</div></div>
+<div class="box"><div class="label">Settlement Direction</div><div class="value">${escapeHtml(direction)}</div></div>
+<div class="box"><div class="label">Payment Date</div><div class="value">${escapeHtml(formatDate(settlement.paidAt))}</div></div>
+</div>
+<table><thead><tr><th>Tracking</th><th>Type</th><th>Description</th><th style="text-align:right">Amount</th></tr></thead><tbody>
+${rows || `<tr><td colspan="4" style="text-align:center;color:#64748b">No item-level entries were returned by the settlement API.</td></tr>`}
+</tbody></table>
+<div class="totals">
+<div class="line"><span>COD credits</span><strong>NPR ${Number(settlement.totalCodAmount || 0).toLocaleString("en-NP", {minimumFractionDigits:2})}</strong></div>
+<div class="line"><span>Shipping charges</span><strong>NPR ${Number(settlement.totalShippingCharge || 0).toLocaleString("en-NP", {minimumFractionDigits:2})}</strong></div>
+<div class="line"><span>Return charges</span><strong>NPR ${Number(settlement.totalReturnCharge || 0).toLocaleString("en-NP", {minimumFractionDigits:2})}</strong></div>
+<div class="line"><span>Other charges</span><strong>NPR ${Number(settlement.totalOtherCharges || 0).toLocaleString("en-NP", {minimumFractionDigits:2})}</strong></div>
+<div class="line"><span>Total credits</span><strong>NPR ${Number(settlement.totalCredits || 0).toLocaleString("en-NP", {minimumFractionDigits:2})}</strong></div>
+<div class="line"><span>Total debits</span><strong>NPR ${Number(settlement.totalDebits || 0).toLocaleString("en-NP", {minimumFractionDigits:2})}</strong></div>
+<div class="line grand"><span>${escapeHtml(direction)}</span><span>NPR ${Number(settlement.netPayable || 0).toLocaleString("en-NP", {minimumFractionDigits:2})}</span></div>
+</div>
+${settlement.paymentReference || settlement.notes ? `<div class="note"><strong>Settlement Notes</strong><div style="margin-top:6px">Reference: ${escapeHtml(settlement.paymentReference || "—")}</div><div style="margin-top:4px">Notes: ${escapeHtml(settlement.notes || "—")}</div></div>` : ""}
+<div class="footer">Generated from the accounting settlement record.</div>
+</div></body></html>`;
+
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `settlement-${settlement.vendor?.companyName || "vendor"}-${settlement.id}.html`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <Modal onClose={onClose}>
+      <div className="mb-5 flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-[#e23c2e]">Settlement Bill</p>
+          <h2 className="mt-1 text-xl font-bold">{settlement.vendor?.companyName}</h2>
+          <p className="mt-1 text-sm text-slate-500">{getDirectionLabel(settlement.direction)} · {settlement.status}</p>
+        </div>
+        <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X className="h-5 w-5" /></button>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <ModalStat label="COD credits" value={formatMoney(settlement.totalCodAmount)} positive />
+        <ModalStat label="Shipping charges" value={formatMoney(settlement.totalShippingCharge)} />
+        <ModalStat label="Return charges" value={formatMoney(settlement.totalReturnCharge)} />
+        <ModalStat label="Other charges" value={formatMoney(settlement.totalOtherCharges)} />
+        <ModalStat label="Total credits" value={formatMoney(settlement.totalCredits)} positive />
+        <ModalStat label="Total debits" value={formatMoney(settlement.totalDebits)} />
+      </div>
+
+      <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-slate-500">{getDirectionLabel(settlement.direction)}</span>
+          <span className="text-xl font-bold">{formatMoney(settlement.netPayable)}</span>
+        </div>
+        <div className="mt-2 text-xs text-slate-500">
+          Created {formatDate(settlement.createdAt)} · Paid {formatDate(settlement.paidAt)}
+        </div>
+      </div>
+
+      <div className="mt-5 rounded-xl border border-slate-200 p-4">
+        <p className="text-sm font-bold">Settlement information</p>
+        <div className="mt-3 space-y-2 text-sm">
+          <div className="flex justify-between gap-4"><span className="text-slate-500">Payment reference</span><span className="font-semibold">{settlement.paymentReference || "—"}</span></div>
+          <div className="flex justify-between gap-4"><span className="text-slate-500">Notes</span><span className="max-w-[60%] text-right font-semibold">{settlement.notes || "—"}</span></div>
+          <div className="flex justify-between gap-4"><span className="text-slate-500">Settlement ID</span><span className="max-w-[60%] break-all text-right font-mono text-xs">{settlement.id}</span></div>
+        </div>
+      </div>
+
+      <button type="button" onClick={downloadBill} className="mt-5 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#e23c2e] px-4 text-sm font-semibold text-white hover:bg-[#ce3122]">
+        <Download className="h-4 w-4" />
+        Download Settlement Bill
+      </button>
+    </Modal>
+  );
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+// ======================================================
+// ENTRY GROUP
 // ======================================================
 
 function EntryGroup({
@@ -2015,79 +3614,135 @@ function EntryGroup({
   tone: "credit" | "debit";
   entries: UnsettledEntry[];
   selectedIds: string[];
-  onToggle: (id: string) => void;
+  onToggle: (
+    id: string
+  ) => void;
 }) {
   return (
     <div className="mb-4 overflow-hidden rounded-xl border border-slate-200">
+
       <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3">
+
         <div>
-          <p className="text-sm font-bold text-[#0b1729]">{title}</p>
-          <p className="text-xs text-slate-400">{subtitle}</p>
+          <p className="text-sm font-bold text-[#0b1729]">
+            {title}
+          </p>
+
+          <p className="text-xs text-slate-400">
+            {subtitle}
+          </p>
         </div>
 
         <span
           className={`text-xs font-semibold ${
-            tone === "credit" ? "text-emerald-600" : "text-red-600"
+            tone === "credit"
+              ? "text-emerald-600"
+              : "text-red-600"
           }`}
         >
-          {entries.length} entries
+          {entries.length}{" "}
+          entries
         </span>
+
       </div>
 
-      {entries.length === 0 ? (
+      {entries.length ===
+      0 ? (
         <p className="px-4 py-6 text-center text-sm text-slate-400">
           None outstanding.
         </p>
       ) : (
         <div className="max-h-64 divide-y divide-slate-100 overflow-y-auto">
-          {entries.map((entry) => {
-            const checked = selectedIds.includes(entry.id);
 
-            return (
-              <label
-                key={entry.id}
-                className="flex cursor-pointer items-start gap-3 px-4 py-3 transition hover:bg-slate-50"
-              >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={() => onToggle(entry.id)}
-                  className="mt-1 h-4 w-4 accent-[#e23c2e]"
-                />
+          {entries.map(
+            (entry) => {
+              const checked =
+                selectedIds.includes(
+                  entry.id
+                );
 
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
-                      {getTypeLabel(entry.type)}
-                    </span>
+              return (
+                <label
+                  key={
+                    entry.id
+                  }
+                  className="flex cursor-pointer items-start gap-3 px-4 py-3 transition hover:bg-slate-50"
+                >
 
-                    {entry.shipment?.trackingNumber && (
-                      <span className="font-mono text-[11px] text-slate-400">
-                        {entry.shipment.trackingNumber}
+                  <input
+                    type="checkbox"
+                    checked={
+                      checked
+                    }
+                    onChange={() =>
+                      onToggle(
+                        entry.id
+                      )
+                    }
+                    className="mt-1 h-4 w-4 accent-[#e23c2e]"
+                  />
+
+                  <div className="min-w-0 flex-1">
+
+                    <div className="flex items-center gap-2">
+
+                      <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
+                        {getTypeLabel(
+                          entry.type
+                        )}
                       </span>
-                    )}
+
+                      {entry.shipment
+                        ?.trackingNumber && (
+                        <span className="font-mono text-[11px] text-slate-400">
+                          {
+                            entry
+                              .shipment
+                              .trackingNumber
+                          }
+                        </span>
+                      )}
+
+                    </div>
+
+                    <p className="mt-1 truncate text-xs text-slate-500">
+                      {entry.description ||
+                        entry
+                          .shipment
+                          ?.receiverName ||
+                        formatDate(
+                          entry.createdAt
+                        )}
+                    </p>
+
                   </div>
 
-                  <p className="mt-1 truncate text-xs text-slate-500">
-                    {entry.description ||
-                      entry.shipment?.receiverName ||
-                      formatDate(entry.createdAt)}
-                  </p>
-                </div>
+                  <span
+                    className={`shrink-0 text-sm font-bold ${
+                      tone ===
+                      "credit"
+                        ? "text-emerald-600"
+                        : "text-red-600"
+                    }`}
+                  >
+                    {tone ===
+                    "credit"
+                      ? "+"
+                      : "−"}
 
-                <span
-                  className={`shrink-0 text-sm font-bold ${
-                    tone === "credit" ? "text-emerald-600" : "text-red-600"
-                  }`}
-                >
-                  {tone === "credit" ? "+" : "−"}
-                  {formatMoney(entry.remainingAmount)}
-                </span>
-              </label>
-            );
-          })}
+                    {formatMoney(
+                      entry.remainingAmount
+                    )}
+                  </span>
+
+                </label>
+              );
+            }
+          )}
+
         </div>
       )}
+
     </div>
   );
 }
@@ -2102,36 +3757,65 @@ function StatCard({
   subtitle,
   icon,
   positive = false,
+  onClick,
 }: {
   title: string;
   value: string;
   subtitle: string;
   icon: React.ReactNode;
   positive?: boolean;
+  onClick?: () => void;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={(event) => {
+        if (onClick && (event.key === "Enter" || event.key === " ")) {
+          event.preventDefault();
+          onClick();
+        }
+      }}
+      className={`rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition ${
+        onClick
+          ? "cursor-pointer hover:-translate-y-0.5 hover:border-[#e23c2e] hover:shadow-md"
+          : ""
+      }`}
+    >
+
       <div className="mb-4 flex items-center justify-between">
+
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-[#0b1729]">
           {icon}
         </div>
 
         <span
           className={`text-xs font-semibold ${
-            positive ? "text-emerald-600" : "text-slate-400"
+            positive
+              ? "text-emerald-600"
+              : "text-slate-400"
           }`}
         >
-          {positive ? "Positive" : "Current"}
+          {positive
+            ? "Positive"
+            : "Current"}
         </span>
+
       </div>
 
-      <p className="text-sm text-slate-500">{title}</p>
+      <p className="text-sm text-slate-500">
+        {title}
+      </p>
 
       <p className="mt-1 text-xl font-bold tracking-tight text-[#0b1729]">
         {value}
       </p>
 
-      <p className="mt-1 text-xs text-slate-400">{subtitle}</p>
+      <p className="mt-1 text-xs text-slate-400">
+        {subtitle}
+      </p>
+
     </div>
   );
 }
@@ -2151,17 +3835,23 @@ function SmallStat({
 }) {
   return (
     <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+
       <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
         {icon}
       </div>
 
       <div className="min-w-0">
-        <p className="text-xs text-slate-400">{label}</p>
+
+        <p className="text-xs text-slate-400">
+          {label}
+        </p>
 
         <p className="mt-0.5 truncate text-sm font-bold text-[#0b1729]">
           {value}
         </p>
+
       </div>
+
     </div>
   );
 }
@@ -2177,207 +3867,366 @@ function OverviewSection({
   onVendorClick,
   onGoToTab,
 }: {
-  dashboard: DashboardData | null;
+  dashboard:
+    | DashboardData
+    | null;
+
   vendors: Vendor[];
+
   settlements: Settlement[];
-  onVendorClick: (vendor: Vendor) => void;
-  onGoToTab: (tab: Tab) => void;
+
+  onVendorClick: (
+    vendor: Vendor
+  ) => void;
+
+  onGoToTab: (
+    tab: Tab
+  ) => void;
 }) {
   return (
     <div className="grid gap-6 lg:grid-cols-[1.35fr_0.65fr]">
+
+      {/* LEFT */}
+
       <div className="space-y-6">
+
+        {/* FINANCIAL SUMMARY */}
+
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+
           <SectionHeader
             title="Financial Summary"
             description="Current accounting position."
           />
 
           <div className="mt-5 grid gap-4 sm:grid-cols-2">
+
             <SummaryRow
-              label="Total credits"
-              value={formatMoney(dashboard?.totalCredits || 0)}
+              label="Total COD credits"
+              value={formatMoney(
+                dashboard?.totalCredits ||
+                  0
+              )}
               positive
             />
 
             <SummaryRow
-              label="Total debits"
-              value={formatMoney(dashboard?.totalDebits || 0)}
+              label="Vendor charges"
+              value={formatMoney(
+                dashboard?.totalDebits ||
+                  0
+              )}
               negative
             />
 
             <SummaryRow
               label="Pending COD"
-              value={formatMoney(dashboard?.cod.pending || 0)}
+              value={formatMoney(
+                dashboard?.cod
+                  .pending ||
+                  0
+              )}
             />
 
             <SummaryRow
               label="Collected COD"
-              value={formatMoney(dashboard?.cod.collected || 0)}
+              value={formatMoney(
+                dashboard?.cod
+                  .collected ||
+                  0
+              )}
               positive
             />
+
           </div>
         </section>
 
+        {/* VENDOR BALANCES */}
+
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+
           <div className="mb-5 flex items-center justify-between">
+
             <SectionHeader
               title="Vendor Balances"
-              description="Who is owed what right now."
+              description="Unsettled amount currently owed or receivable."
             />
 
             <button
               type="button"
-              onClick={() => onGoToTab("vendors")}
+              onClick={() =>
+                onGoToTab(
+                  "vendors"
+                )
+              }
               className="text-xs font-semibold text-[#e23c2e] hover:underline"
             >
               View all
             </button>
+
           </div>
 
           <div className="space-y-2">
-            {vendors.slice(0, 5).map((vendor) => (
-              <button
-                key={vendor.id}
-                type="button"
-                onClick={() => onVendorClick(vendor)}
-                className="flex w-full items-center justify-between rounded-xl border border-transparent px-3 py-3 text-left transition hover:border-slate-200 hover:bg-slate-50"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#0b1729] text-xs font-bold text-white">
-                    {vendor.companyName.slice(0, 1).toUpperCase()}
-                  </div>
 
-                  <div>
-                    <p className="text-sm font-semibold">
-                      {vendor.companyName}
-                    </p>
+            {vendors
+              .slice(0, 5)
+              .map(
+                (vendor) => (
+                  <button
+                    key={
+                      vendor.id
+                    }
+                    type="button"
+                    onClick={() =>
+                      onVendorClick(
+                        vendor
+                      )
+                    }
+                    className="flex w-full items-center justify-between rounded-xl border border-transparent px-3 py-3 text-left transition hover:border-slate-200 hover:bg-slate-50"
+                  >
 
-                    <p className="text-xs text-slate-400">
-                      {vendor._count?.shipments ?? 0} shipments
-                    </p>
-                  </div>
-                </div>
+                    <div className="flex items-center gap-3">
 
-                <div className="text-right">
-                  <p className="text-sm font-bold">
-                    {formatMoney(vendor.balance)}
-                  </p>
+                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#0b1729] text-xs font-bold text-white">
+                        {vendor.companyName
+                          .slice(
+                            0,
+                            1
+                          )
+                          .toUpperCase()}
+                      </div>
 
-                  <p className="text-[10px] font-semibold text-slate-400">
-                    {getDirectionLabel(vendor.direction)}
-                  </p>
-                </div>
-              </button>
-            ))}
+                      <div>
 
-            {vendors.length === 0 && (
+                        <p className="text-sm font-semibold">
+                          {
+                            vendor.companyName
+                          }
+                        </p>
+
+                        <p className="text-xs text-slate-400">
+                          {
+                            vendor
+                              ._count
+                              ?.shipments ??
+                            0
+                          }{" "}
+                          shipments
+                        </p>
+
+                      </div>
+
+                    </div>
+
+                    <div className="text-right">
+
+                      <p className="text-sm font-bold">
+                        {formatMoney(
+                          vendor.balance
+                        )}
+                      </p>
+
+                      <p
+                        className={`text-[10px] font-semibold ${
+                          vendor.direction ===
+                          "PAY_VENDOR"
+                            ? "text-emerald-600"
+                            : vendor.direction ===
+                                "COLLECT_FROM_VENDOR"
+                              ? "text-amber-600"
+                              : "text-slate-400"
+                        }`}
+                      >
+                        {getDirectionLabel(
+                          vendor.direction
+                        )}
+                      </p>
+
+                    </div>
+
+                  </button>
+                )
+              )}
+
+            {vendors.length ===
+              0 && (
               <p className="py-8 text-center text-sm text-slate-400">
                 No vendors found.
               </p>
             )}
+
           </div>
+
         </section>
+
       </div>
 
+      {/* RIGHT */}
+
       <div className="space-y-6">
+
+        {/* SETTLEMENT STATUS */}
+
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+
           <SectionHeader
             title="Settlement Status"
-            description="Vendor payment overview."
+            description="Vendor settlement overview."
           />
 
           <div className="mt-5 space-y-4">
+
             <SettlementSummary
               label="Pending"
-              value={formatMoney(dashboard?.settlements.pending || 0)}
+              value={formatMoney(
+                dashboard
+                  ?.settlements
+                  .pending ||
+                  0
+              )}
               status="PENDING"
             />
 
             <SettlementSummary
               label="Processing"
-              value={formatMoney(dashboard?.settlements.processing || 0)}
+              value={formatMoney(
+                dashboard
+                  ?.settlements
+                  .processing ||
+                  0
+              )}
               status="PROCESSING"
             />
 
             <SettlementSummary
               label="Paid"
-              value={formatMoney(dashboard?.settlements.paid || 0)}
+              value={formatMoney(
+                dashboard
+                  ?.settlements
+                  .paid ||
+                  0
+              )}
               status="PAID"
             />
+
           </div>
 
           <button
             type="button"
-            onClick={() => onGoToTab("settlements")}
+            onClick={() =>
+              onGoToTab(
+                "settlements"
+              )
+            }
             className="mt-5 flex h-10 w-full items-center justify-center rounded-xl border border-slate-200 text-sm font-semibold transition hover:border-[#e23c2e] hover:text-[#e23c2e]"
           >
             Manage Settlements
           </button>
+
         </section>
 
+        {/* RECENT SETTLEMENTS */}
+
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+
           <div className="mb-5 flex items-center justify-between">
+
             <SectionHeader
               title="Recent Settlements"
               description="Latest vendor settlements."
             />
 
             <FileText className="h-5 w-5 text-slate-300" />
+
           </div>
 
           <div className="space-y-2">
-            {settlements.slice(0, 5).map((settlement) => (
-              <div
-                key={settlement.id}
-                className="flex items-center justify-between rounded-xl px-3 py-3"
-              >
-                <div>
-                  <p className="text-sm font-semibold">
-                    {settlement.vendor?.companyName}
-                  </p>
 
-                  <p className="mt-1 text-xs text-slate-400">
-                    {formatDate(settlement.createdAt)} ·{" "}
-                    {getDirectionLabel(settlement.direction)}
-                  </p>
-                </div>
-
-                <div className="text-right">
-                  <p className="text-sm font-bold">
-                    {formatMoney(settlement.netPayable)}
-                  </p>
-
-                  <span
-                    className={`text-[10px] font-bold ${
-                      settlement.status === "PAID"
-                        ? "text-emerald-600"
-                        : settlement.status === "PROCESSING"
-                          ? "text-blue-600"
-                          : settlement.status === "CANCELLED"
-                            ? "text-red-600"
-                            : "text-amber-600"
-                    }`}
+            {settlements
+              .slice(0, 5)
+              .map(
+                (settlement) => (
+                  <div
+                    key={
+                      settlement.id
+                    }
+                    className="flex items-center justify-between rounded-xl px-3 py-3"
                   >
-                    {settlement.status}
-                  </span>
-                </div>
-              </div>
-            ))}
 
-            {settlements.length === 0 && (
+                    <div>
+
+                      <p className="text-sm font-semibold">
+                        {
+                          settlement
+                            .vendor
+                            ?.companyName
+                        }
+                      </p>
+
+                      <p className="mt-1 text-xs text-slate-400">
+                        {formatDate(
+                          settlement.createdAt
+                        )}{" "}
+                        ·{" "}
+                        {getDirectionLabel(
+                          settlement.direction
+                        )}
+                      </p>
+
+                    </div>
+
+                    <div className="text-right">
+
+                      <p className="text-sm font-bold">
+                        {formatMoney(
+                          settlement.netPayable
+                        )}
+                      </p>
+
+                      <span
+                        className={`text-[10px] font-bold ${
+                          settlement.status ===
+                          "PAID"
+                            ? "text-emerald-600"
+                            : settlement.status ===
+                                "PROCESSING"
+                              ? "text-blue-600"
+                              : settlement.status ===
+                                  "CANCELLED"
+                                ? "text-red-600"
+                                : "text-amber-600"
+                        }`}
+                      >
+                        {
+                          settlement.status
+                        }
+                      </span>
+
+                    </div>
+
+                  </div>
+                )
+              )}
+
+            {settlements.length ===
+              0 && (
               <p className="py-8 text-center text-sm text-slate-400">
                 No settlements yet.
               </p>
             )}
+
           </div>
+
         </section>
+
       </div>
+
     </div>
   );
 }
 
 // ======================================================
-// SMALL UI PIECES
+// SETTLEMENT SUMMARY
 // ======================================================
 
 function SettlementSummary({
@@ -2391,24 +4240,37 @@ function SettlementSummary({
 }) {
   return (
     <div className="flex items-center justify-between">
+
       <div className="flex items-center gap-2">
+
         <span
           className={`h-2 w-2 rounded-full ${
             status === "PAID"
               ? "bg-emerald-500"
-              : status === "PROCESSING"
+              : status ===
+                  "PROCESSING"
                 ? "bg-blue-500"
                 : "bg-amber-500"
           }`}
         />
 
-        <span className="text-sm text-slate-500">{label}</span>
+        <span className="text-sm text-slate-500">
+          {label}
+        </span>
+
       </div>
 
-      <span className="text-sm font-bold">{value}</span>
+      <span className="text-sm font-bold">
+        {value}
+      </span>
+
     </div>
   );
 }
+
+// ======================================================
+// SUMMARY ROW
+// ======================================================
 
 function SummaryRow({
   label,
@@ -2423,7 +4285,10 @@ function SummaryRow({
 }) {
   return (
     <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
-      <span className="text-sm text-slate-500">{label}</span>
+
+      <span className="text-sm text-slate-500">
+        {label}
+      </span>
 
       <span
         className={`text-sm font-bold ${
@@ -2436,9 +4301,14 @@ function SummaryRow({
       >
         {value}
       </span>
+
     </div>
   );
 }
+
+// ======================================================
+// SECTION HEADER
+// ======================================================
 
 function SectionHeader({
   title,
@@ -2449,14 +4319,22 @@ function SectionHeader({
 }) {
   return (
     <div>
+
       <h2 className="text-lg font-bold tracking-tight text-[#0b1729]">
         {title}
       </h2>
 
-      <p className="mt-1 text-sm text-slate-400">{description}</p>
+      <p className="mt-1 text-sm text-slate-400">
+        {description}
+      </p>
+
     </div>
   );
 }
+
+// ======================================================
+// TAB BUTTON
+// ======================================================
 
 function TabButton({
   active,
@@ -2482,7 +4360,15 @@ function TabButton({
   );
 }
 
-function TableHead({ children }: { children: React.ReactNode }) {
+// ======================================================
+// TABLE HEAD
+// ======================================================
+
+function TableHead({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">
       {children}
@@ -2490,9 +4376,25 @@ function TableHead({ children }: { children: React.ReactNode }) {
   );
 }
 
-function TableCell({ children }: { children: React.ReactNode }) {
-  return <td className="px-4 py-4 align-middle">{children}</td>;
+// ======================================================
+// TABLE CELL
+// ======================================================
+
+function TableCell({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <td className="px-4 py-4 align-middle">
+      {children}
+    </td>
+  );
 }
+
+// ======================================================
+// EMPTY TABLE
+// ======================================================
 
 function EmptyTableRow({
   colSpan,
@@ -2503,18 +4405,35 @@ function EmptyTableRow({
 }) {
   return (
     <tr>
-      <td colSpan={colSpan} className="px-4 py-16 text-center">
+
+      <td
+        colSpan={
+          colSpan
+        }
+        className="px-4 py-16 text-center"
+      >
+
         <div className="mx-auto flex max-w-sm flex-col items-center">
+
           <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100">
             <FileText className="h-5 w-5 text-slate-400" />
           </div>
 
-          <p className="text-sm font-semibold text-slate-600">{text}</p>
+          <p className="text-sm font-semibold text-slate-600">
+            {text}
+          </p>
+
         </div>
+
       </td>
+
     </tr>
   );
 }
+
+// ======================================================
+// PAGINATION
+// ======================================================
 
 function PaginationBar({
   pagination,
@@ -2525,24 +4444,47 @@ function PaginationBar({
   onPrevious: () => void;
   onNext: () => void;
 }) {
-  if (!pagination || pagination.totalPages <= 1) return null;
+  if (
+    !pagination ||
+    pagination.totalPages <= 1
+  ) {
+    return null;
+  }
 
   return (
     <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3">
+
       <p className="text-xs text-slate-400">
+
         Page{" "}
-        <span className="font-semibold text-slate-600">{pagination.page}</span>{" "}
-        of{" "}
+
         <span className="font-semibold text-slate-600">
-          {pagination.totalPages}
+          {
+            pagination.page
+          }
+        </span>{" "}
+
+        of{" "}
+
+        <span className="font-semibold text-slate-600">
+          {
+            pagination.totalPages
+          }
         </span>
+
       </p>
 
       <div className="flex items-center gap-2">
+
         <button
           type="button"
-          disabled={pagination.page <= 1}
-          onClick={onPrevious}
+          disabled={
+            pagination.page <=
+            1
+          }
+          onClick={
+            onPrevious
+          }
           className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:border-[#e23c2e] hover:text-[#e23c2e] disabled:cursor-not-allowed disabled:opacity-40"
         >
           <ChevronLeft className="h-4 w-4" />
@@ -2550,16 +4492,27 @@ function PaginationBar({
 
         <button
           type="button"
-          disabled={pagination.page >= pagination.totalPages}
-          onClick={onNext}
+          disabled={
+            pagination.page >=
+            pagination.totalPages
+          }
+          onClick={
+            onNext
+          }
           className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:border-[#e23c2e] hover:text-[#e23c2e] disabled:cursor-not-allowed disabled:opacity-40"
         >
           <ChevronRight className="h-4 w-4" />
         </button>
+
       </div>
+
     </div>
   );
 }
+
+// ======================================================
+// MODAL
+// ======================================================
 
 function Modal({
   children,
@@ -2572,18 +4525,29 @@ function Modal({
 }) {
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0b1729]/60 p-4 backdrop-blur-sm">
-      <div className="absolute inset-0" onClick={onClose} />
+
+      <div
+        className="absolute inset-0"
+        onClick={onClose}
+      />
 
       <div
         className={`relative max-h-[90vh] w-full overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6 ${
-          wide ? "max-w-2xl" : "max-w-lg"
+          wide
+            ? "max-w-2xl"
+            : "max-w-lg"
         }`}
       >
         {children}
       </div>
+
     </div>
   );
 }
+
+// ======================================================
+// MODAL STAT
+// ======================================================
 
 function ModalStat({
   label,
@@ -2596,15 +4560,21 @@ function ModalStat({
 }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-      <p className="text-xs text-slate-400">{label}</p>
+
+      <p className="text-xs text-slate-400">
+        {label}
+      </p>
 
       <p
         className={`mt-1 text-lg font-bold ${
-          positive ? "text-emerald-600" : "text-[#0b1729]"
+          positive
+            ? "text-emerald-600"
+            : "text-[#0b1729]"
         }`}
       >
         {value}
       </p>
+
     </div>
   );
 }
