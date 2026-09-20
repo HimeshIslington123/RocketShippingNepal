@@ -81,7 +81,7 @@ export default function Navbar() {
             <div className="flex shrink-0 items-center gap-2.5">
               {/* Track Vehicle */}
               <a
-                href="/track"
+                href="/track-vehicle"
                 className="
                   flex h-11
                   shrink-0
@@ -225,7 +225,7 @@ export default function Navbar() {
             <div className="flex flex-col gap-3">
               {/* Track Vehicle */}
               <a
-                href="/track"
+                href="/track-vehicle"
                 onClick={() => setMobileOpen(false)}
                 className="
                   flex h-12 w-full

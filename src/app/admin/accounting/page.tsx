@@ -16,6 +16,7 @@ import {
   FileText,
   Loader2,
   RefreshCw,
+  Printer,
   Search,
   Share2,
   Store,
@@ -3942,7 +3943,7 @@ function SettlementBillModal({
   settlement: Settlement;
   onClose: () => void;
 }) {
-  const downloadBill = () => {
+  const getBillHtml = () => {
     const rows = (settlement.items || []).map((item) => {
       const entry = item.accountingEntry;
       return `
@@ -3983,6 +3984,11 @@ ${settlement.paymentReference || settlement.notes ? `<div class="note"><strong>S
 <div class="footer">Generated from the accounting settlement record.</div>
 </div></body></html>`;
 
+    return html;
+  };
+
+  const downloadBill = () => {
+    const html = getBillHtml();
     const blob = new Blob([html], { type: "text/html;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -3992,6 +3998,41 @@ ${settlement.paymentReference || settlement.notes ? `<div class="note"><strong>S
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
+  };
+
+  const printBill = () => {
+    const html = getBillHtml();
+    const printWindow = window.open("", "_blank", "width=1000,height=800");
+
+    if (!printWindow) {
+      alert("Please allow pop-ups for this site to print the settlement bill.");
+      return;
+    }
+
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+
+    // Wait for the bill document to finish rendering, then open the
+    // browser/OS printer dialog. From there the user can select a
+    // connected Wi-Fi, USB, network, AirPrint, or system printer.
+    printWindow.onload = () => {
+      setTimeout(() => {
+        printWindow.focus();
+        printWindow.print();
+      }, 250);
+    };
+
+    // Some browsers fire the print call before onload when document.write
+    // is used, so this is a safe fallback.
+    setTimeout(() => {
+      try {
+        printWindow.focus();
+        printWindow.print();
+      } catch {
+        // The browser will already have handled printing if the call above worked.
+      }
+    }, 700);
   };
 
   return (
@@ -4033,7 +4074,7 @@ ${settlement.paymentReference || settlement.notes ? `<div class="note"><strong>S
         </div>
       </div>
 
-      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <button
           type="button"
           onClick={downloadBill}
@@ -4050,6 +4091,15 @@ ${settlement.paymentReference || settlement.notes ? `<div class="note"><strong>S
         >
           <Share2 className="h-4 w-4" />
           Share Bill
+        </button>
+
+        <button
+          type="button"
+          onClick={printBill}
+          className="flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:border-[#0b1729] hover:bg-slate-50"
+        >
+          <Printer className="h-4 w-4" />
+          Print Bill
         </button>
       </div>
     </Modal>
