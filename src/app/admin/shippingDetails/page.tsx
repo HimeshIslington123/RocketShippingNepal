@@ -4,6 +4,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -464,6 +465,18 @@ export default function VendorShipmentsPage() {
   ] = useState("");
 
   // ==========================================================
+  // CLIENT-SIDE FILTERS
+  // ==========================================================
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [vendorFilter, setVendorFilter] = useState("ALL");
+  const [deliveryFilter, setDeliveryFilter] = useState("ALL");
+  const [riderFilter, setRiderFilter] = useState("ALL");
+  const [paymentFilter, setPaymentFilter] = useState("ALL");
+  const [returnFilter, setReturnFilter] = useState("ALL");
+
+  // ==========================================================
   // RETURNS
   // ==========================================================
 
@@ -570,10 +583,15 @@ export default function VendorShipmentsPage() {
     >(null);
 
   // ==========================================================
-  // INITIAL LOAD
+  // INITIAL LOAD — ONCE PER PAGE MOUNT
   // ==========================================================
 
+  const initialLoadStarted = useRef(false);
+
   useEffect(() => {
+    if (initialLoadStarted.current) return;
+
+    initialLoadStarted.current = true;
     void loadAll();
   }, []);
 
@@ -681,6 +699,7 @@ export default function VendorShipmentsPage() {
     await Promise.all([
       loadShipments(),
       loadReturns(),
+      loadRiders(),
     ]);
   }
 
@@ -935,17 +954,7 @@ export default function VendorShipmentsPage() {
         shipmentReturn,
     });
 
-    // ========================================================
-    // RIDER IS REQUIRED FOR IN_WAREHOUSE
-    // ========================================================
-
-    if (
-      shipment.status ===
-      "IN_WAREHOUSE"
-    ) {
-      await loadRiders();
-    }
-
+    // Riders are loaded once during the initial page load.
     setDetailsLoading(false);
   }
 
@@ -1083,15 +1092,6 @@ export default function VendorShipmentsPage() {
       );
 
       setStatusMessage("");
-
-      // Automatically load riders so the
-      // user can assign one immediately.
-      if (
-        currentStatus ===
-        "IN_WAREHOUSE"
-      ) {
-        await loadRiders();
-      }
 
       return;
     }
@@ -1266,14 +1266,7 @@ export default function VendorShipmentsPage() {
         )} successfully.`
       );
 
-      // ======================================================
-      // SERVER REFRESH
-      // ======================================================
-
-      await Promise.all([
-        loadShipments(),
-        loadReturns(),
-      ]);
+      // No GET refresh here. Local state is already synchronized.
     } catch (err) {
       console.error(
         "UPDATE STATUS ERROR:",
@@ -1488,14 +1481,7 @@ export default function VendorShipmentsPage() {
 
       setStatusError("");
 
-      // ======================================================
-      // REFRESH SERVER DATA
-      // ======================================================
-
-      await Promise.all([
-        loadShipments(),
-        loadRiders(),
-      ]);
+      // No GET refresh here. Local state is already synchronized.
     } catch (err) {
       console.error(
         "ASSIGN RIDER ERROR:",
@@ -1552,6 +1538,149 @@ export default function VendorShipmentsPage() {
     setTimeout(() => {
       window.print();
     }, 300);
+  }
+
+  // ==========================================================
+  // FILTER OPTIONS
+  // ==========================================================
+
+  const filterOptions = useMemo(() => {
+    const vendors = Array.from(
+      new Map(
+        shipments
+          .filter((shipment) => shipment.vendor)
+          .map((shipment) => [
+            String(shipment.vendor!.id),
+            shipment.vendor!.companyName,
+          ])
+      ).entries()
+    );
+
+    const deliveryTypes = Array.from(
+      new Set(
+        shipments
+          .map(
+            (shipment) =>
+              shipment.locationRate?.deliveryType?.name ||
+              shipment.deliveryZone ||
+              ""
+          )
+          .filter(Boolean)
+      )
+    ).sort();
+
+    return { vendors, deliveryTypes };
+  }, [shipments]);
+
+  // ==========================================================
+  // FILTERED SHIPMENTS — CLIENT SIDE ONLY
+  // ==========================================================
+
+  const filteredShipments = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+
+    return shipments.filter((shipment) => {
+      const hasReturn = returns.some(
+        (item) => item.shipmentId === shipment.id
+      );
+
+      const vendorName = shipment.vendor?.companyName || "";
+      const riderName = shipment.rider?.user?.name || "";
+      const deliveryType =
+        shipment.locationRate?.deliveryType?.name ||
+        shipment.deliveryZone ||
+        "";
+      const destination =
+        shipment.locationRate?.location?.name ||
+        shipment.deliveryZone ||
+        "";
+
+      const searchableText = [
+        shipment.id,
+        shipment.trackingNumber,
+        shipment.receiverName,
+        shipment.receiverPhone,
+        shipment.receiverAddress,
+        shipment.packageType,
+        shipment.paymentType,
+        shipment.status,
+        shipment.vendorId,
+        vendorName,
+        shipment.riderId,
+        riderName,
+        deliveryType,
+        destination,
+        shipment.origin,
+        shipment.deliveryZone,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      const matchesSearch =
+        !query || searchableText.includes(query);
+
+      const matchesStatus =
+        statusFilter === "ALL" ||
+        shipment.status === statusFilter;
+
+      const matchesVendor =
+        vendorFilter === "ALL" ||
+        String(shipment.vendorId ?? "") === vendorFilter;
+
+      const matchesDelivery =
+        deliveryFilter === "ALL" ||
+        deliveryType === deliveryFilter;
+
+      const matchesRider =
+        riderFilter === "ALL" ||
+        (riderFilter === "UNASSIGNED"
+          ? !shipment.riderId && !shipment.rider
+          : String(
+              shipment.riderId ??
+                shipment.rider?.id ??
+                ""
+            ) === riderFilter);
+
+      const matchesPayment =
+        paymentFilter === "ALL" ||
+        shipment.paymentType === paymentFilter;
+
+      const matchesReturn =
+        returnFilter === "ALL" ||
+        (returnFilter === "RETURN" && hasReturn) ||
+        (returnFilter === "NO_RETURN" && !hasReturn);
+
+      return (
+        matchesSearch &&
+        matchesStatus &&
+        matchesVendor &&
+        matchesDelivery &&
+        matchesRider &&
+        matchesPayment &&
+        matchesReturn
+      );
+    });
+  }, [
+    shipments,
+    returns,
+    searchQuery,
+    statusFilter,
+    vendorFilter,
+    deliveryFilter,
+    riderFilter,
+    paymentFilter,
+    returnFilter,
+  ]);
+
+  function clearFilters() {
+    setSearchQuery("");
+    setStatusFilter("ALL");
+    setVendorFilter("ALL");
+    setDeliveryFilter("ALL");
+    setRiderFilter("ALL");
+    setPaymentFilter("ALL");
+    setReturnFilter("ALL");
   }
 
   // ==========================================================
@@ -1787,6 +1916,125 @@ export default function VendorShipmentsPage() {
         )}
 
         {/* ================================================= */}
+        {/* FILTERS */}
+
+        <div className="mb-5 overflow-hidden rounded-2xl border border-[#e4e8ed] bg-white shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
+          <div className="border-b border-[#edf0f3] px-4 py-4 sm:px-5">
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div>
+                <p className="text-sm font-bold text-[#0b1729]">
+                  Filter shipments
+                </p>
+                <p className="mt-1 text-xs text-[#94a3b8]">
+                  Search and filter instantly without another API request.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-semibold text-[#64748b]">
+                  Showing {filteredShipments.length} of {shipments.length}
+                </span>
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  disabled={
+                    !searchQuery &&
+                    statusFilter === "ALL" &&
+                    vendorFilter === "ALL" &&
+                    deliveryFilter === "ALL" &&
+                    riderFilter === "ALL" &&
+                    paymentFilter === "ALL" &&
+                    returnFilter === "ALL"
+                  }
+                  className="text-xs font-bold text-[#e23c2e] transition hover:text-[#b72d22] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Clear filters
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="relative sm:col-span-2 lg:col-span-3 xl:col-span-1">
+              <div className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#94a3b8]">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="m20 20-3.5-3.5" />
+                </svg>
+              </div>
+              <input
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Search ID, tracking, customer, phone..."
+                className="h-10 w-full rounded-lg border border-[#dfe3e8] bg-white pl-10 pr-3 text-sm outline-none transition placeholder:text-[#a3adb9] focus:border-[#0b1729] focus:ring-2 focus:ring-[#0b1729]/5"
+              />
+            </div>
+
+            <FilterSelect
+              value={statusFilter}
+              onChange={setStatusFilter}
+              placeholder="All statuses"
+              options={Array.from(new Set(shipments.map((item) => item.status))).sort().map((value) => ({
+                value,
+                label: formatStatus(value),
+              }))}
+            />
+
+            <FilterSelect
+              value={vendorFilter}
+              onChange={setVendorFilter}
+              placeholder="All vendors"
+              options={filterOptions.vendors.map(([value, label]) => ({
+                value,
+                label,
+              }))}
+            />
+
+            <FilterSelect
+              value={deliveryFilter}
+              onChange={setDeliveryFilter}
+              placeholder="All delivery types"
+              options={filterOptions.deliveryTypes.map((value) => ({
+                value,
+                label: value,
+              }))}
+            />
+
+            <FilterSelect
+              value={riderFilter}
+              onChange={setRiderFilter}
+              placeholder="All riders"
+              options={[
+                { value: "UNASSIGNED", label: "Unassigned" },
+                ...riders.map((rider) => ({
+                  value: String(rider.id),
+                  label: rider.user?.name || `Rider #${rider.id}`,
+                })),
+              ]}
+            />
+
+            <FilterSelect
+              value={paymentFilter}
+              onChange={setPaymentFilter}
+              placeholder="All payments"
+              options={[
+                { value: "PREPAID", label: "Prepaid" },
+                { value: "COD", label: "Cash on delivery" },
+              ]}
+            />
+
+            <FilterSelect
+              value={returnFilter}
+              onChange={setReturnFilter}
+              placeholder="All returns"
+              options={[
+                { value: "RETURN", label: "With return" },
+                { value: "NO_RETURN", label: "No return" },
+              ]}
+            />
+          </div>
+        </div>
+
         {/* TABLE */}
         {/* ================================================= */}
 
@@ -1835,7 +2083,7 @@ export default function VendorShipmentsPage() {
                 </thead>
 
                 <tbody>
-                  {shipments.length ===
+                  {filteredShipments.length ===
                   0 ? (
                     <tr>
                       <td
@@ -1852,14 +2100,12 @@ export default function VendorShipmentsPage() {
                         </p>
 
                         <p className="mt-1 text-xs text-[#94a3b8]">
-                          Shipments will
-                          appear here once
-                          they are created.
+                          Try changing your search or filters.
                         </p>
                       </td>
                     </tr>
                   ) : (
-                    shipments.map(
+                    filteredShipments.map(
                       (
                         shipment
                       ) => {
@@ -2081,7 +2327,7 @@ export default function VendorShipmentsPage() {
             {/* MOBILE */}
 
             <div className="space-y-3 p-4 lg:hidden">
-              {shipments.length ===
+              {filteredShipments.length ===
               0 ? (
                 <div className="py-14 text-center">
                   <Package
@@ -2094,7 +2340,7 @@ export default function VendorShipmentsPage() {
                   </p>
                 </div>
               ) : (
-                shipments.map(
+                filteredShipments.map(
                   (
                     shipment
                   ) => (
@@ -4234,6 +4480,37 @@ function ReturnDetailsCard({
         )}
       </div>
     </SectionCard>
+  );
+}
+
+// ============================================================
+// FILTER SELECT
+// ============================================================
+
+function FilterSelect({
+  value,
+  onChange,
+  placeholder,
+  options,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  options: Array<{ value: string; label: string }>;
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      className="h-10 w-full rounded-lg border border-[#dfe3e8] bg-white px-3 text-sm font-medium text-[#334155] outline-none transition focus:border-[#0b1729] focus:ring-2 focus:ring-[#0b1729]/5"
+    >
+      <option value="ALL">{placeholder}</option>
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
   );
 }
 
