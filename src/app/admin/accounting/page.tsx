@@ -21,6 +21,8 @@ import {
   Share2,
   Store,
   Wallet,
+  UserPlus,
+  Plus,
   X,
   XCircle,
 } from "lucide-react";
@@ -104,6 +106,7 @@ interface Vendor {
   companyName: string;
   contactId: string;
   location: string;
+  isRegistered?: boolean;
 
   _count: {
     shipments: number;
@@ -526,6 +529,24 @@ export default function AdminAccountingPage() {
   const [settlements, setSettlements] =
     useState<Settlement[]>([]);
 
+  // ====================================================
+  // VENDOR FILTERS / UNREGISTERED VENDOR
+  // ====================================================
+
+  const [vendorSearch, setVendorSearch] = useState("");
+
+  const [vendorType, setVendorType] =
+    useState<"ALL" | "REGISTERED" | "UNREGISTERED">("ALL");
+
+  const [showAddUnregisteredVendor, setShowAddUnregisteredVendor] =
+    useState(false);
+
+  const [newVendorCompanyName, setNewVendorCompanyName] = useState("");
+  const [newVendorContactId, setNewVendorContactId] = useState("");
+  const [newVendorLocation, setNewVendorLocation] = useState("");
+  const [vendorCreateLoading, setVendorCreateLoading] = useState(false);
+  const [vendorCreateError, setVendorCreateError] = useState("");
+
 
 
 
@@ -775,6 +796,41 @@ export default function AdminAccountingPage() {
   // CLIENT-SIDE FILTERING — NO API CALLS
   // ====================================================
 
+  const filteredVendors = useMemo(() => {
+    const search = vendorSearch.trim().toLowerCase();
+
+    return vendors.filter((vendor) => {
+      const matchesSearch =
+        !search ||
+        [
+          vendor.id,
+          vendor.companyName,
+          vendor.contactId,
+          vendor.location,
+        ].some((value) =>
+          String(value ?? "").toLowerCase().includes(search)
+        );
+
+      const matchesType =
+        vendorType === "ALL" ||
+        (vendorType === "REGISTERED"
+          ? vendor.isRegistered !== false
+          : vendor.isRegistered === false);
+
+      return matchesSearch && matchesType;
+    });
+  }, [vendors, vendorSearch, vendorType]);
+
+  const registeredVendorCount = useMemo(
+    () => vendors.filter((vendor) => vendor.isRegistered !== false).length,
+    [vendors]
+  );
+
+  const unregisteredVendorCount = useMemo(
+    () => vendors.filter((vendor) => vendor.isRegistered === false).length,
+    [vendors]
+  );
+
   const filteredEntries = useMemo(() => {
     const search = entrySearch.trim().toLowerCase();
 
@@ -835,6 +891,109 @@ export default function AdminAccountingPage() {
       return matchesStatus && matchesVendor;
     });
   }, [settlements, settlementStatus, settlementVendorId]);
+
+  // ====================================================
+  // CREATE UNREGISTERED VENDOR
+  // ====================================================
+
+  const resetUnregisteredVendorForm = () => {
+    setNewVendorCompanyName("");
+    setNewVendorContactId("");
+    setNewVendorLocation("");
+    setVendorCreateError("");
+  };
+
+  const closeAddUnregisteredVendor = () => {
+    if (vendorCreateLoading) return;
+    setShowAddUnregisteredVendor(false);
+    resetUnregisteredVendorForm();
+  };
+
+  const handleCreateUnregisteredVendor = async () => {
+    const companyName = newVendorCompanyName.trim();
+    const contactId = newVendorContactId.trim();
+    const location = newVendorLocation.trim();
+
+    if (!companyName || !contactId || !location) {
+      setVendorCreateError(
+        "Vendor name, contact number and location are required."
+      );
+      return;
+    }
+
+    try {
+      setVendorCreateLoading(true);
+      setVendorCreateError("");
+
+      const response = await apiFetch(
+        "/api/admin/accounting/unregistered-vendors",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            companyName,
+            contactId,
+            location,
+          }),
+        }
+      );
+
+      const created = response?.data;
+
+      if (!created?.id) {
+        throw new Error("Vendor was created but no vendor ID was returned.");
+      }
+
+      const newVendor: Vendor = {
+        id: Number(created.id),
+        companyName: created.companyName || companyName,
+        contactId: created.contactId || contactId,
+        location: created.location || location,
+        isRegistered: false,
+
+        _count: {
+          shipments: 0,
+          accountingEntries: 0,
+          settlements: 0,
+        },
+
+        totalCredits: 0,
+        totalDebits: 0,
+        availableCredits: 0,
+        availableDebits: 0,
+        balance: 0,
+        direction: null,
+        settlementAmount: 0,
+        outstandingSettlement: 0,
+        pendingSettlementCount: 0,
+      };
+
+      setVendors((current) => {
+        const next = [newVendor, ...current];
+
+        if (pageCache) {
+          pageCache = {
+            ...pageCache,
+            vendors: next,
+          };
+        }
+
+        return next;
+      });
+
+      setShowAddUnregisteredVendor(false);
+      resetUnregisteredVendorForm();
+    } catch (err) {
+      console.error("handleCreateUnregisteredVendor:", err);
+
+      setVendorCreateError(
+        err instanceof Error
+          ? err.message
+          : "Failed to create unregistered vendor"
+      );
+    } finally {
+      setVendorCreateLoading(false);
+    }
+  };
 
   // ====================================================
   // OPEN SETTLEMENT BUILDER
@@ -1859,12 +2018,78 @@ export default function AdminAccountingPage() {
           "vendors" && (
           <section>
 
-            <SectionHeader
-              title="Vendor Accounting"
-              description="Unsettled COD credits minus vendor charges."
-            />
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <SectionHeader
+                title="Vendor Accounting"
+                description="Registered and unregistered vendors use the same accounting, COD and settlement system."
+              />
 
-            <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <button
+                type="button"
+                onClick={() => {
+                  setVendorCreateError("");
+                  setShowAddUnregisteredVendor(true);
+                }}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[#e23c2e] px-4 text-sm font-semibold text-white transition hover:bg-[#ce3122]"
+              >
+                <UserPlus className="h-4 w-4" />
+                Add Unregistered Vendor
+              </button>
+            </div>
+
+            <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    value={vendorSearch}
+                    onChange={(e) => setVendorSearch(e.target.value)}
+                    placeholder="Search vendor ID, company, contact or location..."
+                    className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none transition focus:border-[#e23c2e] focus:ring-2 focus:ring-[#e23c2e]/10"
+                  />
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setVendorType("ALL")}
+                    className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+                      vendorType === "ALL"
+                        ? "border-[#0b1729] bg-[#0b1729] text-white"
+                        : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    All ({vendors.length})
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setVendorType("REGISTERED")}
+                    className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+                      vendorType === "REGISTERED"
+                        ? "border-emerald-600 bg-emerald-600 text-white"
+                        : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    Registered ({registeredVendorCount})
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setVendorType("UNREGISTERED")}
+                    className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+                      vendorType === "UNREGISTERED"
+                        ? "border-amber-600 bg-amber-600 text-white"
+                        : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    Unregistered ({unregisteredVendorCount})
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
               <div className="overflow-x-auto">
 
                 <table className="w-full min-w-[1000px] text-left">
@@ -1873,6 +2098,10 @@ export default function AdminAccountingPage() {
                     <tr>
                       <TableHead>
                         Vendor
+                      </TableHead>
+
+                      <TableHead>
+                        Type
                       </TableHead>
 
                       <TableHead>
@@ -1903,14 +2132,14 @@ export default function AdminAccountingPage() {
 
                   <tbody className="divide-y divide-slate-100">
 
-                    {vendors.length ===
+                    {filteredVendors.length ===
                     0 ? (
                       <EmptyTableRow
-                        colSpan={7}
+                        colSpan={8}
                         text="No vendors found."
                       />
                     ) : (
-                      vendors.map(
+                      filteredVendors.map(
                         (vendor) => (
                           <tr
                             key={
@@ -1939,13 +2168,25 @@ export default function AdminAccountingPage() {
                                   </div>
 
                                   <div className="text-xs text-slate-400">
-                                    {
-                                      vendor.location
-                                    }
+                                    ID #{vendor.id} · {vendor.location}
                                   </div>
                                 </div>
 
                               </div>
+                            </TableCell>
+
+                            <TableCell>
+                              <span
+                                className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-bold ${
+                                  vendor.isRegistered === false
+                                    ? "border-amber-200 bg-amber-50 text-amber-700"
+                                    : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                }`}
+                              >
+                                {vendor.isRegistered === false
+                                  ? "Unregistered"
+                                  : "Registered"}
+                              </span>
                             </TableCell>
 
                             <TableCell>
@@ -2759,6 +3000,129 @@ export default function AdminAccountingPage() {
       </div>
 
       {/* ================================================== */}
+      {/* ADD UNREGISTERED VENDOR MODAL */}
+      {/* ================================================== */}
+
+      {showAddUnregisteredVendor && (
+        <Modal onClose={closeAddUnregisteredVendor}>
+          <div className="mb-6 flex items-start justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-[#e23c2e]">
+                Vendor Accounting
+              </p>
+
+              <h2 className="mt-1 text-xl font-bold">
+                Add Unregistered Vendor
+              </h2>
+
+              <p className="mt-1 text-sm text-slate-500">
+                This vendor can have COD, charges and settlements without a login account.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={closeAddUnregisteredVendor}
+              disabled={vendorCreateLoading}
+              className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          {vendorCreateError && (
+            <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {vendorCreateError}
+            </div>
+          )}
+
+          <div className="space-y-4">
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-[#0b1729]">
+                Company / Vendor Name
+              </label>
+
+              <input
+                value={newVendorCompanyName}
+                onChange={(e) => setNewVendorCompanyName(e.target.value)}
+                placeholder="e.g. ABC Fashion Store"
+                autoFocus
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-[#e23c2e] focus:ring-2 focus:ring-[#e23c2e]/10"
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-[#0b1729]">
+                Contact Number
+              </label>
+
+              <input
+                value={newVendorContactId}
+                onChange={(e) => setNewVendorContactId(e.target.value)}
+                placeholder="e.g. 98XXXXXXXX"
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-[#e23c2e] focus:ring-2 focus:ring-[#e23c2e]/10"
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-[#0b1729]">
+                Location
+              </label>
+
+              <input
+                value={newVendorLocation}
+                onChange={(e) => setNewVendorLocation(e.target.value)}
+                placeholder="e.g. Kathmandu"
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-[#e23c2e] focus:ring-2 focus:ring-[#e23c2e]/10"
+              />
+            </div>
+
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+              <p className="text-xs font-semibold text-amber-800">
+                Accounting behavior
+              </p>
+
+              <p className="mt-1 text-xs leading-5 text-amber-700">
+                The vendor is created without a user login, but it still gets the same
+                accounting identity used by registered vendors. COD, shipping charges,
+                return charges and settlements can all be attached to this vendor.
+              </p>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={closeAddUnregisteredVendor}
+                disabled={vendorCreateLoading}
+                className="h-11 flex-1 rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={handleCreateUnregisteredVendor}
+                disabled={vendorCreateLoading}
+                className="flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-[#e23c2e] px-4 text-sm font-semibold text-white transition hover:bg-[#ce3122] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {vendorCreateLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="h-4 w-4" />
+                    Create Vendor
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ================================================== */}
       {/* VENDOR MODAL */}
       {/* ================================================== */}
 
@@ -2779,11 +3143,29 @@ export default function AdminAccountingPage() {
                   Vendor
                 </p>
 
-                <h2 className="mt-1 text-xl font-bold">
-                  {
-                    selectedVendor.companyName
-                  }
-                </h2>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <h2 className="text-xl font-bold">
+                    {
+                      selectedVendor.companyName
+                    }
+                  </h2>
+
+                  <span
+                    className={`rounded-full border px-2.5 py-1 text-[10px] font-bold ${
+                      selectedVendor.isRegistered === false
+                        ? "border-amber-200 bg-amber-50 text-amber-700"
+                        : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    }`}
+                  >
+                    {selectedVendor.isRegistered === false
+                      ? "Unregistered"
+                      : "Registered"}
+                  </span>
+                </div>
+
+                <p className="mt-1 text-xs text-slate-400">
+                  Vendor ID #{selectedVendor.id}
+                </p>
 
                 <p className="mt-1 text-sm text-slate-500">
                   {
