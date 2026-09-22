@@ -1,3 +1,4 @@
+
 "use client";
 
 import {
@@ -5,6 +6,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type ReactNode,
 } from "react";
 
 import {
@@ -18,6 +20,7 @@ import {
   CheckCircle2,
   ChevronDown,
   Clock,
+  Keyboard,
   MapPin,
   Package,
   Phone,
@@ -93,15 +96,6 @@ type CodCollection = {
   collectedAt?: string;
 };
 
-/*
- * NOTE / FIX:
- * Your Prisma shipment IDs are strings (cuids), not numbers.
- * The scan/action endpoints and the assign-rider endpoint both
- * take :id as a route param and do `String(req.params.id)` /
- * `where: { id: shipmentId }` — so this MUST be a string, or
- * you'll build broken URLs like /api/shipment/123.45/assign-rider
- * if this was ever coerced through Number().
- */
 type Shipment = {
   id: string;
 
@@ -166,23 +160,14 @@ type ScanResult = {
 
 const ACTION_LABELS: Record<string, string> = {
   RECEIVE: "Receive Shipment",
-
   PICKUP: "Pickup Shipment",
-
   ASSIGN_RIDER: "Assign Rider",
-
   OUT_FOR_DELIVERY: "Out for Delivery",
-
   DELIVER: "Deliver Shipment",
-
   REQUEST_RETURN: "Request Return",
-
   RETURN_PICKUP: "Pickup Return",
-
   RETURN_TO_WAREHOUSE: "Return to Warehouse",
-
   OUT_FOR_RETURN: "Out for Return",
-
   RETURNED_TO_VENDOR: "Returned to Vendor",
 };
 
@@ -197,10 +182,10 @@ const ACTION_DESCRIPTIONS: Record<string, string> = {
     "Assign this shipment to a rider.",
 
   OUT_FOR_DELIVERY:
-    "Mark the shipment as out for delivery.",
+    "Mark this shipment as out for delivery.",
 
   DELIVER:
-    "Mark the shipment as delivered.",
+    "Mark this shipment as delivered.",
 
   REQUEST_RETURN:
     "Request a return for this shipment.",
@@ -220,26 +205,20 @@ const ACTION_DESCRIPTIONS: Record<string, string> = {
 
 const ACTION_ICONS: Record<
   string,
-  React.ComponentType<{ size?: number; className?: string }>
+  React.ComponentType<{
+    size?: number;
+    className?: string;
+  }>
 > = {
   RECEIVE: Warehouse,
-
   PICKUP: Package,
-
   ASSIGN_RIDER: UserCheck,
-
   OUT_FOR_DELIVERY: Truck,
-
   DELIVER: CheckCircle2,
-
   REQUEST_RETURN: RotateCcw,
-
   RETURN_PICKUP: RotateCcw,
-
   RETURN_TO_WAREHOUSE: Warehouse,
-
   OUT_FOR_RETURN: Truck,
-
   RETURNED_TO_VENDOR: CheckCircle2,
 };
 
@@ -253,7 +232,9 @@ function formatStatus(status?: string | null) {
   return status
     .toLowerCase()
     .replace(/_/g, " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+    .replace(/\b\w/g, (letter) =>
+      letter.toUpperCase()
+    );
 }
 
 function statusClass(status?: string | null) {
@@ -284,24 +265,29 @@ function money(value?: number | null) {
     return "NPR 0";
   }
 
-  return `NPR ${Number(value).toLocaleString("en-NP")}`;
+  return `NPR ${Number(value).toLocaleString(
+    "en-NP"
+  )}`;
 }
 
 function formatDate(date?: string | null) {
   if (!date) return "-";
 
   try {
-    return new Date(date).toLocaleString("en-NP", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    });
+    return new Date(date).toLocaleString(
+      "en-NP",
+      {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }
+    );
   } catch {
     return date;
   }
 }
 
 /* =========================================================
-   EXTRACT TRACKING NUMBER FROM QR
+   EXTRACT TRACKING NUMBER
 ========================================================= */
 
 function extractTrackingNumber(value: string) {
@@ -314,7 +300,6 @@ function extractTrackingNumber(value: string) {
   /*
    * Direct tracking number
    *
-   * Example:
    * RC-1789981579523-622
    */
   const directMatch = raw.match(
@@ -341,10 +326,13 @@ function extractTrackingNumber(value: string) {
       return trackingParam.trim();
     }
 
-    const parts = url.pathname.split("/").filter(Boolean);
+    const parts = url.pathname
+      .split("/")
+      .filter(Boolean);
 
     const trackIndex = parts.findIndex(
-      (part) => part.toLowerCase() === "track"
+      (part) =>
+        part.toLowerCase() === "track"
     );
 
     if (
@@ -356,10 +344,13 @@ function extractTrackingNumber(value: string) {
       ).trim();
     }
 
-    const lastPart = parts[parts.length - 1];
+    const lastPart =
+      parts[parts.length - 1];
 
     if (lastPart) {
-      return decodeURIComponent(lastPart).trim();
+      return decodeURIComponent(
+        lastPart
+      ).trim();
     }
   } catch {
     // Not a URL.
@@ -397,7 +388,9 @@ export default function ShipmentScannerPage() {
     useRef<HTMLVideoElement | null>(null);
 
   const readerRef =
-    useRef<BrowserMultiFormatReader | null>(null);
+    useRef<BrowserMultiFormatReader | null>(
+      null
+    );
 
   const controlsRef =
     useRef<IScannerControls | null>(null);
@@ -407,6 +400,44 @@ export default function ShipmentScannerPage() {
 
   const lastScanRef =
     useRef<string>("");
+
+  /* =======================================================
+     USB / KEYBOARD SCANNER
+  ======================================================= */
+
+  /*
+   * Most USB barcode/QR scanners behave like keyboards.
+   *
+   * Example:
+   *
+   * Scanner:
+   * RC-1789981579523-622 + ENTER
+   *
+   * Browser receives:
+   * R
+   * C
+   * -
+   * 1
+   * 7
+   * ...
+   * ENTER
+   *
+   * We collect those characters here.
+   */
+
+  const usbBufferRef =
+    useRef<string>("");
+
+  const usbLastKeyTimeRef =
+    useRef<number>(0);
+
+  const usbTimeoutRef =
+    useRef<ReturnType<
+      typeof setTimeout
+    > | null>(null);
+
+  const usbScanningRef =
+    useRef(false);
 
   /* =======================================================
      SHIPMENT STATE
@@ -435,6 +466,13 @@ export default function ShipmentScannerPage() {
 
   const [selectedAction, setSelectedAction] =
     useState("");
+
+  /* =======================================================
+     USB STATUS
+  ======================================================= */
+
+  const [usbScannerActive, setUsbScannerActive] =
+    useState(false);
 
   /* =======================================================
      RIDER STATE
@@ -476,24 +514,14 @@ export default function ShipmentScannerPage() {
   }, []);
 
   /* =======================================================
-     STOP SCANNER
+     STOP CAMERA SCANNER
   ======================================================= */
 
   const stopScanner = useCallback(() => {
-    /*
-     * NOTE:
-     * @zxing/browser's BrowserMultiFormatReader has no
-     * `.reset()` method (that belonged to the older
-     * @zxing/library API). Stopping decoding and releasing
-     * the camera is done entirely through the
-     * IScannerControls object returned by
-     * decodeFromVideoDevice(...), which we stop below.
-     */
-
     try {
       controlsRef.current?.stop();
     } catch {
-      // Ignore scanner cleanup errors.
+      // Ignore cleanup errors.
     }
 
     controlsRef.current = null;
@@ -509,7 +537,9 @@ export default function ShipmentScannerPage() {
       if (stream) {
         stream
           .getTracks()
-          .forEach((track) => track.stop());
+          .forEach((track) =>
+            track.stop()
+          );
 
         videoRef.current.srcObject = null;
       }
@@ -552,7 +582,8 @@ export default function ShipmentScannerPage() {
           }
         );
 
-        const data = await response.json();
+        const data =
+          await response.json();
 
         if (!response.ok) {
           throw new Error(
@@ -595,7 +626,7 @@ export default function ShipmentScannerPage() {
   );
 
   /* =======================================================
-     FETCH RIDERS WHEN PAGE LOADS
+     FETCH RIDERS ON PAGE LOAD
   ======================================================= */
 
   useEffect(() => {
@@ -613,7 +644,7 @@ export default function ShipmentScannerPage() {
 
       if (!trackingNumber) {
         setError(
-          "No tracking number found in QR code."
+          "No tracking number found."
         );
 
         return;
@@ -626,6 +657,14 @@ export default function ShipmentScannerPage() {
           "Authentication required. Please login again."
         );
 
+        return;
+      }
+
+      /*
+       * Prevent duplicate requests while
+       * another scan is being processed.
+       */
+      if (loading) {
         return;
       }
 
@@ -687,9 +726,6 @@ export default function ShipmentScannerPage() {
             : []
         );
 
-        /*
-         * Select first action automatically.
-         */
         setSelectedAction(
           Array.isArray(result.actions) &&
             result.actions.length > 0
@@ -697,10 +733,6 @@ export default function ShipmentScannerPage() {
             : ""
         );
 
-        /*
-         * If shipment already has a rider,
-         * automatically select that rider.
-         */
         if (result.shipment.rider?.id) {
           setSelectedRiderId(
             result.shipment.rider.id
@@ -712,7 +744,7 @@ export default function ShipmentScannerPage() {
         setError("");
 
         /*
-         * Make sure latest riders are available.
+         * Refresh rider list.
          */
         fetchRiders();
       } catch (err) {
@@ -738,7 +770,11 @@ export default function ShipmentScannerPage() {
         setLoading(false);
       }
     },
-    [fetchRiders, getAuthToken]
+    [
+      fetchRiders,
+      getAuthToken,
+      loading,
+    ]
   );
 
   /* =======================================================
@@ -773,18 +809,201 @@ export default function ShipmentScannerPage() {
       lastScanRef.current =
         trackingNumber;
 
-      await findShipment(
-        trackingNumber
-      );
+      try {
+        await findShipment(
+          trackingNumber
+        );
 
-      stopScanner();
-
-      setTimeout(() => {
-        scanLockRef.current = false;
-      }, 1200);
+        stopScanner();
+      } finally {
+        setTimeout(() => {
+          scanLockRef.current = false;
+        }, 1200);
+      }
     },
     [findShipment, stopScanner]
   );
+
+  /* =======================================================
+     USB SCANNER PROCESS
+  ======================================================= */
+
+  const processUSBScan = useCallback(
+    async () => {
+      const value =
+        usbBufferRef.current.trim();
+
+      usbBufferRef.current = "";
+
+      usbLastKeyTimeRef.current = 0;
+
+      usbScanningRef.current = false;
+
+      setUsbScannerActive(false);
+
+      if (!value) {
+        return;
+      }
+
+      const trackingNumber =
+        extractTrackingNumber(value);
+
+      /*
+       * Basic protection against ordinary
+       * keyboard input being treated as scan.
+       */
+      if (
+        trackingNumber.length < 3
+      ) {
+        return;
+      }
+
+      await handleBarcode(
+        trackingNumber
+      );
+    },
+    [handleBarcode]
+  );
+
+  /* =======================================================
+     USB SCANNER KEYBOARD LISTENER
+  ======================================================= */
+
+  useEffect(() => {
+    const handleKeyDown = (
+      event: KeyboardEvent
+    ) => {
+      /*
+       * Do not interfere with normal typing
+       * inside inputs, textarea or select.
+       *
+       * This is important because this page
+       * contains Notes and Location fields.
+       */
+      const target =
+        event.target as HTMLElement | null;
+
+      const tagName =
+        target?.tagName?.toLowerCase();
+
+      if (
+        tagName === "input" ||
+        tagName === "textarea" ||
+        tagName === "select" ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
+
+      /*
+       * Ignore modifier combinations.
+       */
+      if (
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey
+      ) {
+        return;
+      }
+
+      const now = Date.now();
+
+      /*
+       * Most USB scanners send characters
+       * extremely quickly.
+       *
+       * If there is a large delay between
+       * keys, assume this is normal typing
+       * and start a new buffer.
+       */
+      if (
+        usbLastKeyTimeRef.current &&
+        now -
+          usbLastKeyTimeRef.current >
+          100
+      ) {
+        usbBufferRef.current = "";
+      }
+
+      usbLastKeyTimeRef.current = now;
+
+      /*
+       * Scanner normally sends ENTER at the end.
+       */
+      if (
+        event.key === "Enter" ||
+        event.key === "Tab"
+      ) {
+        if (
+          usbBufferRef.current
+            .trim()
+            .length > 0
+        ) {
+          event.preventDefault();
+
+          processUSBScan();
+        }
+
+        return;
+      }
+
+      /*
+       * Only collect printable characters.
+       */
+      if (
+        event.key.length === 1
+      ) {
+        usbBufferRef.current +=
+          event.key;
+
+        usbScanningRef.current =
+          true;
+
+        setUsbScannerActive(true);
+
+        /*
+         * Some scanners don't send ENTER.
+         *
+         * Process automatically after a
+         * short quiet period.
+         */
+        if (usbTimeoutRef.current) {
+          clearTimeout(
+            usbTimeoutRef.current
+          );
+        }
+
+        usbTimeoutRef.current =
+          setTimeout(() => {
+            if (
+              usbBufferRef.current
+                .trim()
+                .length > 0
+            ) {
+              processUSBScan();
+            }
+          }, 100);
+      }
+    };
+
+    window.addEventListener(
+      "keydown",
+      handleKeyDown
+    );
+
+    return () => {
+      window.removeEventListener(
+        "keydown",
+        handleKeyDown
+      );
+
+      if (usbTimeoutRef.current) {
+        clearTimeout(
+          usbTimeoutRef.current
+        );
+      }
+    };
+  }, [processUSBScan]);
 
   /* =======================================================
      OPEN CAMERA SCANNER
@@ -797,7 +1016,9 @@ export default function ShipmentScannerPage() {
       setSuccess("");
 
       try {
-        if (!navigator.mediaDevices) {
+        if (
+          !navigator.mediaDevices
+        ) {
           throw new Error(
             "Camera is not supported by this browser."
           );
@@ -809,10 +1030,13 @@ export default function ShipmentScannerPage() {
         const videoDevices =
           devices.filter(
             (device) =>
-              device.kind === "videoinput"
+              device.kind ===
+              "videoinput"
           );
 
-        if (videoDevices.length === 0) {
+        if (
+          videoDevices.length === 0
+        ) {
           throw new Error(
             "No camera was found."
           );
@@ -822,10 +1046,11 @@ export default function ShipmentScannerPage() {
          * Prefer rear camera.
          */
         const preferredCamera =
-          videoDevices.find((device) =>
-            /back|rear|environment/i.test(
-              device.label
-            )
+          videoDevices.find(
+            (device) =>
+              /back|rear|environment/i.test(
+                device.label
+              )
           ) || videoDevices[0];
 
         const reader =
@@ -836,10 +1061,12 @@ export default function ShipmentScannerPage() {
         setScannerOpen(true);
 
         /*
-         * Give React time to render video element.
+         * Give React time to render
+         * video element.
          */
-        await new Promise((resolve) =>
-          setTimeout(resolve, 150)
+        await new Promise(
+          (resolve) =>
+            setTimeout(resolve, 150)
         );
 
         if (!videoRef.current) {
@@ -895,48 +1122,20 @@ export default function ShipmentScannerPage() {
   }, [stopScanner]);
 
   /* =======================================================
-     ASSIGN RIDER VALIDATION
+     ASSIGN RIDER
   ======================================================= */
 
   const isAssignAction =
-    selectedAction === "ASSIGN_RIDER";
+    selectedAction ===
+    "ASSIGN_RIDER";
 
   const canAssignRider =
     selectedRiderId !== "" &&
     !ridersLoading &&
     riders.length > 0;
 
-  /* =======================================================
-     ASSIGN RIDER
-
-     *** THIS IS THE FIX ***
-
-     The old code POSTed to /api/shipment/scan/action with
-     action: "ASSIGN_RIDER". That endpoint (scanShipmentAction
-     on the backend) has no branch for ASSIGN_RIDER, so it
-     always fell through to the "Unsupported scan action"
-     400 error you were seeing.
-
-     Rider assignment has its own dedicated route:
-
-         PATCH /api/shipment/:id/assign-rider
-         body: { riderId }
-
-     which is handled by the `assignRider` controller. That
-     controller looks up the rider, checks isAvailable, sets
-     shipment.riderId, and (if the shipment was IN_WAREHOUSE)
-     bumps status to ASSIGNED_TO_RIDER — then writes a
-     Tracking row itself. So we call that endpoint here
-     instead, using shipment.id (a string cuid), not the
-     scan/action endpoint.
-
-     Also note: that controller does not read `location` or
-     `notes` from the body (it hardcodes "Warehouse" for the
-     tracking entry), so there's no point sending them here.
-  ======================================================= */
-
-  const assignRider = useCallback(
-    async () => {
+  const assignRider =
+    useCallback(async () => {
       if (!shipment) {
         setError(
           "Please scan a shipment first."
@@ -945,11 +1144,9 @@ export default function ShipmentScannerPage() {
         return;
       }
 
-      /*
-       * VERY IMPORTANT:
-       * Rider selection is mandatory.
-       */
-      if (selectedRiderId === "") {
+      if (
+        selectedRiderId === ""
+      ) {
         setError(
           "Please select a rider before assigning the shipment."
         );
@@ -960,7 +1157,9 @@ export default function ShipmentScannerPage() {
       const riderId =
         Number(selectedRiderId);
 
-      if (!Number.isInteger(riderId)) {
+      if (
+        !Number.isInteger(riderId)
+      ) {
         setError(
           "Invalid rider selected."
         );
@@ -968,7 +1167,8 @@ export default function ShipmentScannerPage() {
         return;
       }
 
-      const token = getAuthToken();
+      const token =
+        getAuthToken();
 
       if (!token) {
         setError(
@@ -985,25 +1185,37 @@ export default function ShipmentScannerPage() {
       setSuccess("");
 
       try {
-        const response = await fetch(
-          `${API_BASE}/api/shipment/${shipment.id}/assign-rider`,
-          {
-            method: "PATCH",
+        /*
+         * IMPORTANT:
+         *
+         * Rider assignment uses:
+         *
+         * PATCH /api/shipment/:id/assign-rider
+         *
+         * NOT:
+         *
+         * POST /api/shipment/scan/action
+         */
+        const response =
+          await fetch(
+            `${API_BASE}/api/shipment/${shipment.id}/assign-rider`,
+            {
+              method: "PATCH",
 
-            headers: {
-              "Content-Type":
-                "application/json",
+              headers: {
+                "Content-Type":
+                  "application/json",
 
-              Authorization: `Bearer ${token}`,
-            },
+                Authorization: `Bearer ${token}`,
+              },
 
-            credentials: "include",
+              credentials: "include",
 
-            body: JSON.stringify({
-              riderId,
-            }),
-          }
-        );
+              body: JSON.stringify({
+                riderId,
+              }),
+            }
+          );
 
         const data =
           await response.json();
@@ -1015,15 +1227,9 @@ export default function ShipmentScannerPage() {
           );
         }
 
-        /*
-         * NOTE: the assign-rider controller's success
-         * response does not include a `success: false`
-         * flag on failure — it just returns non-2xx with
-         * a `message`. So we only need the !response.ok
-         * check above. We keep this guard for safety in
-         * case the backend is later changed to include it.
-         */
-        if (data?.success === false) {
+        if (
+          data?.success === false
+        ) {
           throw new Error(
             data?.message ||
               "Failed to assign rider."
@@ -1035,15 +1241,10 @@ export default function ShipmentScannerPage() {
             "Rider assigned successfully."
         );
 
-        /*
-         * Clear notes.
-         */
         setNotes("");
 
         /*
-         * Refresh shipment via the scan endpoint so the
-         * UI picks up the new rider + status + actions
-         * available to the current user.
+         * Reload shipment data.
          */
         await findShipment(
           shipment.trackingNumber
@@ -1062,14 +1263,12 @@ export default function ShipmentScannerPage() {
       } finally {
         setActionLoading(false);
       }
-    },
-    [
+    }, [
       findShipment,
       getAuthToken,
       selectedRiderId,
       shipment,
-    ]
-  );
+    ]);
 
   /* =======================================================
      NORMAL ACTION
@@ -1094,8 +1293,7 @@ export default function ShipmentScannerPage() {
       }
 
       /*
-       * Rider assignment has its own
-       * validation and request.
+       * ASSIGN_RIDER has a dedicated API.
        */
       if (
         selectedAction ===
@@ -1106,7 +1304,8 @@ export default function ShipmentScannerPage() {
         return;
       }
 
-      const token = getAuthToken();
+      const token =
+        getAuthToken();
 
       if (!token) {
         setError(
@@ -1123,35 +1322,36 @@ export default function ShipmentScannerPage() {
       setSuccess("");
 
       try {
-        const response = await fetch(
-          `${API_BASE}/api/shipment/scan/action`,
-          {
-            method: "POST",
+        const response =
+          await fetch(
+            `${API_BASE}/api/shipment/scan/action`,
+            {
+              method: "POST",
 
-            headers: {
-              "Content-Type":
-                "application/json",
+              headers: {
+                "Content-Type":
+                  "application/json",
 
-              Authorization: `Bearer ${token}`,
-            },
+                Authorization: `Bearer ${token}`,
+              },
 
-            credentials: "include",
+              credentials: "include",
 
-            body: JSON.stringify({
-              trackingNumber:
-                shipment.trackingNumber,
+              body: JSON.stringify({
+                trackingNumber:
+                  shipment.trackingNumber,
 
-              action:
-                selectedAction,
+                action:
+                  selectedAction,
 
-              location:
-                location.trim(),
+                location:
+                  location.trim(),
 
-              notes:
-                notes.trim(),
-            }),
-          }
-        );
+                notes:
+                  notes.trim(),
+              }),
+            }
+          );
 
         const data =
           await response.json();
@@ -1163,7 +1363,9 @@ export default function ShipmentScannerPage() {
           );
         }
 
-        if (data?.success === false) {
+        if (
+          data?.success === false
+        ) {
           throw new Error(
             data?.message ||
               "Action failed."
@@ -1178,7 +1380,7 @@ export default function ShipmentScannerPage() {
         setNotes("");
 
         /*
-         * Refresh shipment state.
+         * Refresh shipment.
          */
         await findShipment(
           shipment.trackingNumber
@@ -1211,33 +1413,51 @@ export default function ShipmentScannerPage() {
      RESET
   ======================================================= */
 
-  const resetPage = useCallback(() => {
-    stopScanner();
+  const resetPage =
+    useCallback(() => {
+      stopScanner();
 
-    setShipment(null);
+      setShipment(null);
 
-    setActions([]);
+      setActions([]);
 
-    setSelectedAction("");
+      setSelectedAction("");
 
-    setSelectedRiderId("");
+      setSelectedRiderId("");
 
-    setError("");
+      setError("");
 
-    setSuccess("");
+      setSuccess("");
 
-    setNotes("");
+      setNotes("");
 
-    setLocation("");
+      setLocation("");
 
-    setLoading(false);
+      setLoading(false);
 
-    setActionLoading(false);
+      setActionLoading(false);
 
-    lastScanRef.current = "";
+      lastScanRef.current = "";
 
-    scanLockRef.current = false;
-  }, [stopScanner]);
+      scanLockRef.current = false;
+
+      usbBufferRef.current = "";
+
+      usbLastKeyTimeRef.current = 0;
+
+      usbScanningRef.current = false;
+
+      setUsbScannerActive(false);
+
+      if (usbTimeoutRef.current) {
+        clearTimeout(
+          usbTimeoutRef.current
+        );
+
+        usbTimeoutRef.current =
+          null;
+      }
+    }, [stopScanner]);
 
   /* =======================================================
      RIDER NAME
@@ -1272,12 +1492,12 @@ export default function ShipmentScannerPage() {
             </h1>
 
             <p className="mt-1 text-sm text-gray-500">
-              Scan a shipment QR code to view,
-              assign and update shipment status.
+              Scan a shipment QR code using
+              your camera or USB scanner.
             </p>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button
               type="button"
               onClick={fetchRiders}
@@ -1305,6 +1525,101 @@ export default function ShipmentScannerPage() {
 
               Reset
             </button>
+          </div>
+        </div>
+
+        {/* =================================================
+            SCANNER METHODS
+        ================================================= */}
+
+        <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+
+          {/* USB SCANNER */}
+
+          <div
+            className={`rounded-2xl border bg-white p-5 shadow-sm transition ${
+              usbScannerActive
+                ? "border-green-400 ring-2 ring-green-100"
+                : "border-gray-200"
+            }`}
+          >
+            <div className="flex items-start gap-4">
+              <div className="rounded-xl bg-green-50 p-3 text-green-600">
+                <Keyboard size={23} />
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <h2 className="font-semibold text-gray-900">
+                  USB / Bluetooth Scanner
+                </h2>
+
+                <p className="mt-1 text-sm text-gray-500">
+                  Connect your scanner and scan
+                  the shipment barcode or QR code.
+                </p>
+
+                <div className="mt-3 flex items-center gap-2">
+                  <span
+                    className={`h-2.5 w-2.5 rounded-full ${
+                      usbScannerActive
+                        ? "animate-pulse bg-green-500"
+                        : "bg-gray-300"
+                    }`}
+                  />
+
+                  <span className="text-xs font-medium text-gray-500">
+                    {usbScannerActive
+                      ? "Scanning..."
+                      : "Ready for scanner"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-xl bg-gray-50 p-3">
+              <p className="text-xs leading-5 text-gray-500">
+                Most USB scanners work like a
+                keyboard. Simply scan the code.
+                No input field is required.
+              </p>
+            </div>
+          </div>
+
+          {/* CAMERA */}
+
+          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="flex items-start gap-4">
+              <div className="rounded-xl bg-blue-50 p-3 text-blue-600">
+                <Camera size={23} />
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <h2 className="font-semibold text-gray-900">
+                  Laptop Camera
+                </h2>
+
+                <p className="mt-1 text-sm text-gray-500">
+                  Use your laptop webcam to scan
+                  the shipment QR code.
+                </p>
+
+                <button
+                  type="button"
+                  onClick={openScanner}
+                  disabled={
+                    scannerOpen ||
+                    loading
+                  }
+                  className="mt-4 inline-flex items-center gap-2 rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Camera size={17} />
+
+                  {scannerOpen
+                    ? "Camera Active"
+                    : "Open Camera"}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1343,52 +1658,33 @@ export default function ShipmentScannerPage() {
         )}
 
         {/* =================================================
-            SCANNER
+            CAMERA SCANNER
         ================================================= */}
 
-        <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-          <div className="mb-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="rounded-xl bg-blue-50 p-3 text-blue-600">
-                <ScanLine size={22} />
-              </div>
-
+        {scannerOpen && (
+          <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="mb-4 flex items-center justify-between">
               <div>
                 <h2 className="font-semibold text-gray-900">
-                  Scan Shipment
+                  Camera Scanner
                 </h2>
 
                 <p className="text-sm text-gray-500">
-                  Scan the QR code printed on the shipment.
+                  Point the camera at the QR code.
                 </p>
               </div>
-            </div>
 
-            {!scannerOpen ? (
-              <button
-                type="button"
-                onClick={openScanner}
-                disabled={loading}
-                className="inline-flex items-center gap-2 rounded-xl bg-gray-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Camera size={18} />
-
-                Open Scanner
-              </button>
-            ) : (
               <button
                 type="button"
                 onClick={stopScanner}
-                className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-red-700"
+                className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700"
               >
-                <CameraOff size={18} />
+                <CameraOff size={17} />
 
                 Stop Scanner
               </button>
-            )}
-          </div>
+            </div>
 
-          {scannerOpen && (
             <div className="overflow-hidden rounded-2xl bg-black">
               <div className="relative aspect-video w-full">
                 <video
@@ -1407,27 +1703,8 @@ export default function ShipmentScannerPage() {
                 </div>
               </div>
             </div>
-          )}
-
-          {!scannerOpen && (
-            <div className="flex min-h-40 items-center justify-center rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50">
-              <div className="text-center">
-                <ScanLine
-                  size={38}
-                  className="mx-auto mb-3 text-gray-400"
-                />
-
-                <p className="font-medium text-gray-700">
-                  Scanner is ready
-                </p>
-
-                <p className="mt-1 text-sm text-gray-500">
-                  Click Open Scanner to scan a shipment.
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* =================================================
             LOADING
@@ -1468,7 +1745,7 @@ export default function ShipmentScannerPage() {
                       Tracking Number
                     </p>
 
-                    <h2 className="mt-1 text-2xl font-bold tracking-tight text-gray-900">
+                    <h2 className="mt-1 break-all text-2xl font-bold tracking-tight text-gray-900">
                       {shipment.trackingNumber}
                     </h2>
                   </div>
@@ -1506,7 +1783,7 @@ export default function ShipmentScannerPage() {
                     label="Weight"
                     value={
                       shipment.weight !==
-                      null &&
+                        null &&
                       shipment.weight !==
                         undefined
                         ? `${shipment.weight} kg`
@@ -1626,7 +1903,6 @@ export default function ShipmentScannerPage() {
               =========================================== */}
 
               <div className="rounded-2xl border border-purple-200 bg-white p-5 shadow-sm">
-
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <SectionTitle
                     icon={
@@ -1854,7 +2130,10 @@ export default function ShipmentScannerPage() {
                   0 ? (
                   <div className="mt-5 space-y-4">
                     {shipment.trackings.map(
-                      (tracking, index) => (
+                      (
+                        tracking,
+                        index
+                      ) => (
                         <div
                           key={
                             tracking.id ??
@@ -1977,13 +2256,9 @@ export default function ShipmentScannerPage() {
                               );
 
                               setError("");
+
                               setSuccess("");
 
-                              /*
-                               * If selecting
-                               * ASSIGN_RIDER,
-                               * refresh riders.
-                               */
                               if (
                                 action ===
                                 "ASSIGN_RIDER"
@@ -2039,8 +2314,6 @@ export default function ShipmentScannerPage() {
                   </div>
                 )}
 
-                {/* Selected action */}
-
                 {selectedAction && (
                   <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50 p-4">
                     <p className="text-xs font-semibold uppercase tracking-wide text-blue-500">
@@ -2067,7 +2340,7 @@ export default function ShipmentScannerPage() {
                 )}
               </div>
 
-              {/* Location */}
+              {/* Action Details */}
 
               <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
                 <SectionTitle
@@ -2089,14 +2362,15 @@ export default function ShipmentScannerPage() {
                       )
                     }
                     placeholder="e.g. Kathmandu Warehouse"
-                    disabled={actionLoading}
+                    disabled={
+                      actionLoading
+                    }
                     className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-gray-100"
                   />
 
                   <p className="mt-1 text-xs text-gray-400">
-                    Used for RECEIVE / PICKUP / DELIVER / etc. via the
-                    scan action endpoint. Not used for ASSIGN_RIDER,
-                    which goes through the dedicated assign-rider route.
+                    Used by the normal shipment
+                    action endpoint.
                   </p>
                 </div>
 
@@ -2114,13 +2388,15 @@ export default function ShipmentScannerPage() {
                     }
                     rows={4}
                     placeholder="Add notes..."
-                    disabled={actionLoading}
+                    disabled={
+                      actionLoading
+                    }
                     className="w-full resize-none rounded-xl border border-gray-300 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-gray-100"
                   />
                 </div>
               </div>
 
-              {/* Main action button */}
+              {/* Main action */}
 
               <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
                 <button
@@ -2131,13 +2407,9 @@ export default function ShipmentScannerPage() {
                   disabled={
                     !selectedAction ||
                     actionLoading ||
-                    /*
-                     * IMPORTANT:
-                     * assignment cannot happen
-                     * without rider selection.
-                     */
                     (isAssignAction &&
-                      selectedRiderId === "")
+                      selectedRiderId ===
+                        "")
                   }
                   className={`flex w-full items-center justify-center gap-2 rounded-xl px-5 py-4 text-sm font-bold text-white transition disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500 ${
                     isAssignAction
@@ -2229,10 +2501,31 @@ export default function ShipmentScannerPage() {
               </h2>
 
               <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-gray-500">
-                Scan a shipment QR code to load
-                its details and perform shipment
-                actions.
+                Scan a shipment QR code using
+                your laptop camera or connect a
+                USB scanner and scan directly.
               </p>
+
+              <div className="mx-auto mt-6 max-w-md rounded-xl border border-green-100 bg-green-50 p-4 text-left">
+                <div className="flex gap-3">
+                  <Keyboard
+                    size={20}
+                    className="mt-0.5 shrink-0 text-green-600"
+                  />
+
+                  <div>
+                    <p className="text-sm font-semibold text-green-800">
+                      USB scanner ready
+                    </p>
+
+                    <p className="mt-1 text-xs leading-5 text-green-700">
+                      Connect your barcode/QR
+                      scanner and scan. You do not
+                      need to click an input box.
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
       </div>
@@ -2248,7 +2541,7 @@ function SectionTitle({
   icon,
   title,
 }: {
-  icon: React.ReactNode;
+  icon: ReactNode;
   title: string;
 }) {
   return (

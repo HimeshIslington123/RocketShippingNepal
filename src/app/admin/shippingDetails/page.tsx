@@ -36,6 +36,10 @@ type Vendor = {
   id: number;
   companyName: string;
   contactId?: string;
+  vatNumber?: string | null;
+  vat?: string | null;
+  panNumber?: string | null;
+  pan?: string | null;
   location?: string | null;
   address?: string | null;
   userId?: number;
@@ -126,6 +130,13 @@ type Shipment = {
   codAmount: number;
   shippingCharge: number;
 
+  logisticCharge?: number | null;
+  packingCharge?: number | null;
+  vatNumber?: string | null;
+  vat?: string | null;
+  panNumber?: string | null;
+  pan?: string | null;
+
   notes?: string | null;
 
   vendorId?: number | null;
@@ -178,6 +189,15 @@ const API_URL =
 
 const APP_URL =
   process.env.NEXT_PUBLIC_APP_URL || "";
+
+const TRACKING_URL_BASE =
+  "https://www.rocketshippings.com/track";
+
+function getTrackingUrl(trackingNumber: string) {
+  return `${TRACKING_URL_BASE}/${encodeURIComponent(
+    trackingNumber
+  )}`;
+}
 
 // ============================================================
 // NORMAL SHIPMENT FLOW
@@ -2069,6 +2089,10 @@ export default function VendorShipmentsPage() {
                     </th>
 
                     <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wide text-[#94a3b8]">
+                      Delivery Charge
+                    </th>
+
+                    <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wide text-[#94a3b8]">
                       Rider
                     </th>
 
@@ -2087,7 +2111,7 @@ export default function VendorShipmentsPage() {
                   0 ? (
                     <tr>
                       <td
-                        colSpan={8}
+                        colSpan={9}
                         className="px-6 py-16 text-center"
                       >
                         <Package
@@ -2225,6 +2249,16 @@ export default function VendorShipmentsPage() {
                               )}
                             </td>
 
+                            {/* DELIVERY CHARGE */}
+
+                            <td className="px-5 py-4">
+                              <p className="font-semibold text-[#0b1729]">
+                                {formatCurrency(
+                                  shipment.shippingCharge
+                                )}
+                              </p>
+                            </td>
+
                             {/* RIDER */}
 
                             <td className="px-5 py-4">
@@ -2294,6 +2328,19 @@ export default function VendorShipmentsPage() {
                                       14
                                     }
                                   />
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    printCustomerDetails(
+                                      shipment
+                                    )
+                                  }
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-[#0b1729] bg-white px-3 py-2 text-xs font-semibold text-[#0b1729] transition hover:bg-[#f8fafc]"
+                                >
+                                  <Printer size={13} />
+                                  Slip
                                 </button>
 
                                 <button
@@ -2400,6 +2447,13 @@ export default function VendorShipmentsPage() {
                         />
 
                         <MobileRow
+                          label="Delivery Charge"
+                          value={formatCurrency(
+                            shipment.shippingCharge
+                          )}
+                        />
+
+                        <MobileRow
                           label="Rider"
                           value={
                             shipment
@@ -2411,7 +2465,7 @@ export default function VendorShipmentsPage() {
                         />
                       </div>
 
-                      <div className="mt-4 grid grid-cols-2 gap-2">
+                      <div className="mt-4 grid grid-cols-3 gap-2">
                         <button
                           type="button"
                           onClick={() =>
@@ -2746,7 +2800,7 @@ export default function VendorShipmentsPage() {
                             />
 
                             <InfoCard
-                              label="Shipping charge"
+                              label="Delivery charge"
                               value={formatCurrency(
                                 detailsShipment.shippingCharge
                               )}
@@ -3443,7 +3497,7 @@ export default function VendorShipmentsPage() {
                           <div className="flex justify-center rounded-xl border border-[#edf0f3] bg-[#fafbfc] p-5">
                             <div className="rounded-xl border border-[#e1e5ea] bg-white p-3">
                               <QRCode
-                                value={`${APP_URL}/track/${detailsShipment.trackingNumber}`}
+                                value={getTrackingUrl(detailsShipment.trackingNumber)}
                                 size={
                                   145
                                 }
@@ -3491,11 +3545,11 @@ export default function VendorShipmentsPage() {
 
                                 <div>
                                   <p className="text-sm font-bold">
-                                    Print Bill
+                                    Print Vendor Bill
                                   </p>
 
                                   <p className="mt-0.5 text-[11px] text-white/70">
-                                    Full shipment receipt
+                                    Vendor billing details + QR
                                   </p>
                                 </div>
                               </div>
@@ -3527,11 +3581,11 @@ export default function VendorShipmentsPage() {
 
                                 <div>
                                   <p className="text-sm font-bold text-[#0b1729]">
-                                    Print Customer Details
+                                    Print Delivery Slip
                                   </p>
 
                                   <p className="mt-0.5 text-[11px] text-[#94a3b8]">
-                                    Customer label + QR code
+                                    QR-first From / To delivery slip
                                   </p>
                                 </div>
                               </div>
@@ -3555,6 +3609,7 @@ export default function VendorShipmentsPage() {
       )}
 
       {/* ==================================================== */}
+      {/* ==================================================== */}
       {/* PRINT BILL */}
       {/* ==================================================== */}
 
@@ -3562,447 +3617,224 @@ export default function VendorShipmentsPage() {
         printMode === "bill" && (
           <div
             id="print-bill"
-            className="text-black"
+            className="mx-auto max-w-[760px] text-black"
           >
             <div className="border-b-2 border-black pb-3 text-center">
               <h1 className="text-[18px] font-black uppercase leading-tight">
-                {
-                  CARGO_COMPANY_NAME
-                }
+                {CARGO_COMPANY_NAME}
               </h1>
-
-              <p className="mt-1 text-[9px] uppercase tracking-[0.15em] text-gray-500">
-                Shipment Receipt
+              <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.16em] text-gray-500">
+                Vendor Bill / VAT Invoice
               </p>
             </div>
 
-            <div className="border-b py-3 text-center">
-              <p className="text-[8px] font-semibold uppercase tracking-wider text-gray-500">
-                Tracking Number
-              </p>
-
-              <p className="mt-1 text-[16px] font-black tracking-wide">
-                {
-                  printShipment.trackingNumber
-                }
-              </p>
-            </div>
-
-            <div className="border-b py-3">
-              <p className="text-[8px] font-bold uppercase tracking-wider text-gray-500">
-                From / Sender
-              </p>
-
-              <p className="mt-1 text-[12px] font-bold">
-                {printShipment
-                  .vendor
-                  ?.companyName ||
-                  "Vendor"}
-              </p>
-
-              {printShipment.vendor
-                ?.location && (
-                <p className="mt-1 text-[9px] text-gray-500">
-                  {
-                    printShipment
-                      .vendor
-                      .location
-                  }
+            <div className="grid grid-cols-2 gap-4 border-b py-4">
+              <div>
+                <p className="text-[8px] font-bold uppercase tracking-wider text-gray-500">Vendor</p>
+                <p className="mt-1 text-[13px] font-black">
+                  {printShipment.vendor?.companyName || "—"}
                 </p>
-              )}
-
-              <div className="my-2 text-center text-[11px] font-bold">
-                ↓
-              </div>
-
-              <p className="text-[8px] font-bold uppercase tracking-wider text-gray-500">
-                To / Receiver
-              </p>
-
-              <p className="mt-1 text-[12px] font-bold">
-                {
-                  printShipment.receiverName
-                }
-              </p>
-
-              <p className="mt-1 text-[10px]">
-                {
-                  printShipment.receiverPhone
-                }
-              </p>
-            </div>
-
-            <div className="border-b py-3">
-              <p className="text-[8px] font-bold uppercase tracking-wider text-gray-500">
-                Delivery Address
-              </p>
-
-              <p className="mt-1 break-words text-[10px] leading-4">
-                {
-                  printShipment.receiverAddress
-                }
-              </p>
-            </div>
-
-            <div className="border-b py-3">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-[8px] font-semibold uppercase text-gray-500">
-                    Destination
-                  </p>
-
-                  <p className="mt-1 text-[11px] font-bold">
-                    {printShipment
-                      .locationRate
-                      ?.location
-                      ?.name ||
-                      "—"}
-                  </p>
-                </div>
-
-                <div className="text-right">
-                  <p className="text-[8px] font-semibold uppercase text-gray-500">
-                    Delivery Type
-                  </p>
-
-                  <p className="mt-1 text-[10px] font-semibold">
-                    {printShipment
-                      .locationRate
-                      ?.deliveryType
-                      ?.name ||
-                      "—"}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="border-b py-3">
-              <div className="grid grid-cols-2 gap-y-3">
-                <div>
-                  <p className="text-[8px] font-semibold uppercase text-gray-500">
-                    Package
-                  </p>
-
-                  <p className="mt-1 text-[10px] font-semibold">
-                    {
-                      printShipment.packageType
-                    }
-                  </p>
-                </div>
-
-                <div className="text-right">
-                  <p className="text-[8px] font-semibold uppercase text-gray-500">
-                    Weight
-                  </p>
-
-                  <p className="mt-1 text-[10px] font-semibold">
-                    {
-                      printShipment.weight
-                    }{" "}
-                    kg
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-[8px] font-semibold uppercase text-gray-500">
-                    Payment
-                  </p>
-
-                  <p className="mt-1 text-[10px] font-semibold">
-                    {
-                      printShipment.paymentType
-                    }
-                  </p>
-                </div>
-
-                {printShipment.paymentType ===
-                  "COD" && (
-                  <div className="text-right">
-                    <p className="text-[8px] font-semibold uppercase text-gray-500">
-                      COD Amount
-                    </p>
-
-                    <p className="mt-1 text-[11px] font-bold">
-                      {formatCurrency(
-                        printShipment.codAmount
-                      )}
-                    </p>
-                  </div>
+                {printShipment.vendor?.location && (
+                  <p className="mt-1 text-[9px] text-gray-600">{printShipment.vendor.location}</p>
+                )}
+                {printShipment.vendor?.address && (
+                  <p className="mt-1 text-[9px] leading-4 text-gray-600">{printShipment.vendor.address}</p>
                 )}
               </div>
-            </div>
 
-            <div className="border-b py-3">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold">
-                  Shipping Charge
-                </span>
-
-                <span className="text-[14px] font-black">
-                  {formatCurrency(
-                    printShipment.shippingCharge
-                  )}
-                </span>
+              <div className="text-right">
+                <p className="text-[8px] font-bold uppercase tracking-wider text-gray-500">Bill Date</p>
+                <p className="mt-1 text-[10px] font-bold">{formatDate(printShipment.createdAt)}</p>
+                <p className="mt-3 text-[8px] font-bold uppercase tracking-wider text-gray-500">Tracking</p>
+                <p className="mt-1 break-all text-[10px] font-black">{printShipment.trackingNumber}</p>
               </div>
             </div>
 
-            <div className="flex items-center justify-between gap-4 py-4">
-              <div className="flex-1">
-                <p className="text-[9px] font-bold uppercase tracking-wider">
-                  Track Shipment
-                </p>
-
-                <p className="mt-1 text-[8px] leading-3 text-gray-500">
-                  Scan the QR code to see the latest shipment status.
-                </p>
-
-                <p className="mt-2 break-all text-[8px] font-bold">
-                  {
-                    printShipment.trackingNumber
-                  }
+            <div className="grid grid-cols-2 gap-4 border-b py-4">
+              <div>
+                <p className="text-[8px] font-bold uppercase tracking-wider text-gray-500">VAT</p>
+                <p className="mt-1 text-[10px] font-bold">
+                  {printShipment.vendor?.vatNumber || printShipment.vendor?.vat || printShipment.vatNumber || printShipment.vat || "—"}
                 </p>
               </div>
-
-              <div className="shrink-0 border border-black p-1">
-                <QRCode
-                  value={`${APP_URL}/track/${printShipment.trackingNumber}`}
-                  size={
-                    82
-                  }
-                />
+              <div className="text-right">
+                <p className="text-[8px] font-bold uppercase tracking-wider text-gray-500">PAN</p>
+                <p className="mt-1 text-[10px] font-bold">
+                  {printShipment.vendor?.panNumber || printShipment.vendor?.pan || printShipment.panNumber || printShipment.pan || "—"}
+                </p>
               </div>
             </div>
 
-            <div className="border-t pt-3 text-center">
-              <p className="text-[9px] font-semibold">
-                Thank you for choosing{" "}
-                {
-                  CARGO_COMPANY_NAME
-                }
-                .
-              </p>
+            <div className="border-b py-4">
+              <p className="mb-3 text-[8px] font-bold uppercase tracking-wider text-gray-500">Shipment Details</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-[8px] font-bold uppercase tracking-wider text-gray-500">Customer</p>
+                  <p className="mt-1 text-[11px] font-bold">{printShipment.receiverName}</p>
+                  <p className="mt-1 text-[9px] text-gray-600">{printShipment.receiverPhone}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[8px] font-bold uppercase tracking-wider text-gray-500">Package</p>
+                  <p className="mt-1 text-[11px] font-black">{printShipment.packageType}</p>
+                  <p className="mt-1 text-[9px] text-gray-600">{printShipment.weight} kg</p>
+                </div>
+              </div>
+            </div>
 
-              <p className="mt-1 text-[7px] text-gray-500">
-                Please keep this receipt for your reference.
-              </p>
+            <div className="border-b py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-[8px] font-bold uppercase tracking-wider text-gray-500">Payment</p>
+                  <p className="mt-1 text-[11px] font-bold">{printShipment.paymentType}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[8px] font-bold uppercase tracking-wider text-gray-500">COD</p>
+                  <p className="mt-1 text-[12px] font-black">
+                    {printShipment.paymentType === "COD" ? formatCurrency(printShipment.codAmount) : "N/A"}
+                  </p>
+                </div>
+              </div>
+            </div>
 
-              <p className="mt-2 text-[7px] text-gray-400">
-                {formatDate(
-                  printShipment.createdAt
-                )}
-              </p>
+       <div className="border-b py-4">
+  <div className="flex items-center justify-between gap-4">
+    <span className="text-[9px] font-bold uppercase tracking-wider">
+      Logistic / Delivery Charge
+    </span>
+
+    <span className="text-[14px] font-black">
+      {formatCurrency(
+        Number(printShipment.logisticCharge ?? printShipment.shippingCharge) || 0
+      )}
+    </span>
+  </div>
+
+  <div className="mt-3 flex items-center justify-between gap-4">
+    <span className="text-[9px] font-bold uppercase tracking-wider">
+      Packing Charge
+    </span>
+
+    <span className="text-[12px] font-bold">
+      {formatCurrency(Number(printShipment.packingCharge) || 0)}
+    </span>
+  </div>
+
+  <div className="mt-3 flex items-center justify-between gap-4 border-t border-dashed border-gray-300 pt-3">
+    <span className="text-[10px] font-black uppercase tracking-wider">
+      Total Charge
+    </span>
+
+    <span className="text-[16px] font-black">
+      {formatCurrency(
+        (Number(printShipment.logisticCharge ?? printShipment.shippingCharge) || 0) +
+        (Number(printShipment.packingCharge) || 0)
+      )}
+    </span>
+  </div>
+</div>
+
+            <div className="flex items-center justify-between gap-5 py-5">
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-wider">Package QR</p>
+                <p className="mt-2 text-[8px] leading-4 text-gray-500">Scan to track this package.</p>
+                <p className="mt-2 break-all text-[8px] font-bold">{printShipment.trackingNumber}</p>
+              </div>
+              <div className="shrink-0 border-2 border-black p-2">
+                <QRCode value={getTrackingUrl(printShipment.trackingNumber)} size={105} />
+              </div>
+            </div>
+
+            <div className="border-t-2 border-black pt-3 text-center">
+              <p className="text-[8px] font-bold uppercase tracking-wider">{CARGO_COMPANY_NAME}</p>
+              <p className="mt-1 text-[7px] text-gray-500">Thank you for shipping with us.</p>
             </div>
           </div>
         )}
 
       {/* ==================================================== */}
-      {/* PRINT CUSTOMER */}
+      {/* DELIVERY SLIP */}
       {/* ==================================================== */}
 
       {printShipment &&
-        printMode ===
-          "customer" && (
+        printMode === "customer" && (
           <div
             id="print-customer"
-            className="text-black"
+            className="mx-auto max-w-[760px] text-black"
           >
-            <div className="border-b-2 border-black pb-4">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h1 className="text-[17px] font-black uppercase">
-                    {
-                      CARGO_COMPANY_NAME
-                    }
-                  </h1>
+            <div className="text-center">
+              <p className="text-[18px] font-black uppercase leading-tight">{CARGO_COMPANY_NAME}</p>
+              <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.16em] text-gray-500">Delivery Slip</p>
+            </div>
 
-                  <p className="mt-1 text-[8px] font-semibold uppercase tracking-[0.14em] text-gray-500">
-                    Customer Delivery Label
-                  </p>
-                </div>
+            <div className="mt-4 flex flex-col items-center border-y-2 border-black py-5">
+              <div className="border-2 border-black p-2">
+                <QRCode value={getTrackingUrl(printShipment.trackingNumber)} size={145} />
+              </div>
+              <p className="mt-3 text-[9px] font-bold uppercase tracking-wider text-gray-500">Tracking Number</p>
+              <p className="mt-1 break-all text-[15px] font-black">{printShipment.trackingNumber}</p>
+              <p className="mt-2 text-[7px] text-gray-500">Scan QR to track shipment</p>
+            </div>
 
-                <div className="text-right">
-                  <p className="text-[8px] font-semibold uppercase text-gray-500">
-                    Tracking
-                  </p>
-
-                  <p className="mt-1 text-[12px] font-black">
-                    {
-                      printShipment.trackingNumber
-                    }
-                  </p>
-                </div>
+            <div className="grid grid-cols-2 gap-5 border-b py-5">
+              <div>
+                <p className="text-[8px] font-bold uppercase tracking-wider text-gray-500">From / Sender</p>
+                <p className="mt-1 text-[13px] font-black">{printShipment.vendor?.companyName || "Vendor"}</p>
+                <p className="mt-1 text-[9px] leading-4 text-gray-600">{printShipment.vendor?.location || printShipment.origin || "—"}</p>
+                {printShipment.vendor?.address && <p className="mt-1 text-[9px] leading-4 text-gray-600">{printShipment.vendor.address}</p>}
+              </div>
+              <div>
+                <p className="text-[8px] font-bold uppercase tracking-wider text-gray-500">To / Receiver</p>
+                <p className="mt-1 text-[13px] font-black">{printShipment.receiverName}</p>
+                <p className="mt-1 text-[10px] font-semibold">{printShipment.receiverPhone}</p>
+                <p className="mt-1 text-[9px] leading-4 text-gray-600">{printShipment.receiverAddress}</p>
               </div>
             </div>
 
-            {/* CUSTOMER */}
+            <div className="grid grid-cols-3 gap-4 border-b py-4">
+              <div>
+                <p className="text-[8px] font-bold uppercase tracking-wider text-gray-500">Location</p>
+                <p className="mt-1 text-[10px] font-bold">{printShipment.locationRate?.location?.name || printShipment.deliveryZone || "—"}</p>
+              </div>
+              <div>
+                <p className="text-[8px] font-bold uppercase tracking-wider text-gray-500">Delivery Type</p>
+                <p className="mt-1 text-[10px] font-bold">{printShipment.locationRate?.deliveryType?.name || "—"}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-[8px] font-bold uppercase tracking-wider text-gray-500">Payment Mode</p>
+                <p className="mt-1 text-[10px] font-black">{printShipment.paymentType}</p>
+              </div>
+            </div>
 
             <div className="border-b py-4">
-              <p className="text-[8px] font-bold uppercase tracking-wider text-gray-500">
-                Deliver To
-              </p>
-
-              <p className="mt-2 text-[17px] font-black leading-tight">
-                {
-                  printShipment.receiverName
-                }
-              </p>
-
-              <div className="mt-2 flex items-center gap-2">
-                <Phone
-                  size={
-                    12
-                  }
-                />
-
-                <p className="text-[11px] font-semibold">
-                  {
-                    printShipment.receiverPhone
-                  }
-                </p>
-              </div>
-
-              <div className="mt-3">
-                <p className="text-[8px] font-bold uppercase tracking-wider text-gray-500">
-                  Address
-                </p>
-
-                <p className="mt-1 text-[12px] font-semibold leading-5">
-                  {
-                    printShipment.receiverAddress
-                  }
-                </p>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <p className="text-[8px] font-bold uppercase tracking-wider text-gray-500">Package</p>
+                  <p className="mt-1 text-[11px] font-black">{printShipment.packageType}</p>
+                </div>
+                <div>
+                  <p className="text-[8px] font-bold uppercase tracking-wider text-gray-500">Weight</p>
+                  <p className="mt-1 text-[11px] font-bold">{printShipment.weight} kg</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[8px] font-bold uppercase tracking-wider text-gray-500">COD</p>
+                  <p className="mt-1 text-[12px] font-black">{printShipment.paymentType === "COD" ? formatCurrency(printShipment.codAmount) : "N/A"}</p>
+                </div>
               </div>
             </div>
-
-            {/* DESTINATION */}
 
             <div className="border-b py-4">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-[8px] font-bold uppercase tracking-wider text-gray-500">
-                    Destination
-                  </p>
-
-                  <p className="mt-1 text-[12px] font-bold">
-                    {printShipment
-                      .locationRate
-                      ?.location
-                      ?.name ||
-                      "—"}
-                  </p>
-                </div>
-
-                <div className="text-right">
-                  <p className="text-[8px] font-bold uppercase tracking-wider text-gray-500">
-                    Delivery
-                  </p>
-
-                  <p className="mt-1 text-[10px] font-semibold">
-                    {printShipment
-                      .locationRate
-                      ?.deliveryType
-                      ?.name ||
-                      "—"}
-                  </p>
-                </div>
-              </div>
+              <p className="text-[8px] font-bold uppercase tracking-wider text-gray-500">Delivery Note</p>
+              <p className="mt-1 min-h-[28px] text-[10px] leading-4">{printShipment.notes || "—"}</p>
             </div>
 
-            {/* PACKAGE */}
-
-            <div className="border-b py-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <p className="text-[8px] font-bold uppercase tracking-wider text-gray-500">
-                    Package
-                  </p>
-
-                  <p className="mt-1 text-[11px] font-bold">
-                    {
-                      printShipment.packageType
-                    }
-                  </p>
-                </div>
-
-                <div className="text-right">
-                  <p className="text-[8px] font-bold uppercase tracking-wider text-gray-500">
-                    Weight
-                  </p>
-
-                  <p className="mt-1 text-[11px] font-bold">
-                    {
-                      printShipment.weight
-                    }{" "}
-                    kg
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-[8px] font-bold uppercase tracking-wider text-gray-500">
-                    Payment
-                  </p>
-
-                  <p className="mt-1 text-[11px] font-bold">
-                    {
-                      printShipment.paymentType
-                    }
-                  </p>
-                </div>
-
-                {printShipment.paymentType ===
-                  "COD" && (
-                  <div className="text-right">
-                    <p className="text-[8px] font-bold uppercase tracking-wider text-gray-500">
-                      COD
-                    </p>
-
-                    <p className="mt-1 text-[12px] font-black">
-                      {formatCurrency(
-                        printShipment.codAmount
-                      )}
-                    </p>
-                  </div>
-                )}
-              </div>
+            <div className="flex items-center justify-between gap-4 border-b py-4">
+              <span className="text-[9px] font-bold uppercase tracking-wider">Delivery Charge</span>
+              <span className="text-[14px] font-black">{formatCurrency(printShipment.shippingCharge)}</span>
             </div>
 
-            {/* QR */}
-
-            <div className="flex items-center justify-between gap-5 py-5">
-              <div className="flex-1">
-                <p className="text-[9px] font-black uppercase tracking-wider">
-                  Scan to track
-                </p>
-
-                <p className="mt-2 text-[8px] leading-4 text-gray-500">
-                  Scan this QR code to view the current delivery status of this shipment.
-                </p>
-
-                <p className="mt-3 break-all text-[9px] font-black">
-                  {
-                    printShipment.trackingNumber
-                  }
-                </p>
-              </div>
-
-              <div className="shrink-0 border-2 border-black p-2">
-                <QRCode
-                  value={`${APP_URL}/track/${printShipment.trackingNumber}`}
-                  size={
-                    115
-                  }
-                />
-              </div>
-            </div>
-
-            <div className="border-t-2 border-black pt-3 text-center">
-              <p className="text-[8px] font-semibold uppercase tracking-wider">
-                Rocket Shipping Cargo
-              </p>
-
-              <p className="mt-1 text-[7px] text-gray-500">
-                Handle with care • Thank you
-              </p>
+            <div className="pt-4 text-center">
+              <p className="text-[8px] font-bold uppercase tracking-wider">Handle with care</p>
+              <p className="mt-1 text-[7px] text-gray-500">{CARGO_COMPANY_NAME} • Thank you</p>
             </div>
           </div>
         )}
