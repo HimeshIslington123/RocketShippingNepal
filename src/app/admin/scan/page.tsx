@@ -1,4 +1,3 @@
-
 "use client";
 
 import {
@@ -13,86 +12,387 @@ import {
   IScannerControls,
 } from "@zxing/browser";
 
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL || "";
+import {
+  Camera,
+  CameraOff,
+  CheckCircle2,
+  ChevronDown,
+  Clock,
+  MapPin,
+  Package,
+  Phone,
+  RefreshCw,
+  RotateCcw,
+  ScanLine,
+  Truck,
+  User,
+  UserCheck,
+  XCircle,
+  Warehouse,
+} from "lucide-react";
 
+/* =========================================================
+   API
+========================================================= */
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
+
+/* =========================================================
+   TYPES
+========================================================= */
+
+type Tracking = {
+  id?: number;
+  status?: string;
+  location?: string | null;
+  notes?: string | null;
+  message?: string | null;
+  createdAt?: string;
+};
+
+type Vendor = {
+  id?: number;
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+};
+
+type RiderUser = {
+  id?: number;
+  name?: string | null;
+  email?: string | null;
+  role?: string;
+  isActive?: boolean;
+  createdAt?: string;
+};
+
+type Rider = {
+  id: number;
+
+  phone?: string | null;
+
+  vehicleType?: string | null;
+
+  vehicleNumber?: string | null;
+
+  isAvailable?: boolean;
+
+  latitude?: number | null;
+
+  longitude?: number | null;
+
+  name?: string | null;
+
+  user?: RiderUser | null;
+};
+
+type CodCollection = {
+  id?: number;
+  amount?: number;
+  status?: string;
+  collectedAt?: string;
+};
+
+/*
+ * NOTE / FIX:
+ * Your Prisma shipment IDs are strings (cuids), not numbers.
+ * The scan/action endpoints and the assign-rider endpoint both
+ * take :id as a route param and do `String(req.params.id)` /
+ * `where: { id: shipmentId }` — so this MUST be a string, or
+ * you'll build broken URLs like /api/shipment/123.45/assign-rider
+ * if this was ever coerced through Number().
+ */
 type Shipment = {
   id: string;
+
   trackingNumber: string;
+
   status: string;
 
-  senderName?: string;
-  senderPhone?: string;
-  senderAddress?: string;
+  senderName?: string | null;
 
-  receiverName?: string;
-  receiverPhone?: string;
-  receiverAddress?: string;
+  senderPhone?: string | null;
 
-  packageType?: string;
-  weight?: number | string;
+  senderAddress?: string | null;
 
-  paymentType?: string;
-  codAmount?: number | string;
-  shippingCharge?: number | string;
+  receiverName?: string | null;
 
-  notes?: string;
+  receiverPhone?: string | null;
 
-  vendor?: {
-    id: number;
-    companyName?: string;
-    contactId?: string;
-    location?: string;
-  } | null;
+  receiverAddress?: string | null;
 
-  rider?: {
-    id: number;
-    name?: string;
-    phone?: string;
-  } | null;
+  packageType?: string | null;
 
-  trackings?: any[];
+  weight?: number | null;
 
-  codCollection?: any;
+  paymentType?: string | null;
+
+  codAmount?: number | null;
+
+  shippingCharge?: number | null;
+
+  notes?: string | null;
+
+  vendor?: Vendor | null;
+
+  rider?: Rider | null;
+
+  riderId?: number | null;
+
+  trackings?: Tracking[];
+
+  codCollection?: CodCollection | null;
 };
 
 type ScanResult = {
   success: boolean;
-  shipment: Shipment;
 
-  currentUser: {
-    role: string;
-    riderId: number | null;
+  message?: string;
+
+  shipment?: Shipment;
+
+  currentUser?: {
+    id?: number;
+    name?: string;
+    role?: string;
   };
 
-  actions: string[];
+  actions?: string[];
 };
 
+/* =========================================================
+   ACTIONS
+========================================================= */
+
 const ACTION_LABELS: Record<string, string> = {
-  RECEIVE: "Receive in Warehouse",
+  RECEIVE: "Receive Shipment",
+
   PICKUP: "Pickup Shipment",
+
+  ASSIGN_RIDER: "Assign Rider",
+
   OUT_FOR_DELIVERY: "Out for Delivery",
-  DELIVER: "Mark Delivered",
+
+  DELIVER: "Deliver Shipment",
+
   REQUEST_RETURN: "Request Return",
+
   RETURN_PICKUP: "Pickup Return",
+
   RETURN_TO_WAREHOUSE: "Return to Warehouse",
+
   OUT_FOR_RETURN: "Out for Return",
+
   RETURNED_TO_VENDOR: "Returned to Vendor",
 };
 
-const ACTION_ICONS: Record<string, string> = {
-  RECEIVE: "📦",
-  PICKUP: "🤝",
-  OUT_FOR_DELIVERY: "🚚",
-  DELIVER: "✓",
-  REQUEST_RETURN: "↩",
-  RETURN_PICKUP: "📥",
-  RETURN_TO_WAREHOUSE: "🏭",
-  OUT_FOR_RETURN: "🚚",
-  RETURNED_TO_VENDOR: "✓",
+const ACTION_DESCRIPTIONS: Record<string, string> = {
+  RECEIVE:
+    "Receive this shipment into the warehouse.",
+
+  PICKUP:
+    "Mark this shipment as picked up.",
+
+  ASSIGN_RIDER:
+    "Assign this shipment to a rider.",
+
+  OUT_FOR_DELIVERY:
+    "Mark the shipment as out for delivery.",
+
+  DELIVER:
+    "Mark the shipment as delivered.",
+
+  REQUEST_RETURN:
+    "Request a return for this shipment.",
+
+  RETURN_PICKUP:
+    "Pick up the return from the customer.",
+
+  RETURN_TO_WAREHOUSE:
+    "Bring the return back to the warehouse.",
+
+  OUT_FOR_RETURN:
+    "Send the return shipment to the vendor.",
+
+  RETURNED_TO_VENDOR:
+    "Complete the return to the vendor.",
 };
 
+const ACTION_ICONS: Record<
+  string,
+  React.ComponentType<{ size?: number; className?: string }>
+> = {
+  RECEIVE: Warehouse,
+
+  PICKUP: Package,
+
+  ASSIGN_RIDER: UserCheck,
+
+  OUT_FOR_DELIVERY: Truck,
+
+  DELIVER: CheckCircle2,
+
+  REQUEST_RETURN: RotateCcw,
+
+  RETURN_PICKUP: RotateCcw,
+
+  RETURN_TO_WAREHOUSE: Warehouse,
+
+  OUT_FOR_RETURN: Truck,
+
+  RETURNED_TO_VENDOR: CheckCircle2,
+};
+
+/* =========================================================
+   HELPERS
+========================================================= */
+
+function formatStatus(status?: string | null) {
+  if (!status) return "-";
+
+  return status
+    .toLowerCase()
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function statusClass(status?: string | null) {
+  switch (status) {
+    case "DELIVERED":
+      return "bg-green-100 text-green-700";
+
+    case "OUT_FOR_DELIVERY":
+      return "bg-blue-100 text-blue-700";
+
+    case "ASSIGNED_TO_RIDER":
+      return "bg-purple-100 text-purple-700";
+
+    case "IN_WAREHOUSE":
+      return "bg-yellow-100 text-yellow-700";
+
+    case "RETURNED":
+    case "CANCELLED":
+      return "bg-red-100 text-red-700";
+
+    default:
+      return "bg-gray-100 text-gray-700";
+  }
+}
+
+function money(value?: number | null) {
+  if (value === null || value === undefined) {
+    return "NPR 0";
+  }
+
+  return `NPR ${Number(value).toLocaleString("en-NP")}`;
+}
+
+function formatDate(date?: string | null) {
+  if (!date) return "-";
+
+  try {
+    return new Date(date).toLocaleString("en-NP", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+  } catch {
+    return date;
+  }
+}
+
+/* =========================================================
+   EXTRACT TRACKING NUMBER FROM QR
+========================================================= */
+
+function extractTrackingNumber(value: string) {
+  const raw = value.trim();
+
+  if (!raw) {
+    return "";
+  }
+
+  /*
+   * Direct tracking number
+   *
+   * Example:
+   * RC-1789981579523-622
+   */
+  const directMatch = raw.match(
+    /(?:^|\/)(RC-[A-Za-z0-9-]+)(?:[/?#]|$)/i
+  );
+
+  if (directMatch?.[1]) {
+    return directMatch[1];
+  }
+
+  /*
+   * URL
+   *
+   * https://example.com/track/RC-123
+   */
+  try {
+    const url = new URL(raw);
+
+    const trackingParam =
+      url.searchParams.get("trackingNumber") ||
+      url.searchParams.get("tracking");
+
+    if (trackingParam) {
+      return trackingParam.trim();
+    }
+
+    const parts = url.pathname.split("/").filter(Boolean);
+
+    const trackIndex = parts.findIndex(
+      (part) => part.toLowerCase() === "track"
+    );
+
+    if (
+      trackIndex !== -1 &&
+      parts[trackIndex + 1]
+    ) {
+      return decodeURIComponent(
+        parts[trackIndex + 1]
+      ).trim();
+    }
+
+    const lastPart = parts[parts.length - 1];
+
+    if (lastPart) {
+      return decodeURIComponent(lastPart).trim();
+    }
+  } catch {
+    // Not a URL.
+  }
+
+  /*
+   * Query string directly
+   */
+  const queryMatch = raw.match(
+    /trackingNumber=([^&]+)/i
+  );
+
+  if (queryMatch?.[1]) {
+    return decodeURIComponent(
+      queryMatch[1]
+    ).trim();
+  }
+
+  /*
+   * Fallback
+   */
+  return raw;
+}
+
+/* =========================================================
+   COMPONENT
+========================================================= */
+
 export default function ShipmentScannerPage() {
+  /* =======================================================
+     CAMERA
+  ======================================================= */
+
   const videoRef =
     useRef<HTMLVideoElement | null>(null);
 
@@ -106,11 +406,11 @@ export default function ShipmentScannerPage() {
     useRef(false);
 
   const lastScanRef =
-    useRef("");
+    useRef<string>("");
 
-  // =========================================================
-  // STATE
-  // =========================================================
+  /* =======================================================
+     SHIPMENT STATE
+  ======================================================= */
 
   const [scannerOpen, setScannerOpen] =
     useState(false);
@@ -127,12 +427,6 @@ export default function ShipmentScannerPage() {
   const [success, setSuccess] =
     useState("");
 
-  const [trackingNumber, setTrackingNumber] =
-    useState("");
-
-  const [manualTracking, setManualTracking] =
-    useState("");
-
   const [shipment, setShipment] =
     useState<Shipment | null>(null);
 
@@ -142,64 +436,574 @@ export default function ShipmentScannerPage() {
   const [selectedAction, setSelectedAction] =
     useState("");
 
-  const [location, setLocation] =
-    useState("Main Warehouse");
+  /* =======================================================
+     RIDER STATE
+  ======================================================= */
 
-  // =========================================================
-  // STOP CAMERA
-  // =========================================================
+  const [riders, setRiders] =
+    useState<Rider[]>([]);
+
+  const [ridersLoading, setRidersLoading] =
+    useState(false);
+
+  const [selectedRiderId, setSelectedRiderId] =
+    useState<number | "">("");
+
+  /* =======================================================
+     OTHER FORM STATE
+  ======================================================= */
+
+  const [location, setLocation] =
+    useState("");
+
+  const [notes, setNotes] =
+    useState("");
+
+  /* =======================================================
+     AUTH TOKEN
+  ======================================================= */
+
+  const getAuthToken = useCallback(() => {
+    if (typeof window === "undefined") {
+      return null;
+    }
+
+    return (
+      localStorage.getItem("token") ||
+      localStorage.getItem("accessToken") ||
+      localStorage.getItem("authToken")
+    );
+  }, []);
+
+  /* =======================================================
+     STOP SCANNER
+  ======================================================= */
 
   const stopScanner = useCallback(() => {
+    /*
+     * NOTE:
+     * @zxing/browser's BrowserMultiFormatReader has no
+     * `.reset()` method (that belonged to the older
+     * @zxing/library API). Stopping decoding and releasing
+     * the camera is done entirely through the
+     * IScannerControls object returned by
+     * decodeFromVideoDevice(...), which we stop below.
+     */
+
     try {
       controlsRef.current?.stop();
-    } catch {}
+    } catch {
+      // Ignore scanner cleanup errors.
+    }
 
     controlsRef.current = null;
+
+    readerRef.current = null;
+
+    if (videoRef.current) {
+      const stream =
+        videoRef.current.srcObject as
+          | MediaStream
+          | null;
+
+      if (stream) {
+        stream
+          .getTracks()
+          .forEach((track) => track.stop());
+
+        videoRef.current.srcObject = null;
+      }
+    }
 
     setScannerOpen(false);
   }, []);
 
-  // =========================================================
-  // FIND SHIPMENT
-  // =========================================================
+  /* =======================================================
+     GET ALL RIDERS
+  ======================================================= */
+
+  const fetchRiders = useCallback(
+    async () => {
+      const token = getAuthToken();
+
+      if (!token) {
+        setError(
+          "Authentication required. Please login again."
+        );
+
+        return;
+      }
+
+      setRidersLoading(true);
+
+      try {
+        const response = await fetch(
+          `${API_BASE}/api/rider`,
+          {
+            method: "GET",
+
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type":
+                "application/json",
+            },
+
+            credentials: "include",
+          }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            data?.message ||
+              "Failed to load riders."
+          );
+        }
+
+        if (!data?.success) {
+          throw new Error(
+            data?.message ||
+              "Failed to load riders."
+          );
+        }
+
+        const riderList: Rider[] =
+          Array.isArray(data.riders)
+            ? data.riders
+            : [];
+
+        setRiders(riderList);
+      } catch (err) {
+        console.error(
+          "FETCH RIDERS ERROR:",
+          err
+        );
+
+        setRiders([]);
+
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Failed to load riders."
+        );
+      } finally {
+        setRidersLoading(false);
+      }
+    },
+    [getAuthToken]
+  );
+
+  /* =======================================================
+     FETCH RIDERS WHEN PAGE LOADS
+  ======================================================= */
+
+  useEffect(() => {
+    fetchRiders();
+  }, [fetchRiders]);
+
+  /* =======================================================
+     FIND SHIPMENT
+  ======================================================= */
 
   const findShipment = useCallback(
     async (value: string) => {
-      const cleanValue =
-        value.trim();
+      const trackingNumber =
+        extractTrackingNumber(value);
 
-      if (!cleanValue) {
+      if (!trackingNumber) {
         setError(
-          "Please scan or enter a tracking number."
+          "No tracking number found in QR code."
+        );
+
+        return;
+      }
+
+      const token = getAuthToken();
+
+      if (!token) {
+        setError(
+          "Authentication required. Please login again."
         );
 
         return;
       }
 
       setLoading(true);
+
       setError("");
+
       setSuccess("");
 
       try {
-        const response =
-          await fetch(
-            `${API_BASE}/api/shipment/scan`,
-            {
-              method: "POST",
+        const response = await fetch(
+          `${API_BASE}/api/shipment/scan`,
+          {
+            method: "POST",
 
-              credentials: "include",
+            headers: {
+              "Content-Type":
+                "application/json",
 
-              headers: {
-                "Content-Type":
-                  "application/json",
-              },
+              Authorization: `Bearer ${token}`,
+            },
 
-              body: JSON.stringify({
-                trackingNumber:
-                  cleanValue,
-              }),
+            credentials: "include",
+
+            body: JSON.stringify({
+              trackingNumber,
+            }),
+          }
+        );
+
+        const result: ScanResult =
+          await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            result?.message ||
+              "Shipment not found."
+          );
+        }
+
+        if (!result.success) {
+          throw new Error(
+            result?.message ||
+              "Unable to find shipment."
+          );
+        }
+
+        if (!result.shipment) {
+          throw new Error(
+            "Shipment information was not returned."
+          );
+        }
+
+        setShipment(result.shipment);
+
+        setActions(
+          Array.isArray(result.actions)
+            ? result.actions
+            : []
+        );
+
+        /*
+         * Select first action automatically.
+         */
+        setSelectedAction(
+          Array.isArray(result.actions) &&
+            result.actions.length > 0
+            ? result.actions[0]
+            : ""
+        );
+
+        /*
+         * If shipment already has a rider,
+         * automatically select that rider.
+         */
+        if (result.shipment.rider?.id) {
+          setSelectedRiderId(
+            result.shipment.rider.id
+          );
+        } else {
+          setSelectedRiderId("");
+        }
+
+        setError("");
+
+        /*
+         * Make sure latest riders are available.
+         */
+        fetchRiders();
+      } catch (err) {
+        console.error(
+          "FIND SHIPMENT ERROR:",
+          err
+        );
+
+        setShipment(null);
+
+        setActions([]);
+
+        setSelectedAction("");
+
+        setSelectedRiderId("");
+
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to find shipment."
+        );
+      } finally {
+        setLoading(false);
+      }
+    },
+    [fetchRiders, getAuthToken]
+  );
+
+  /* =======================================================
+     BARCODE HANDLER
+  ======================================================= */
+
+  const handleBarcode = useCallback(
+    async (value: string) => {
+      const trackingNumber =
+        extractTrackingNumber(value);
+
+      if (!trackingNumber) {
+        return;
+      }
+
+      /*
+       * Prevent duplicate scanner reads.
+       */
+      if (scanLockRef.current) {
+        return;
+      }
+
+      if (
+        lastScanRef.current ===
+        trackingNumber
+      ) {
+        return;
+      }
+
+      scanLockRef.current = true;
+
+      lastScanRef.current =
+        trackingNumber;
+
+      await findShipment(
+        trackingNumber
+      );
+
+      stopScanner();
+
+      setTimeout(() => {
+        scanLockRef.current = false;
+      }, 1200);
+    },
+    [findShipment, stopScanner]
+  );
+
+  /* =======================================================
+     OPEN CAMERA SCANNER
+  ======================================================= */
+
+  const openScanner = useCallback(
+    async () => {
+      setError("");
+
+      setSuccess("");
+
+      try {
+        if (!navigator.mediaDevices) {
+          throw new Error(
+            "Camera is not supported by this browser."
+          );
+        }
+
+        const devices =
+          await navigator.mediaDevices.enumerateDevices();
+
+        const videoDevices =
+          devices.filter(
+            (device) =>
+              device.kind === "videoinput"
+          );
+
+        if (videoDevices.length === 0) {
+          throw new Error(
+            "No camera was found."
+          );
+        }
+
+        /*
+         * Prefer rear camera.
+         */
+        const preferredCamera =
+          videoDevices.find((device) =>
+            /back|rear|environment/i.test(
+              device.label
+            )
+          ) || videoDevices[0];
+
+        const reader =
+          new BrowserMultiFormatReader();
+
+        readerRef.current = reader;
+
+        setScannerOpen(true);
+
+        /*
+         * Give React time to render video element.
+         */
+        await new Promise((resolve) =>
+          setTimeout(resolve, 150)
+        );
+
+        if (!videoRef.current) {
+          throw new Error(
+            "Camera video element is not ready."
+          );
+        }
+
+        const controls =
+          await reader.decodeFromVideoDevice(
+            preferredCamera.deviceId,
+            videoRef.current,
+            (result) => {
+              if (result) {
+                const text =
+                  result.getText();
+
+                if (text) {
+                  handleBarcode(text);
+                }
+              }
             }
           );
+
+        controlsRef.current =
+          controls;
+      } catch (err) {
+        console.error(
+          "CAMERA ERROR:",
+          err
+        );
+
+        setScannerOpen(false);
+
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to open camera."
+        );
+      }
+    },
+    [handleBarcode]
+  );
+
+  /* =======================================================
+     CAMERA CLEANUP
+  ======================================================= */
+
+  useEffect(() => {
+    return () => {
+      stopScanner();
+    };
+  }, [stopScanner]);
+
+  /* =======================================================
+     ASSIGN RIDER VALIDATION
+  ======================================================= */
+
+  const isAssignAction =
+    selectedAction === "ASSIGN_RIDER";
+
+  const canAssignRider =
+    selectedRiderId !== "" &&
+    !ridersLoading &&
+    riders.length > 0;
+
+  /* =======================================================
+     ASSIGN RIDER
+
+     *** THIS IS THE FIX ***
+
+     The old code POSTed to /api/shipment/scan/action with
+     action: "ASSIGN_RIDER". That endpoint (scanShipmentAction
+     on the backend) has no branch for ASSIGN_RIDER, so it
+     always fell through to the "Unsupported scan action"
+     400 error you were seeing.
+
+     Rider assignment has its own dedicated route:
+
+         PATCH /api/shipment/:id/assign-rider
+         body: { riderId }
+
+     which is handled by the `assignRider` controller. That
+     controller looks up the rider, checks isAvailable, sets
+     shipment.riderId, and (if the shipment was IN_WAREHOUSE)
+     bumps status to ASSIGNED_TO_RIDER — then writes a
+     Tracking row itself. So we call that endpoint here
+     instead, using shipment.id (a string cuid), not the
+     scan/action endpoint.
+
+     Also note: that controller does not read `location` or
+     `notes` from the body (it hardcodes "Warehouse" for the
+     tracking entry), so there's no point sending them here.
+  ======================================================= */
+
+  const assignRider = useCallback(
+    async () => {
+      if (!shipment) {
+        setError(
+          "Please scan a shipment first."
+        );
+
+        return;
+      }
+
+      /*
+       * VERY IMPORTANT:
+       * Rider selection is mandatory.
+       */
+      if (selectedRiderId === "") {
+        setError(
+          "Please select a rider before assigning the shipment."
+        );
+
+        return;
+      }
+
+      const riderId =
+        Number(selectedRiderId);
+
+      if (!Number.isInteger(riderId)) {
+        setError(
+          "Invalid rider selected."
+        );
+
+        return;
+      }
+
+      const token = getAuthToken();
+
+      if (!token) {
+        setError(
+          "Authentication required. Please login again."
+        );
+
+        return;
+      }
+
+      setActionLoading(true);
+
+      setError("");
+
+      setSuccess("");
+
+      try {
+        const response = await fetch(
+          `${API_BASE}/api/shipment/${shipment.id}/assign-rider`,
+          {
+            method: "PATCH",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+
+              Authorization: `Bearer ${token}`,
+            },
+
+            credentials: "include",
+
+            body: JSON.stringify({
+              riderId,
+            }),
+          }
+        );
 
         const data =
           await response.json();
@@ -207,197 +1011,75 @@ export default function ShipmentScannerPage() {
         if (!response.ok) {
           throw new Error(
             data?.message ||
-              "Shipment not found."
+              "Failed to assign rider."
           );
         }
 
-        const result =
-          data as ScanResult;
-
-        setShipment(
-          result.shipment
-        );
-
-        setTrackingNumber(
-          result.shipment.trackingNumber
-        );
-
-        setActions(
-          result.actions || []
-        );
-
-        // Automatically select
-        // first available action.
-        setSelectedAction(
-          result.actions?.[0] || ""
-        );
-
-        setManualTracking(
-          result.shipment.trackingNumber
-        );
+        /*
+         * NOTE: the assign-rider controller's success
+         * response does not include a `success: false`
+         * flag on failure — it just returns non-2xx with
+         * a `message`. So we only need the !response.ok
+         * check above. We keep this guard for safety in
+         * case the backend is later changed to include it.
+         */
+        if (data?.success === false) {
+          throw new Error(
+            data?.message ||
+              "Failed to assign rider."
+          );
+        }
 
         setSuccess(
-          "Shipment scanned successfully."
+          data?.message ||
+            "Rider assigned successfully."
         );
-      } catch (err: any) {
-        setShipment(null);
-        setActions([]);
-        setSelectedAction("");
+
+        /*
+         * Clear notes.
+         */
+        setNotes("");
+
+        /*
+         * Refresh shipment via the scan endpoint so the
+         * UI picks up the new rider + status + actions
+         * available to the current user.
+         */
+        await findShipment(
+          shipment.trackingNumber
+        );
+      } catch (err) {
+        console.error(
+          "ASSIGN RIDER ERROR:",
+          err
+        );
 
         setError(
-          err?.message ||
-            "Failed to find shipment."
+          err instanceof Error
+            ? err.message
+            : "Failed to assign rider."
         );
       } finally {
-        setLoading(false);
+        setActionLoading(false);
       }
     },
-    []
+    [
+      findShipment,
+      getAuthToken,
+      selectedRiderId,
+      shipment,
+    ]
   );
 
-  // =========================================================
-  // HANDLE BARCODE
-  // =========================================================
-
-  const handleBarcode =
-    useCallback(
-      async (value: string) => {
-        if (!value) {
-          return;
-        }
-
-        const clean =
-          value.trim();
-
-        if (!clean) {
-          return;
-        }
-
-        if (scanLockRef.current) {
-          return;
-        }
-
-        if (
-          lastScanRef.current ===
-          clean
-        ) {
-          return;
-        }
-
-        scanLockRef.current = true;
-
-        lastScanRef.current =
-          clean;
-
-        await findShipment(clean);
-
-        stopScanner();
-
-        setTimeout(() => {
-          scanLockRef.current =
-            false;
-        }, 1000);
-      },
-      [
-        findShipment,
-        stopScanner,
-      ]
-    );
-
-  // =========================================================
-  // OPEN CAMERA
-  // =========================================================
-
-  const openScanner = useCallback(
-    async () => {
-      setError("");
-      setSuccess("");
-
-      try {
-        if (!videoRef.current) {
-          throw new Error(
-            "Camera is not ready."
-          );
-        }
-
-        if (!readerRef.current) {
-          readerRef.current =
-            new BrowserMultiFormatReader();
-        }
-
-        const devices =
-          await BrowserMultiFormatReader.listVideoInputDevices();
-
-        if (!devices.length) {
-          throw new Error(
-            "No camera was found."
-          );
-        }
-
-        // Prefer back camera
-        const backCamera =
-          devices.find((device) =>
-            /back|rear|environment/i.test(
-              device.label
-            )
-          );
-
-        const deviceId =
-          backCamera?.deviceId ||
-          devices[0].deviceId;
-
-        const controls =
-          await readerRef.current.decodeFromVideoDevice(
-            deviceId,
-            videoRef.current,
-            (result) => {
-              if (result) {
-                handleBarcode(
-                  result.getText()
-                );
-              }
-            }
-          );
-
-        controlsRef.current =
-          controls;
-
-        setScannerOpen(true);
-      } catch (err: any) {
-        console.error(err);
-
-        setError(
-          err?.message ||
-            "Unable to open camera."
-        );
-
-        setScannerOpen(false);
-      }
-    },
-    [handleBarcode]
-  );
-
-  // =========================================================
-  // CLEANUP
-  // =========================================================
-
-  useEffect(() => {
-    return () => {
-      try {
-        controlsRef.current?.stop();
-      } catch {}
-    };
-  }, []);
-
-  // =========================================================
-  // PROCESS ACTION
-  // =========================================================
+  /* =======================================================
+     NORMAL ACTION
+  ======================================================= */
 
   const processAction =
-    async () => {
+    useCallback(async () => {
       if (!shipment) {
         setError(
-          "No shipment selected."
+          "Please scan a shipment first."
         );
 
         return;
@@ -411,37 +1093,65 @@ export default function ShipmentScannerPage() {
         return;
       }
 
+      /*
+       * Rider assignment has its own
+       * validation and request.
+       */
+      if (
+        selectedAction ===
+        "ASSIGN_RIDER"
+      ) {
+        await assignRider();
+
+        return;
+      }
+
+      const token = getAuthToken();
+
+      if (!token) {
+        setError(
+          "Authentication required. Please login again."
+        );
+
+        return;
+      }
+
       setActionLoading(true);
+
       setError("");
+
       setSuccess("");
 
       try {
-        const response =
-          await fetch(
-            `${API_BASE}/api/shipment/scan/action`,
-            {
-              method: "POST",
+        const response = await fetch(
+          `${API_BASE}/api/shipment/scan/action`,
+          {
+            method: "POST",
 
-              credentials: "include",
+            headers: {
+              "Content-Type":
+                "application/json",
 
-              headers: {
-                "Content-Type":
-                  "application/json",
-              },
+              Authorization: `Bearer ${token}`,
+            },
 
-              body: JSON.stringify({
-                trackingNumber:
-                  shipment.trackingNumber,
+            credentials: "include",
 
-                action:
-                  selectedAction,
+            body: JSON.stringify({
+              trackingNumber:
+                shipment.trackingNumber,
 
-                location,
+              action:
+                selectedAction,
 
-                notes: "",
-              }),
-            }
-          );
+              location:
+                location.trim(),
+
+              notes:
+                notes.trim(),
+            }),
+          }
+        );
 
         const data =
           await response.json();
@@ -449,711 +1159,1155 @@ export default function ShipmentScannerPage() {
         if (!response.ok) {
           throw new Error(
             data?.message ||
-              "Failed to process shipment."
+              "Action failed."
+          );
+        }
+
+        if (data?.success === false) {
+          throw new Error(
+            data?.message ||
+              "Action failed."
           );
         }
 
         setSuccess(
           data?.message ||
-            "Shipment updated successfully."
+            "Action completed successfully."
         );
 
-        // Fetch updated shipment
+        setNotes("");
+
+        /*
+         * Refresh shipment state.
+         */
         await findShipment(
           shipment.trackingNumber
         );
-      } catch (err: any) {
+      } catch (err) {
+        console.error(
+          "PROCESS ACTION ERROR:",
+          err
+        );
+
         setError(
-          err?.message ||
-            "Failed to process action."
+          err instanceof Error
+            ? err.message
+            : "Action failed."
         );
       } finally {
         setActionLoading(false);
       }
-    };
+    }, [
+      assignRider,
+      findShipment,
+      getAuthToken,
+      location,
+      notes,
+      selectedAction,
+      shipment,
+    ]);
 
-  // =========================================================
-  // CLEAR
-  // =========================================================
+  /* =======================================================
+     RESET
+  ======================================================= */
 
-  const resetPage = () => {
+  const resetPage = useCallback(() => {
     stopScanner();
 
     setShipment(null);
-    setTrackingNumber("");
-    setManualTracking("");
 
     setActions([]);
+
     setSelectedAction("");
 
+    setSelectedRiderId("");
+
     setError("");
+
     setSuccess("");
 
+    setNotes("");
+
+    setLocation("");
+
+    setLoading(false);
+
+    setActionLoading(false);
+
     lastScanRef.current = "";
+
     scanLockRef.current = false;
-  };
+  }, [stopScanner]);
 
-  // =========================================================
-  // MONEY
-  // =========================================================
+  /* =======================================================
+     RIDER NAME
+  ======================================================= */
 
-  const money = (
-    value: any
+  const getRiderName = (
+    rider: Rider
   ) => {
-    const amount =
-      Number(value || 0);
-
-    return `Rs. ${amount.toLocaleString(
-      "en-NP"
-    )}`;
+    return (
+      rider.user?.name ||
+      rider.name ||
+      `Rider #${rider.id}`
+    );
   };
 
-  // =========================================================
-  // UI
-  // =========================================================
+  /* =======================================================
+     RENDER
+  ======================================================= */
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="mx-auto max-w-7xl px-4 py-6 md:px-8">
+    <div className="min-h-screen bg-gray-50 p-4 md:p-6">
+      <div className="mx-auto max-w-7xl">
 
         {/* =================================================
             HEADER
         ================================================= */}
 
         <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">
+            <h1 className="text-2xl font-bold text-gray-900">
               Shipment Scanner
             </h1>
 
-            <p className="mt-1 text-sm text-slate-500">
-              Scan a package and select the
-              shipment process.
+            <p className="mt-1 text-sm text-gray-500">
+              Scan a shipment QR code to view,
+              assign and update shipment status.
             </p>
           </div>
 
-          {shipment && (
+          <div className="flex gap-2">
             <button
-              onClick={resetPage}
-              className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+              type="button"
+              onClick={fetchRiders}
+              disabled={ridersLoading}
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Scan New Package
+              <RefreshCw
+                size={16}
+                className={
+                  ridersLoading
+                    ? "animate-spin"
+                    : ""
+                }
+              />
+
+              Refresh Riders
             </button>
+
+            <button
+              type="button"
+              onClick={resetPage}
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              <RotateCcw size={16} />
+
+              Reset
+            </button>
+          </div>
+        </div>
+
+        {/* =================================================
+            ERROR
+        ================================================= */}
+
+        {error && (
+          <div className="mb-5 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
+            <XCircle
+              size={20}
+              className="mt-0.5 shrink-0"
+            />
+
+            <div className="text-sm font-medium">
+              {error}
+            </div>
+          </div>
+        )}
+
+        {/* =================================================
+            SUCCESS
+        ================================================= */}
+
+        {success && (
+          <div className="mb-5 flex items-start gap-3 rounded-xl border border-green-200 bg-green-50 p-4 text-green-700">
+            <CheckCircle2
+              size={20}
+              className="mt-0.5 shrink-0"
+            />
+
+            <div className="text-sm font-medium">
+              {success}
+            </div>
+          </div>
+        )}
+
+        {/* =================================================
+            SCANNER
+        ================================================= */}
+
+        <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="rounded-xl bg-blue-50 p-3 text-blue-600">
+                <ScanLine size={22} />
+              </div>
+
+              <div>
+                <h2 className="font-semibold text-gray-900">
+                  Scan Shipment
+                </h2>
+
+                <p className="text-sm text-gray-500">
+                  Scan the QR code printed on the shipment.
+                </p>
+              </div>
+            </div>
+
+            {!scannerOpen ? (
+              <button
+                type="button"
+                onClick={openScanner}
+                disabled={loading}
+                className="inline-flex items-center gap-2 rounded-xl bg-gray-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Camera size={18} />
+
+                Open Scanner
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={stopScanner}
+                className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-red-700"
+              >
+                <CameraOff size={18} />
+
+                Stop Scanner
+              </button>
+            )}
+          </div>
+
+          {scannerOpen && (
+            <div className="overflow-hidden rounded-2xl bg-black">
+              <div className="relative aspect-video w-full">
+                <video
+                  ref={videoRef}
+                  className="h-full w-full object-cover"
+                  muted
+                  playsInline
+                />
+
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                  <div className="h-56 w-72 rounded-2xl border-2 border-white/90 shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]" />
+                </div>
+
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-black/70 px-4 py-2 text-sm text-white">
+                  Point the camera at the QR code
+                </div>
+              </div>
+            </div>
+          )}
+
+          {!scannerOpen && (
+            <div className="flex min-h-40 items-center justify-center rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50">
+              <div className="text-center">
+                <ScanLine
+                  size={38}
+                  className="mx-auto mb-3 text-gray-400"
+                />
+
+                <p className="font-medium text-gray-700">
+                  Scanner is ready
+                </p>
+
+                <p className="mt-1 text-sm text-gray-500">
+                  Click Open Scanner to scan a shipment.
+                </p>
+              </div>
+            </div>
           )}
         </div>
 
         {/* =================================================
-            ALERTS
+            LOADING
         ================================================= */}
 
-        {error && (
-          <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
-            {error}
+        {loading && (
+          <div className="mb-6 flex items-center justify-center rounded-xl border border-gray-200 bg-white p-6">
+            <RefreshCw
+              size={22}
+              className="mr-3 animate-spin text-blue-600"
+            />
+
+            <span className="text-sm font-medium text-gray-600">
+              Loading shipment...
+            </span>
           </div>
         )}
 
-        {success && (
-          <div className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
-            {success}
-          </div>
-        )}
+        {/* =================================================
+            SHIPMENT
+        ================================================= */}
 
-        <div className="grid gap-6 lg:grid-cols-[430px_1fr]">
+        {shipment && !loading && (
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
 
-          {/* =================================================
-              SCANNER CARD
-          ================================================= */}
+            {/* =============================================
+                LEFT
+            ============================================= */}
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="space-y-6 xl:col-span-2">
 
-            <div className="mb-4">
-              <h2 className="text-lg font-semibold text-slate-900">
-                Scan Package
-              </h2>
+              {/* Shipment header */}
 
-              <p className="mt-1 text-sm text-slate-500">
-                Use your camera to scan QR or
-                barcode.
-              </p>
-            </div>
-
-            {/* CAMERA */}
-
-            <div className="relative overflow-hidden rounded-2xl bg-black">
-
-              <video
-                ref={videoRef}
-                muted
-                playsInline
-                className="aspect-square w-full object-cover"
-              />
-
-              {!scannerOpen && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950 text-white">
-                  <div className="mb-4 text-5xl">
-                    📷
-                  </div>
-
-                  <p className="text-sm font-medium">
-                    Camera scanner is closed
-                  </p>
-                </div>
-              )}
-
-              {scannerOpen && (
-                <div className="pointer-events-none absolute inset-0">
-
-                  <div className="absolute left-1/2 top-1/2 h-64 w-64 -translate-x-1/2 -translate-y-1/2 rounded-2xl border-2 border-white" />
-
-                  <div className="absolute left-1/2 top-1/2 h-0.5 w-56 -translate-x-1/2 bg-red-500" />
-
-                </div>
-              )}
-            </div>
-
-            {/* CAMERA BUTTON */}
-
-            <div className="mt-4">
-
-              {!scannerOpen ? (
-                <button
-                  onClick={openScanner}
-                  className="w-full rounded-xl bg-slate-900 px-4 py-3.5 text-sm font-semibold text-white hover:bg-slate-800"
-                >
-                  📷 Open Scanner
-                </button>
-              ) : (
-                <button
-                  onClick={stopScanner}
-                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                >
-                  Stop Scanner
-                </button>
-              )}
-
-            </div>
-
-            {/* DIVIDER */}
-
-            <div className="my-5 flex items-center gap-3">
-
-              <div className="h-px flex-1 bg-slate-200" />
-
-              <span className="text-xs font-medium text-slate-400">
-                OR
-              </span>
-
-              <div className="h-px flex-1 bg-slate-200" />
-
-            </div>
-
-            {/* MANUAL TRACKING */}
-
-            <label className="mb-2 block text-sm font-semibold text-slate-700">
-              Tracking Number
-            </label>
-
-            <div className="flex gap-2">
-
-              <input
-                value={manualTracking}
-                onChange={(e) =>
-                  setManualTracking(
-                    e.target.value
-                  )
-                }
-                onKeyDown={(e) => {
-                  if (
-                    e.key === "Enter"
-                  ) {
-                    findShipment(
-                      manualTracking
-                    );
-                  }
-                }}
-                placeholder="RC-1789981579523-622"
-                className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
-              />
-
-              <button
-                onClick={() =>
-                  findShipment(
-                    manualTracking
-                  )
-                }
-                disabled={
-                  loading ||
-                  !manualTracking.trim()
-                }
-                className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {loading
-                  ? "..."
-                  : "Search"}
-              </button>
-
-            </div>
-
-            {/* LOCATION */}
-
-            <div className="mt-5">
-
-              <label className="mb-2 block text-sm font-semibold text-slate-700">
-                Location
-              </label>
-
-              <select
-                value={location}
-                onChange={(e) =>
-                  setLocation(
-                    e.target.value
-                  )
-                }
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:border-slate-400"
-              >
-                <option value="Main Warehouse">
-                  Main Warehouse
-                </option>
-
-                <option value="Kathmandu Warehouse">
-                  Kathmandu Warehouse
-                </option>
-
-                <option value="Lalitpur Warehouse">
-                  Lalitpur Warehouse
-                </option>
-
-                <option value="Bhaktapur Warehouse">
-                  Bhaktapur Warehouse
-                </option>
-
-                <option value="Sorting Center">
-                  Sorting Center
-                </option>
-
-                <option value="Delivery Hub">
-                  Delivery Hub
-                </option>
-              </select>
-
-            </div>
-          </div>
-
-          {/* =================================================
-              SHIPMENT INFORMATION
-          ================================================= */}
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-
-            {!shipment ? (
-
-              <div className="flex min-h-[600px] items-center justify-center">
-
-                <div className="max-w-sm text-center">
-
-                  <div className="mb-5 text-6xl">
-                    📦
-                  </div>
-
-                  <h2 className="text-xl font-bold text-slate-900">
-                    Scan a shipment
-                  </h2>
-
-                  <p className="mt-2 text-sm leading-6 text-slate-500">
-                    Once you scan a package,
-                    shipment details and the
-                    available process dropdown
-                    will appear here.
-                  </p>
-
-                </div>
-
-              </div>
-
-            ) : (
-
-              <div>
-
-                {/* TRACKING */}
-
-                <div className="flex flex-col gap-4 border-b border-slate-200 pb-5 md:flex-row md:items-center md:justify-between">
-
+              <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                   <div>
-
-                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
                       Tracking Number
                     </p>
 
-                    <h2 className="mt-1 break-all text-2xl font-bold text-slate-900">
+                    <h2 className="mt-1 text-2xl font-bold tracking-tight text-gray-900">
                       {shipment.trackingNumber}
                     </h2>
-
                   </div>
 
-                  <div className="rounded-full bg-slate-100 px-4 py-2 text-xs font-bold uppercase text-slate-700">
-                    {shipment.status.replaceAll(
-                      "_",
-                      " "
+                  <span
+                    className={`inline-flex w-fit items-center rounded-full px-3 py-1.5 text-sm font-semibold ${statusClass(
+                      shipment.status
+                    )}`}
+                  >
+                    {formatStatus(
+                      shipment.status
                     )}
-                  </div>
-
+                  </span>
                 </div>
+              </div>
 
-                {/* =================================================
-                    DETAILS
-                ================================================= */}
+              {/* Shipment information */}
 
-                <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                <SectionTitle
+                  icon={<Package size={19} />}
+                  title="Shipment Details"
+                />
 
-                  <Info
-                    label="Sender"
+                <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <InfoCard
+                    label="Package Type"
                     value={
-                      shipment.senderName
+                      shipment.packageType ||
+                      "-"
                     }
                   />
 
-                  <Info
-                    label="Sender Phone"
-                    value={
-                      shipment.senderPhone
-                    }
-                  />
-
-                  <Info
-                    label="Receiver"
-                    value={
-                      shipment.receiverName
-                    }
-                  />
-
-                  <Info
-                    label="Receiver Phone"
-                    value={
-                      shipment.receiverPhone
-                    }
-                  />
-
-                  <Info
-                    label="Package"
-                    value={
-                      shipment.packageType
-                    }
-                  />
-
-                  <Info
+                  <InfoCard
                     label="Weight"
-                    value={`${shipment.weight || 0} kg`}
-                  />
-
-                  <Info
-                    label="Payment"
                     value={
-                      shipment.paymentType
+                      shipment.weight !==
+                      null &&
+                      shipment.weight !==
+                        undefined
+                        ? `${shipment.weight} kg`
+                        : "-"
                     }
                   />
 
-                  <Info
-                    label="COD"
+                  <InfoCard
+                    label="Payment Type"
+                    value={
+                      shipment.paymentType ||
+                      "-"
+                    }
+                  />
+
+                  <InfoCard
+                    label="COD Amount"
                     value={money(
                       shipment.codAmount
                     )}
                   />
 
-                  <Info
+                  <InfoCard
+                    label="Shipping Charge"
+                    value={money(
+                      shipment.shippingCharge
+                    )}
+                  />
+
+                  <InfoCard
                     label="Vendor"
                     value={
-                      shipment.vendor
-                        ?.companyName ||
-                      "Unregistered / Walk-in"
+                      shipment.vendor?.name ||
+                      "-"
                     }
                   />
-
-                  <Info
-                    label="Rider"
-                    value={
-                      shipment.rider
-                        ?.name ||
-                      "Not Assigned"
-                    }
-                  />
-
                 </div>
-
-                {/* ADDRESS */}
-
-                <div className="mt-4 grid gap-4 md:grid-cols-2">
-
-                  <div className="rounded-xl border border-slate-200 p-4">
-
-                    <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                      Sender Address
-                    </p>
-
-                    <p className="mt-2 text-sm text-slate-700">
-                      {shipment.senderAddress ||
-                        "-"}
-                    </p>
-
-                  </div>
-
-                  <div className="rounded-xl border border-slate-200 p-4">
-
-                    <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                      Receiver Address
-                    </p>
-
-                    <p className="mt-2 text-sm text-slate-700">
-                      {shipment.receiverAddress ||
-                        "-"}
-                    </p>
-
-                  </div>
-
-                </div>
-
-                {/* =================================================
-                    PROCESS DROPDOWN
-                ================================================= */}
-
-                <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5">
-
-                  <div className="mb-4">
-
-                    <h3 className="text-lg font-bold text-slate-900">
-                      Shipment Process
-                    </h3>
-
-                    <p className="mt-1 text-sm text-slate-500">
-                      Select what you want to do
-                      with this shipment.
-                    </p>
-
-                  </div>
-
-                  {actions.length === 0 ? (
-
-                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-
-                      <p className="text-sm font-semibold text-amber-800">
-                        No action available
-                      </p>
-
-                      <p className="mt-1 text-xs text-amber-700">
-                        The current shipment status
-                        does not allow an action
-                        for your account.
-                      </p>
-
-                    </div>
-
-                  ) : (
-
-                    <>
-
-                      <label className="mb-2 block text-sm font-semibold text-slate-700">
-                        Select Process
-                      </label>
-
-                      <select
-                        value={selectedAction}
-                        onChange={(e) =>
-                          setSelectedAction(
-                            e.target.value
-                          )
-                        }
-                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3.5 text-sm font-medium text-slate-800 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
-                      >
-
-                        <option value="">
-                          Select shipment process
-                        </option>
-
-                        {actions.map(
-                          (action) => (
-                            <option
-                              key={action}
-                              value={action}
-                            >
-                              {ACTION_ICONS[
-                                action
-                              ] || ""}{" "}
-                              {ACTION_LABELS[
-                                action
-                              ] ||
-                                action.replaceAll(
-                                  "_",
-                                  " "
-                                )}
-                            </option>
-                          )
-                        )}
-
-                      </select>
-
-                      {/* SELECTED ACTION */}
-
-                      {selectedAction && (
-                        <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
-
-                          <div className="flex items-center gap-3">
-
-                            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-xl">
-                              {ACTION_ICONS[
-                                selectedAction
-                              ] || "•"}
-                            </div>
-
-                            <div>
-
-                              <p className="text-xs font-medium text-slate-400">
-                                Selected Process
-                              </p>
-
-                              <p className="text-sm font-bold text-slate-900">
-                                {ACTION_LABELS[
-                                  selectedAction
-                                ] ||
-                                  selectedAction.replaceAll(
-                                    "_",
-                                    " "
-                                  )}
-                              </p>
-
-                            </div>
-
-                          </div>
-
-                        </div>
-                      )}
-
-                      {/* SUBMIT */}
-
-                      <button
-                        onClick={
-                          processAction
-                        }
-                        disabled={
-                          actionLoading ||
-                          !selectedAction
-                        }
-                        className="mt-4 w-full rounded-xl bg-slate-900 px-5 py-3.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-
-                        {actionLoading
-                          ? "Processing..."
-                          : "Confirm Process"}
-
-                      </button>
-
-                    </>
-
-                  )}
-
-                </div>
-
-                {/* =================================================
-                    TRACKING HISTORY
-                ================================================= */}
-
-                {shipment.trackings &&
-                  shipment.trackings.length >
-                    0 && (
-
-                  <div className="mt-6">
-
-                    <h3 className="mb-3 text-lg font-bold text-slate-900">
-                      Tracking History
-                    </h3>
-
-                    <div className="space-y-2">
-
-                      {shipment.trackings
-                        .slice(0, 8)
-                        .map(
-                          (
-                            tracking: any
-                          ) => (
-
-                            <div
-                              key={
-                                tracking.id
-                              }
-                              className="rounded-xl border border-slate-200 p-4"
-                            >
-
-                              <div className="flex items-start justify-between gap-4">
-
-                                <div>
-
-                                  <p className="text-sm font-semibold text-slate-800">
-                                    {tracking.message ||
-                                      "Shipment updated"}
-                                  </p>
-
-                                  <p className="mt-1 text-xs text-slate-500">
-                                    {tracking.location ||
-                                      "-"}
-                                  </p>
-
-                                </div>
-
-                                <span className="whitespace-nowrap rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase text-slate-600">
-                                  {tracking.status?.replaceAll(
-                                    "_",
-                                    " "
-                                  )}
-                                </span>
-
-                              </div>
-
-                            </div>
-
-                          )
-                        )}
-
-                    </div>
-
-                  </div>
-
-                )}
-
               </div>
 
-            )}
+              {/* Sender / Receiver */}
 
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+
+                {/* Sender */}
+
+                <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                  <SectionTitle
+                    icon={<User size={19} />}
+                    title="Sender"
+                  />
+
+                  <div className="mt-5 space-y-4">
+                    <InfoRow
+                      label="Name"
+                      value={
+                        shipment.senderName ||
+                        "-"
+                      }
+                    />
+
+                    <InfoRow
+                      label="Phone"
+                      value={
+                        shipment.senderPhone ||
+                        "-"
+                      }
+                    />
+
+                    <InfoRow
+                      label="Address"
+                      value={
+                        shipment.senderAddress ||
+                        "-"
+                      }
+                    />
+                  </div>
+                </div>
+
+                {/* Receiver */}
+
+                <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                  <SectionTitle
+                    icon={<User size={19} />}
+                    title="Receiver"
+                  />
+
+                  <div className="mt-5 space-y-4">
+                    <InfoRow
+                      label="Name"
+                      value={
+                        shipment.receiverName ||
+                        "-"
+                      }
+                    />
+
+                    <InfoRow
+                      label="Phone"
+                      value={
+                        shipment.receiverPhone ||
+                        "-"
+                      }
+                    />
+
+                    <InfoRow
+                      label="Address"
+                      value={
+                        shipment.receiverAddress ||
+                        "-"
+                      }
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* ===========================================
+                  RIDER ASSIGNMENT
+              =========================================== */}
+
+              <div className="rounded-2xl border border-purple-200 bg-white p-5 shadow-sm">
+
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <SectionTitle
+                    icon={
+                      <UserCheck size={19} />
+                    }
+                    title="Assign Rider"
+                  />
+
+                  <span className="text-xs font-medium text-gray-500">
+                    Rider selection is required
+                  </span>
+                </div>
+
+                {/* Current rider */}
+
+                {shipment.rider && (
+                  <div className="mt-5 rounded-xl border border-purple-100 bg-purple-50 p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="rounded-lg bg-purple-100 p-2 text-purple-700">
+                        <Truck size={18} />
+                      </div>
+
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium uppercase tracking-wide text-purple-500">
+                          Currently Assigned
+                        </p>
+
+                        <p className="mt-1 font-semibold text-purple-900">
+                          {getRiderName(
+                            shipment.rider
+                          )}
+                        </p>
+
+                        {shipment.rider
+                          .phone && (
+                          <p className="mt-1 flex items-center gap-1 text-sm text-purple-700">
+                            <Phone size={14} />
+
+                            {
+                              shipment.rider
+                                .phone
+                            }
+                          </p>
+                        )}
+
+                        {shipment.rider
+                          .vehicleNumber && (
+                          <p className="mt-1 text-sm text-purple-700">
+                            Vehicle:{" "}
+                            {
+                              shipment.rider
+                                .vehicleNumber
+                            }
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Rider dropdown */}
+
+                <div className="mt-5">
+                  <label className="mb-2 block text-sm font-semibold text-gray-700">
+                    Select Rider
+                    <span className="ml-1 text-red-500">
+                      *
+                    </span>
+                  </label>
+
+                  <div className="relative">
+                    <select
+                      value={
+                        selectedRiderId
+                      }
+                      onChange={(event) => {
+                        const value =
+                          event.target
+                            .value;
+
+                        setSelectedRiderId(
+                          value === ""
+                            ? ""
+                            : Number(value)
+                        );
+
+                        setError("");
+                      }}
+                      disabled={
+                        ridersLoading ||
+                        actionLoading
+                      }
+                      className="w-full appearance-none rounded-xl border border-gray-300 bg-white px-4 py-3 pr-10 text-sm font-medium text-gray-900 outline-none transition focus:border-purple-500 focus:ring-2 focus:ring-purple-100 disabled:cursor-not-allowed disabled:bg-gray-100"
+                    >
+                      <option value="">
+                        {ridersLoading
+                          ? "Loading riders..."
+                          : riders.length ===
+                            0
+                          ? "No riders available"
+                          : "Select a rider"}
+                      </option>
+
+                      {riders.map(
+                        (rider) => (
+                          <option
+                            key={
+                              rider.id
+                            }
+                            value={
+                              rider.id
+                            }
+                          >
+                            {getRiderName(
+                              rider
+                            )}
+                            {" — "}
+                            {rider.phone ||
+                              "No phone"}
+                            {rider
+                              .vehicleNumber
+                              ? ` — ${rider.vehicleNumber}`
+                              : ""}
+                            {!rider
+                              .isAvailable
+                              ? " — Unavailable"
+                              : ""}
+                          </option>
+                        )
+                      )}
+                    </select>
+
+                    <ChevronDown
+                      size={18}
+                      className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-gray-400"
+                    />
+                  </div>
+
+                  {riders.length ===
+                    0 &&
+                    !ridersLoading && (
+                      <p className="mt-2 text-sm text-red-600">
+                        No riders were found.
+                        Please create/activate a
+                        rider first.
+                      </p>
+                    )}
+
+                  {selectedRiderId !==
+                    "" && (
+                    <div className="mt-3 rounded-lg bg-green-50 px-3 py-2 text-sm font-medium text-green-700">
+                      ✓ Rider selected
+                    </div>
+                  )}
+                </div>
+
+                {/* Assign button */}
+
+                <button
+                  type="button"
+                  onClick={assignRider}
+                  disabled={
+                    !canAssignRider ||
+                    actionLoading
+                  }
+                  className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-purple-600 px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-purple-700 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
+                >
+                  {actionLoading ? (
+                    <>
+                      <RefreshCw
+                        size={18}
+                        className="animate-spin"
+                      />
+
+                      Assigning Rider...
+                    </>
+                  ) : (
+                    <>
+                      <UserCheck
+                        size={18}
+                      />
+
+                      Assign Selected Rider
+                    </>
+                  )}
+                </button>
+
+                {selectedRiderId ===
+                  "" && (
+                  <p className="mt-2 text-center text-xs text-gray-500">
+                    Select a rider above before
+                    assigning this shipment.
+                  </p>
+                )}
+              </div>
+
+              {/* Notes */}
+
+              <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                <SectionTitle
+                  icon={<Phone size={19} />}
+                  title="Shipment Notes"
+                />
+
+                <p className="mt-2 text-sm text-gray-500">
+                  Existing notes:
+                </p>
+
+                <div className="mt-2 rounded-xl bg-gray-50 p-4 text-sm text-gray-700">
+                  {shipment.notes ||
+                    "No shipment notes."}
+                </div>
+              </div>
+
+              {/* Tracking history */}
+
+              <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                <SectionTitle
+                  icon={<Clock size={19} />}
+                  title="Tracking History"
+                />
+
+                {shipment.trackings &&
+                shipment.trackings.length >
+                  0 ? (
+                  <div className="mt-5 space-y-4">
+                    {shipment.trackings.map(
+                      (tracking, index) => (
+                        <div
+                          key={
+                            tracking.id ??
+                            index
+                          }
+                          className="relative flex gap-4"
+                        >
+                          {index <
+                            shipment.trackings!
+                              .length -
+                              1 && (
+                            <div className="absolute left-[9px] top-6 h-full w-px bg-gray-200" />
+                          )}
+
+                          <div className="relative z-10 mt-1 h-5 w-5 rounded-full border-4 border-white bg-blue-600 shadow-sm" />
+
+                          <div className="min-w-0 flex-1 pb-4">
+                            <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+                              <p className="font-semibold text-gray-900">
+                                {formatStatus(
+                                  tracking.status
+                                )}
+                              </p>
+
+                              <span className="text-xs text-gray-400">
+                                {formatDate(
+                                  tracking.createdAt
+                                )}
+                              </span>
+                            </div>
+
+                            {tracking.location && (
+                              <p className="mt-1 flex items-center gap-1 text-sm text-gray-500">
+                                <MapPin
+                                  size={14}
+                                />
+
+                                {
+                                  tracking.location
+                                }
+                              </p>
+                            )}
+
+                            {tracking.message && (
+                              <p className="mt-1 text-sm text-gray-600">
+                                {
+                                  tracking.message
+                                }
+                              </p>
+                            )}
+
+                            {tracking.notes && (
+                              <p className="mt-1 text-sm text-gray-500">
+                                Note:{" "}
+                                {
+                                  tracking.notes
+                                }
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    )}
+                  </div>
+                ) : (
+                  <div className="mt-5 rounded-xl bg-gray-50 p-6 text-center text-sm text-gray-500">
+                    No tracking history available.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* =============================================
+                RIGHT SIDE
+            ============================================= */}
+
+            <div className="space-y-6">
+
+              {/* Action card */}
+
+              <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                <SectionTitle
+                  icon={<Truck size={19} />}
+                  title="Shipment Actions"
+                />
+
+                {actions.length ===
+                0 ? (
+                  <div className="mt-5 rounded-xl bg-gray-50 p-5 text-center">
+                    <XCircle
+                      size={28}
+                      className="mx-auto mb-2 text-gray-400"
+                    />
+
+                    <p className="text-sm font-medium text-gray-600">
+                      No actions available
+                    </p>
+                  </div>
+                ) : (
+                  <div className="mt-5 space-y-2">
+                    {actions.map(
+                      (action) => {
+                        const Icon =
+                          ACTION_ICONS[
+                            action
+                          ] ||
+                          Package;
+
+                        const selected =
+                          selectedAction ===
+                          action;
+
+                        return (
+                          <button
+                            key={action}
+                            type="button"
+                            onClick={() => {
+                              setSelectedAction(
+                                action
+                              );
+
+                              setError("");
+                              setSuccess("");
+
+                              /*
+                               * If selecting
+                               * ASSIGN_RIDER,
+                               * refresh riders.
+                               */
+                              if (
+                                action ===
+                                "ASSIGN_RIDER"
+                              ) {
+                                fetchRiders();
+                              }
+                            }}
+                            className={`flex w-full items-start gap-3 rounded-xl border p-3 text-left transition ${
+                              selected
+                                ? "border-blue-500 bg-blue-50"
+                                : "border-gray-200 bg-white hover:bg-gray-50"
+                            }`}
+                          >
+                            <div
+                              className={`mt-0.5 rounded-lg p-2 ${
+                                selected
+                                  ? "bg-blue-100 text-blue-700"
+                                  : "bg-gray-100 text-gray-600"
+                              }`}
+                            >
+                              <Icon
+                                size={18}
+                              />
+                            </div>
+
+                            <div className="min-w-0">
+                              <p
+                                className={`text-sm font-semibold ${
+                                  selected
+                                    ? "text-blue-800"
+                                    : "text-gray-800"
+                                }`}
+                              >
+                                {ACTION_LABELS[
+                                  action
+                                ] ||
+                                  formatStatus(
+                                    action
+                                  )}
+                              </p>
+
+                              <p className="mt-1 text-xs leading-5 text-gray-500">
+                                {ACTION_DESCRIPTIONS[
+                                  action
+                                ] ||
+                                  "Perform this shipment action."}
+                              </p>
+                            </div>
+                          </button>
+                        );
+                      }
+                    )}
+                  </div>
+                )}
+
+                {/* Selected action */}
+
+                {selectedAction && (
+                  <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-blue-500">
+                      Selected Action
+                    </p>
+
+                    <p className="mt-1 font-semibold text-blue-900">
+                      {ACTION_LABELS[
+                        selectedAction
+                      ] ||
+                        formatStatus(
+                          selectedAction
+                        )}
+                    </p>
+
+                    <p className="mt-1 text-xs text-blue-700">
+                      {
+                        ACTION_DESCRIPTIONS[
+                          selectedAction
+                        ]
+                      }
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Location */}
+
+              <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                <SectionTitle
+                  icon={<MapPin size={19} />}
+                  title="Action Details"
+                />
+
+                <div className="mt-5">
+                  <label className="mb-2 block text-sm font-semibold text-gray-700">
+                    Location
+                  </label>
+
+                  <input
+                    type="text"
+                    value={location}
+                    onChange={(event) =>
+                      setLocation(
+                        event.target.value
+                      )
+                    }
+                    placeholder="e.g. Kathmandu Warehouse"
+                    disabled={actionLoading}
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-gray-100"
+                  />
+
+                  <p className="mt-1 text-xs text-gray-400">
+                    Used for RECEIVE / PICKUP / DELIVER / etc. via the
+                    scan action endpoint. Not used for ASSIGN_RIDER,
+                    which goes through the dedicated assign-rider route.
+                  </p>
+                </div>
+
+                <div className="mt-5">
+                  <label className="mb-2 block text-sm font-semibold text-gray-700">
+                    Notes
+                  </label>
+
+                  <textarea
+                    value={notes}
+                    onChange={(event) =>
+                      setNotes(
+                        event.target.value
+                      )
+                    }
+                    rows={4}
+                    placeholder="Add notes..."
+                    disabled={actionLoading}
+                    className="w-full resize-none rounded-xl border border-gray-300 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-gray-100"
+                  />
+                </div>
+              </div>
+
+              {/* Main action button */}
+
+              <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                <button
+                  type="button"
+                  onClick={
+                    processAction
+                  }
+                  disabled={
+                    !selectedAction ||
+                    actionLoading ||
+                    /*
+                     * IMPORTANT:
+                     * assignment cannot happen
+                     * without rider selection.
+                     */
+                    (isAssignAction &&
+                      selectedRiderId === "")
+                  }
+                  className={`flex w-full items-center justify-center gap-2 rounded-xl px-5 py-4 text-sm font-bold text-white transition disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500 ${
+                    isAssignAction
+                      ? "bg-purple-600 hover:bg-purple-700"
+                      : "bg-gray-900 hover:bg-gray-800"
+                  }`}
+                >
+                  {actionLoading ? (
+                    <>
+                      <RefreshCw
+                        size={18}
+                        className="animate-spin"
+                      />
+
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2
+                        size={18}
+                      />
+
+                      {isAssignAction
+                        ? "Assign Rider"
+                        : "Confirm Action"}
+                    </>
+                  )}
+                </button>
+
+                {isAssignAction &&
+                  selectedRiderId ===
+                    "" && (
+                    <p className="mt-3 text-center text-xs font-medium text-red-500">
+                      Select a rider before
+                      assigning.
+                    </p>
+                  )}
+              </div>
+
+              {/* Rider count */}
+
+              <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-xl bg-green-50 p-3 text-green-600">
+                      <UserCheck
+                        size={20}
+                      />
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                        Available Riders
+                      </p>
+
+                      <p className="mt-1 text-xl font-bold text-gray-900">
+                        {
+                          riders.filter(
+                            (rider) =>
+                              rider.isAvailable
+                          ).length
+                        }
+                      </p>
+                    </div>
+                  </div>
+
+                  <span className="text-sm text-gray-400">
+                    / {riders.length}
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
+        )}
 
-        </div>
+        {/* =================================================
+            EMPTY STATE
+        ================================================= */}
 
+        {!shipment &&
+          !loading && (
+            <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center shadow-sm">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+                <ScanLine size={30} />
+              </div>
+
+              <h2 className="mt-5 text-lg font-bold text-gray-900">
+                No Shipment Selected
+              </h2>
+
+              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-gray-500">
+                Scan a shipment QR code to load
+                its details and perform shipment
+                actions.
+              </p>
+            </div>
+          )}
       </div>
     </div>
   );
 }
 
-// =============================================================
-// INFO COMPONENT
-// =============================================================
+/* =========================================================
+   SECTION TITLE
+========================================================= */
 
-function Info({
-  label,
-  value,
+function SectionTitle({
+  icon,
+  title,
 }: {
-  label: string;
-  value?: any;
+  icon: React.ReactNode;
+  title: string;
 }) {
   return (
-    <div className="rounded-xl bg-slate-50 p-3.5">
+    <div className="flex items-center gap-2">
+      <div className="text-gray-700">
+        {icon}
+      </div>
 
-      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-        {label}
-      </p>
-
-      <p className="mt-1 break-words text-sm font-semibold text-slate-800">
-        {value || "-"}
-      </p>
-
+      <h3 className="font-semibold text-gray-900">
+        {title}
+      </h3>
     </div>
   );
 }
 
+/* =========================================================
+   INFO CARD
+========================================================= */
+
+function InfoCard({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-xl bg-gray-50 p-4">
+      <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
+        {label}
+      </p>
+
+      <p className="mt-1 break-words text-sm font-semibold text-gray-800">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+/* =========================================================
+   INFO ROW
+========================================================= */
+
+function InfoRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div>
+      <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
+        {label}
+      </p>
+
+      <p className="mt-1 break-words text-sm font-medium text-gray-800">
+        {value}
+      </p>
+    </div>
+  );
+}
