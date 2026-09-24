@@ -1,19 +1,26 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
 import {
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
+
+import {
+  AlertCircle,
   Building2,
+  CheckCircle2,
+  ChevronRight,
+  Loader2,
+  MapPin,
+  Package,
+  Phone,
+  Truck,
+  User,
   UserRound,
   X,
-  Package,
-  MapPin,
-  Phone,
-  User,
-  ChevronRight,
-  Truck,
-  CheckCircle2,
-  AlertCircle,
-  Loader2,
 } from "lucide-react";
 
 // =====================================================
@@ -23,13 +30,14 @@ import {
 type Vendor = {
   id: number;
   companyName: string;
-  location?: string;
-  contactId?: string;
+  location?: string | null;
+  contactId?: string | null;
+  phone?: string | null;
 };
 
 type LocationRate = {
   id: number;
-  price: number;
+  price: number | string;
 
   location: {
     id: number;
@@ -45,6 +53,18 @@ type LocationRate = {
 
 type CreationMode = "VENDOR" | "UNREGISTERED" | null;
 
+type PackageType =
+  | "DOCUMENT"
+  | "PARCEL"
+  | "BOX"
+  | "ELECTRONICS"
+  | "CLOTHING"
+  | "FOOD"
+  | "FRAGILE"
+  | "OTHER";
+
+type PaymentType = "PREPAID" | "COD";
+
 type ShipmentForm = {
   vendorId: number;
 
@@ -58,19 +78,13 @@ type ShipmentForm = {
 
   locationRateId: number;
 
-  packageType:
-    | "DOCUMENT"
-    | "PARCEL"
-    | "BOX"
-    | "ELECTRONICS"
-    | "CLOTHING"
-    | "FOOD"
-    | "FRAGILE"
-    | "OTHER";
+  packageType: PackageType;
 
   weight: number;
 
-  paymentType: "PREPAID" | "COD";
+  totalBox: number;
+
+  paymentType: PaymentType;
 
   codAmount: number;
 
@@ -98,12 +112,86 @@ const initialForm: ShipmentForm = {
 
   weight: 1,
 
+  totalBox: 1,
+
   paymentType: "PREPAID",
 
   codAmount: 0,
 
   notes: "",
 };
+
+// =====================================================
+// API
+// =====================================================
+
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_URL || "";
+
+// =====================================================
+// HELPERS
+// =====================================================
+
+function getToken() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return localStorage.getItem("token");
+}
+
+function formatCurrency(value: number | string | null | undefined) {
+  const amount = Number(value) || 0;
+
+  return `Rs. ${amount.toLocaleString("en-IN", {
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function normalizeList<T>(
+  data: unknown,
+  keys: string[]
+): T[] {
+  if (Array.isArray(data)) {
+    return data as T[];
+  }
+
+  if (
+    data &&
+    typeof data === "object"
+  ) {
+    const object = data as Record<
+      string,
+      unknown
+    >;
+
+    for (const key of keys) {
+      if (Array.isArray(object[key])) {
+        return object[key] as T[];
+      }
+    }
+  }
+
+  return [];
+}
+
+async function parseResponse(
+  response: Response
+) {
+  const text = await response.text();
+
+  if (!text) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {
+      message: text,
+    };
+  }
+}
 
 // =====================================================
 // COMPONENT
@@ -114,19 +202,23 @@ export default function StaffCreateShipmentPage() {
   // STATE
   // ===================================================
 
-  const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [vendors, setVendors] =
+    useState<Vendor[]>([]);
 
   const [locationRates, setLocationRates] =
     useState<LocationRate[]>([]);
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] =
+    useState(true);
 
   const [submitting, setSubmitting] =
     useState(false);
 
-  const [error, setError] = useState("");
+  const [error, setError] =
+    useState("");
 
-  const [success, setSuccess] = useState("");
+  const [success, setSuccess] =
+    useState("");
 
   const [mode, setMode] =
     useState<CreationMode>(null);
@@ -139,98 +231,130 @@ export default function StaffCreateShipmentPage() {
   // ===================================================
 
   useEffect(() => {
-    loadData();
-  }, []);
+    let cancelled = false;
 
-  async function loadData() {
-    try {
-      setLoading(true);
-      setError("");
+    async function loadData() {
+      try {
+        setLoading(true);
+        setError("");
 
-      const token =
-        localStorage.getItem("token");
+        const token = getToken();
 
-      const [
-        vendorsRes,
-        locationRatesRes,
-      ] = await Promise.all([
-        fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/vendor/getvendor`,
-          {
-            headers: token
-              ? {
-                  Authorization:
-                    `Bearer ${token}`,
-                }
-              : undefined,
-          }
-        ),
+        const headers: HeadersInit = {
+          "Content-Type": "application/json",
+        };
 
-        fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/locationRate`,
-          {
-            headers: token
-              ? {
-                  Authorization:
-                    `Bearer ${token}`,
-                }
-              : undefined,
-          }
-        ),
-      ]);
+        if (token) {
+          headers.Authorization = `Bearer ${token}`;
+        }
 
-      if (!vendorsRes.ok) {
-        throw new Error(
-          "Failed to load vendors."
+        const [
+          vendorsResponse,
+          locationRatesResponse,
+        ] = await Promise.all([
+          fetch(
+            `${API_BASE}/api/vendor/getvendor`,
+            {
+              method: "GET",
+              headers,
+              cache: "no-store",
+            }
+          ),
+
+          fetch(
+            `${API_BASE}/api/locationRate`,
+            {
+              method: "GET",
+              headers,
+              cache: "no-store",
+            }
+          ),
+        ]);
+
+        const vendorsData =
+          await parseResponse(
+            vendorsResponse
+          );
+
+        const ratesData =
+          await parseResponse(
+            locationRatesResponse
+          );
+
+        if (!vendorsResponse.ok) {
+          throw new Error(
+            vendorsData?.message ||
+              "Failed to load vendors."
+          );
+        }
+
+        if (!locationRatesResponse.ok) {
+          throw new Error(
+            ratesData?.message ||
+              "Failed to load location rates."
+          );
+        }
+
+        if (cancelled) {
+          return;
+        }
+
+        setVendors(
+          normalizeList<Vendor>(
+            vendorsData,
+            [
+              "vendors",
+              "data",
+              "results",
+            ]
+          )
         );
-      }
 
-      if (!locationRatesRes.ok) {
-        throw new Error(
-          "Failed to load location rates."
+        setLocationRates(
+          normalizeList<LocationRate>(
+            ratesData,
+            [
+              "locationRates",
+              "rates",
+              "data",
+              "results",
+            ]
+          )
         );
+      } catch (err) {
+        console.error(
+          "LOAD CREATE SHIPMENT DATA ERROR:",
+          err
+        );
+
+        if (!cancelled) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Failed to load shipment data."
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
-
-      const vendorsData =
-        await vendorsRes.json();
-
-      const ratesData =
-        await locationRatesRes.json();
-
-      setVendors(
-        Array.isArray(vendorsData)
-          ? vendorsData
-          : vendorsData.vendors || []
-      );
-
-      setLocationRates(
-        Array.isArray(ratesData)
-          ? ratesData
-          : ratesData.locationRates ||
-              ratesData.rates ||
-              []
-      );
-    } catch (err) {
-      console.error(
-        "LOAD CREATE SHIPMENT DATA ERROR:",
-        err
-      );
-
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Failed to load shipment data."
-      );
-    } finally {
-      setLoading(false);
     }
-  }
+
+    loadData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // ===================================================
   // FIELD UPDATE
   // ===================================================
 
-  function updateField<K extends keyof ShipmentForm>(
+  function updateField<
+    K extends keyof ShipmentForm
+  >(
     key: K,
     value: ShipmentForm[K]
   ) {
@@ -249,7 +373,10 @@ export default function StaffCreateShipmentPage() {
       (vendor) =>
         vendor.id === form.vendorId
     );
-  }, [vendors, form.vendorId]);
+  }, [
+    vendors,
+    form.vendorId,
+  ]);
 
   // ===================================================
   // SELECTED RATE
@@ -266,26 +393,50 @@ export default function StaffCreateShipmentPage() {
   ]);
 
   // ===================================================
+  // RATE
+  // ===================================================
+
+  const ratePerKg = useMemo(() => {
+    return Number(
+      selectedRate?.price || 0
+    );
+  }, [selectedRate]);
+
+  // ===================================================
   // SHIPPING CHARGE
   // ===================================================
 
-  const shippingCharge =
-    selectedRate
-      ? Number(selectedRate.price) *
-        Number(form.weight || 0)
-      : 0;
+  const shippingCharge = useMemo(() => {
+    const weight =
+      Number(form.weight) || 0;
+
+    return ratePerKg * weight;
+  }, [
+    ratePerKg,
+    form.weight,
+  ]);
 
   // ===================================================
-  // OPEN VENDOR MODAL
+  // TOTAL CHARGE
+  // ===================================================
+
+  const totalCharge = useMemo(() => {
+    return shippingCharge;
+  }, [shippingCharge]);
+
+  // ===================================================
+  // OPEN REGISTERED VENDOR
   // ===================================================
 
   function openVendorModal() {
     setError("");
     setSuccess("");
+
     setMode("VENDOR");
 
     setForm((previous) => ({
       ...previous,
+
       senderName: "",
       senderPhone: "",
       senderAddress: "",
@@ -293,26 +444,30 @@ export default function StaffCreateShipmentPage() {
   }
 
   // ===================================================
-  // OPEN UNREGISTERED MODAL
+  // OPEN UNREGISTERED
   // ===================================================
 
   function openUnregisteredModal() {
     setError("");
     setSuccess("");
+
     setMode("UNREGISTERED");
 
     setForm((previous) => ({
       ...previous,
+
       vendorId: 0,
     }));
   }
 
   // ===================================================
-  // CLOSE MODAL
+  // CLOSE
   // ===================================================
 
   function closeModal() {
-    if (submitting) return;
+    if (submitting) {
+      return;
+    }
 
     setMode(null);
     setError("");
@@ -323,11 +478,27 @@ export default function StaffCreateShipmentPage() {
   // ===================================================
 
   function validateForm() {
+    if (!mode) {
+      return "Please select a shipment creation type.";
+    }
+
+    // -----------------------------------------------
+    // REGISTERED VENDOR
+    // -----------------------------------------------
+
     if (mode === "VENDOR") {
       if (!form.vendorId) {
         return "Please select a vendor.";
       }
+
+      if (!selectedVendor) {
+        return "Selected vendor could not be found.";
+      }
     }
+
+    // -----------------------------------------------
+    // UNREGISTERED
+    // -----------------------------------------------
 
     if (mode === "UNREGISTERED") {
       if (!form.senderName.trim()) {
@@ -343,6 +514,10 @@ export default function StaffCreateShipmentPage() {
       }
     }
 
+    // -----------------------------------------------
+    // RECEIVER
+    // -----------------------------------------------
+
     if (!form.receiverName.trim()) {
       return "Receiver name is required.";
     }
@@ -355,16 +530,47 @@ export default function StaffCreateShipmentPage() {
       return "Receiver address is required.";
     }
 
+    // -----------------------------------------------
+    // LOCATION
+    // -----------------------------------------------
+
     if (!form.locationRateId) {
       return "Please select destination and delivery type.";
     }
 
+    if (!selectedRate) {
+      return "Selected delivery rate could not be found.";
+    }
+
+    // -----------------------------------------------
+    // WEIGHT
+    // -----------------------------------------------
+
     if (
-      !form.weight ||
+      !Number.isFinite(
+        Number(form.weight)
+      ) ||
       Number(form.weight) <= 0
     ) {
       return "Weight must be greater than 0.";
     }
+
+    // -----------------------------------------------
+    // TOTAL BOX
+    // -----------------------------------------------
+
+    if (
+      !Number.isFinite(
+        Number(form.totalBox)
+      ) ||
+      Number(form.totalBox) <= 0
+    ) {
+      return "Total box must be at least 1.";
+    }
+
+    // -----------------------------------------------
+    // COD
+    // -----------------------------------------------
 
     if (
       form.paymentType === "COD" &&
@@ -381,7 +587,7 @@ export default function StaffCreateShipmentPage() {
   // ===================================================
 
   async function handleSubmit(
-    event: React.FormEvent
+    event: FormEvent<HTMLFormElement>
   ) {
     event.preventDefault();
 
@@ -399,8 +605,7 @@ export default function StaffCreateShipmentPage() {
     try {
       setSubmitting(true);
 
-      const token =
-        localStorage.getItem("token");
+      const token = getToken();
 
       if (!token) {
         throw new Error(
@@ -409,39 +614,63 @@ export default function StaffCreateShipmentPage() {
       }
 
       // =================================================
+      // SENDER DATA
+      // =================================================
+
+      const senderName =
+        mode === "VENDOR"
+          ? selectedVendor?.companyName || ""
+          : form.senderName.trim();
+
+      const senderPhone =
+        mode === "VENDOR"
+          ? selectedVendor?.contactId ||
+            selectedVendor?.phone ||
+            ""
+          : form.senderPhone.trim();
+
+      const senderAddress =
+        mode === "VENDOR"
+          ? selectedVendor?.location || ""
+          : form.senderAddress.trim();
+
+      // =================================================
       // PAYLOAD
       // =================================================
 
       const payload = {
-        // Registered vendor only
+        // ---------------------------------------------
+        // VENDOR
+        // ---------------------------------------------
+
         vendorId:
           mode === "VENDOR"
             ? form.vendorId
             : null,
 
-        // STAFF or VENDOR
+        // ---------------------------------------------
+        // ORIGIN
+        // ---------------------------------------------
+
         origin:
           mode === "VENDOR"
             ? "VENDOR"
             : "STAFF",
 
-        // Sender
-        senderName:
-          mode === "VENDOR"
-            ? selectedVendor?.companyName || ""
-            : form.senderName.trim(),
+        // ---------------------------------------------
+        // SENDER
+        // ---------------------------------------------
 
-        senderPhone:
-          mode === "VENDOR"
-            ? selectedVendor?.contactId || ""
-            : form.senderPhone.trim(),
+        senderName,
 
-        senderAddress:
-          mode === "VENDOR"
-            ? selectedVendor?.location || ""
-            : form.senderAddress.trim(),
+        senderPhone,
 
-        // Receiver
+        senderAddress,
+
+        // ---------------------------------------------
+        // RECEIVER
+        // ---------------------------------------------
+
         receiverName:
           form.receiverName.trim(),
 
@@ -451,18 +680,30 @@ export default function StaffCreateShipmentPage() {
         receiverAddress:
           form.receiverAddress.trim(),
 
-        // Delivery
-        locationRateId:
-          form.locationRateId,
+        // ---------------------------------------------
+        // LOCATION / DELIVERY
+        // ---------------------------------------------
 
-        // Package
+        locationRateId:
+          Number(form.locationRateId),
+
+        // ---------------------------------------------
+        // PACKAGE
+        // ---------------------------------------------
+
         packageType:
           form.packageType,
 
         weight:
           Number(form.weight),
 
-        // Payment
+        totalBox:
+          Number(form.totalBox),
+
+        // ---------------------------------------------
+        // PAYMENT
+        // ---------------------------------------------
+
         paymentType:
           form.paymentType,
 
@@ -471,9 +712,18 @@ export default function StaffCreateShipmentPage() {
             ? Number(form.codAmount)
             : 0,
 
+        // ---------------------------------------------
+        // NOTES
+        // ---------------------------------------------
+
         notes:
           form.notes.trim() || null,
       };
+
+      console.log(
+        "CREATE SHIPMENT PAYLOAD:",
+        payload
+      );
 
       // =================================================
       // API
@@ -481,7 +731,7 @@ export default function StaffCreateShipmentPage() {
 
       const response =
         await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/shipment`,
+          `${API_BASE}/api/shipment`,
           {
             method: "POST",
 
@@ -493,28 +743,43 @@ export default function StaffCreateShipmentPage() {
                 `Bearer ${token}`,
             },
 
-            body: JSON.stringify(payload),
+            body: JSON.stringify(
+              payload
+            ),
           }
         );
 
       const data =
-        await response.json();
+        await parseResponse(response);
+
+      console.log(
+        "CREATE SHIPMENT RESPONSE:",
+        data
+      );
 
       if (!response.ok) {
         throw new Error(
-          data.message ||
+          data?.message ||
+            data?.error ||
+            data?.errors?.[0]?.message ||
             "Failed to create shipment."
         );
       }
 
       // =================================================
-      // SUCCESS
+      // TRACKING
       // =================================================
 
       const trackingNumber =
-        data.shipment?.trackingNumber ||
-        data.trackingNumber ||
+        data?.shipment?.trackingNumber ||
+        data?.trackingNumber ||
+        data?.shipment?.code ||
+        data?.code ||
         "";
+
+      // =================================================
+      // SUCCESS
+      // =================================================
 
       setSuccess(
         trackingNumber
@@ -522,9 +787,15 @@ export default function StaffCreateShipmentPage() {
           : "Shipment created successfully."
       );
 
+      // =================================================
+      // CLOSE MODAL
+      // =================================================
+
       setMode(null);
 
-      setForm(initialForm);
+      setForm({
+        ...initialForm,
+      });
     } catch (err) {
       console.error(
         "CREATE SHIPMENT ERROR:",
@@ -534,7 +805,7 @@ export default function StaffCreateShipmentPage() {
       setError(
         err instanceof Error
           ? err.message
-          : "Something went wrong."
+          : "Something went wrong while creating the shipment."
       );
     } finally {
       setSubmitting(false);
@@ -546,49 +817,28 @@ export default function StaffCreateShipmentPage() {
   // ===================================================
 
   function resetForm() {
-    if (submitting) return;
+    if (submitting) {
+      return;
+    }
 
-    setForm(initialForm);
+    setForm({
+      ...initialForm,
+    });
+
     setMode(null);
+
     setError("");
+
     setSuccess("");
   }
 
   // ===================================================
-  // LOADING SKELETON
+  // LOADING
   // ===================================================
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-6xl text-black">
-        <div className="animate-pulse">
-
-          <div className="h-8 w-64 rounded-lg bg-gray-200" />
-
-          <div className="mt-3 h-4 w-96 max-w-full rounded bg-gray-200" />
-
-          <div className="mt-8 grid gap-5 md:grid-cols-2">
-
-            <div className="h-48 rounded-2xl bg-gray-200" />
-
-            <div className="h-48 rounded-2xl bg-gray-200" />
-
-          </div>
-
-          <div className="mt-8 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-black/5">
-
-            <div className="grid gap-5 md:grid-cols-3">
-
-              <div className="h-14 rounded-xl bg-gray-100" />
-              <div className="h-14 rounded-xl bg-gray-100" />
-              <div className="h-14 rounded-xl bg-gray-100" />
-
-            </div>
-
-          </div>
-
-        </div>
-      </div>
+      <CreateShipmentSkeleton />
     );
   }
 
@@ -608,7 +858,9 @@ export default function StaffCreateShipmentPage() {
         <div className="flex items-center gap-3">
 
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent text-white">
+
             <Truck size={22} />
+
           </div>
 
           <div>
@@ -640,7 +892,7 @@ export default function StaffCreateShipmentPage() {
             size={20}
           />
 
-          <div>
+          <div className="min-w-0">
 
             <p className="font-semibold text-green-800">
               Shipment Created
@@ -651,6 +903,16 @@ export default function StaffCreateShipmentPage() {
             </p>
 
           </div>
+
+          <button
+            type="button"
+            onClick={() =>
+              setSuccess("")
+            }
+            className="ml-auto rounded-lg p-1 text-green-600 hover:bg-green-100"
+          >
+            <X size={17} />
+          </button>
 
         </div>
       )}
@@ -745,7 +1007,9 @@ export default function StaffCreateShipmentPage() {
 
         <button
           type="button"
-          onClick={openUnregisteredModal}
+          onClick={
+            openUnregisteredModal
+          }
           className="group text-left"
         >
 
@@ -774,9 +1038,9 @@ export default function StaffCreateShipmentPage() {
               </h2>
 
               <p className="mt-2 max-w-md text-sm leading-6 text-gray-500">
-                Create a shipment for a walk-in
-                customer who is not registered as
-                a vendor.
+                Create a shipment for a
+                walk-in customer who is not
+                registered as a vendor.
               </p>
 
             </div>
@@ -820,9 +1084,10 @@ export default function StaffCreateShipmentPage() {
 
             <p className="mt-1 text-sm leading-6 text-gray-500">
               Registered vendor shipments are
-              linked to the vendor account. For
-              walk-in customers, sender details
-              are stored directly on the shipment.
+              linked to the vendor account.
+              Walk-in customers are stored
+              directly on the shipment with
+              their sender details.
             </p>
 
           </div>
@@ -836,9 +1101,19 @@ export default function StaffCreateShipmentPage() {
       ================================================= */}
 
       {mode && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+          onMouseDown={(event) => {
+            if (
+              event.target ===
+              event.currentTarget
+            ) {
+              closeModal();
+            }
+          }}
+        >
 
-          <div className="max-h-[92vh] w-full max-w-4xl overflow-hidden rounded-3xl bg-white shadow-2xl">
+          <div className="max-h-[94vh] w-full max-w-5xl overflow-hidden rounded-3xl bg-white shadow-2xl">
 
             {/* =================================================
                 MODAL HEADER
@@ -846,9 +1121,9 @@ export default function StaffCreateShipmentPage() {
 
             <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5">
 
-              <div className="flex items-center gap-3">
+              <div className="flex min-w-0 items-center gap-3">
 
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent/10 text-accent">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-accent/10 text-accent">
 
                   {mode === "VENDOR" ? (
                     <Building2 size={22} />
@@ -858,9 +1133,9 @@ export default function StaffCreateShipmentPage() {
 
                 </div>
 
-                <div>
+                <div className="min-w-0">
 
-                  <h2 className="text-lg font-bold">
+                  <h2 className="truncate text-lg font-bold">
                     {mode === "VENDOR"
                       ? "Registered Vendor Shipment"
                       : "Unregistered Customer Shipment"}
@@ -879,20 +1154,22 @@ export default function StaffCreateShipmentPage() {
                 type="button"
                 onClick={closeModal}
                 disabled={submitting}
-                className="flex h-9 w-9 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 hover:text-black disabled:opacity-50"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 hover:text-black disabled:opacity-50"
               >
+
                 <X size={20} />
+
               </button>
 
             </div>
 
             {/* =================================================
-                MODAL BODY
+                FORM
             ================================================= */}
 
             <form
               onSubmit={handleSubmit}
-              className="max-h-[calc(92vh-80px)] overflow-y-auto"
+              className="max-h-[calc(94vh-80px)] overflow-y-auto"
             >
 
               <div className="p-6">
@@ -924,15 +1201,17 @@ export default function StaffCreateShipmentPage() {
 
                   <SectionTitle
                     icon={
-                      mode === "VENDOR"
-                        ? <Building2 size={18} />
-                        : <User size={18} />
+                      mode === "VENDOR" ? (
+                        <Building2 size={18} />
+                      ) : (
+                        <User size={18} />
+                      )
                     }
                     title="Sender Information"
                     description={
                       mode === "VENDOR"
                         ? "Select the registered vendor sending this shipment."
-                        : "Enter the details of the person sending this shipment."
+                        : "Enter the person sending this shipment."
                     }
                   />
 
@@ -947,16 +1226,19 @@ export default function StaffCreateShipmentPage() {
                         </label>
 
                         <select
-                          value={form.vendorId}
-                          onChange={(event) => {
+                          value={
+                            form.vendorId
+                          }
+                          onChange={(event) =>
                             updateField(
                               "vendorId",
                               Number(
-                                event.target.value
+                                event.target
+                                  .value
                               )
-                            );
-                          }}
-                          className="w-full rounded-xl border border-gray-200 bg-white p-3 outline-none transition focus:border-accent"
+                            )
+                          }
+                          className="w-full rounded-xl border border-gray-200 bg-white p-3 outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/10"
                         >
 
                           <option value={0}>
@@ -966,20 +1248,34 @@ export default function StaffCreateShipmentPage() {
                           {vendors.map(
                             (vendor) => (
                               <option
-                                key={vendor.id}
-                                value={vendor.id}
+                                key={
+                                  vendor.id
+                                }
+                                value={
+                                  vendor.id
+                                }
                               >
-                                {vendor.companyName}
+                                {
+                                  vendor.companyName
+                                }
                               </option>
                             )
                           )}
 
                         </select>
 
+                        {vendors.length ===
+                          0 && (
+                          <p className="mt-2 text-xs text-amber-600">
+                            No registered vendors
+                            were found.
+                          </p>
+                        )}
+
                       </div>
 
                       {selectedVendor && (
-                        <div className="grid gap-4 md:grid-cols-2">
+                        <div className="grid gap-4 md:grid-cols-3">
 
                           <ReadonlyField
                             label="Company"
@@ -992,6 +1288,15 @@ export default function StaffCreateShipmentPage() {
                             label="Location"
                             value={
                               selectedVendor.location ||
+                              "Not available"
+                            }
+                          />
+
+                          <ReadonlyField
+                            label="Contact"
+                            value={
+                              selectedVendor.contactId ||
+                              selectedVendor.phone ||
                               "Not available"
                             }
                           />
@@ -1020,6 +1325,7 @@ export default function StaffCreateShipmentPage() {
                         icon={
                           <User size={16} />
                         }
+                        required
                       />
 
                       <InputField
@@ -1038,6 +1344,7 @@ export default function StaffCreateShipmentPage() {
                         icon={
                           <Phone size={16} />
                         }
+                        required
                       />
 
                       <div className="md:col-span-2">
@@ -1057,6 +1364,7 @@ export default function StaffCreateShipmentPage() {
                           icon={
                             <MapPin size={16} />
                           }
+                          required
                         />
 
                       </div>
@@ -1097,6 +1405,7 @@ export default function StaffCreateShipmentPage() {
                           value
                         )
                       }
+                      required
                     />
 
                     <InputField
@@ -1112,6 +1421,7 @@ export default function StaffCreateShipmentPage() {
                           value
                         )
                       }
+                      required
                     />
 
                     <div className="md:col-span-2">
@@ -1128,6 +1438,7 @@ export default function StaffCreateShipmentPage() {
                             value
                           )
                         }
+                        required
                       />
 
                     </div>
@@ -1154,6 +1465,8 @@ export default function StaffCreateShipmentPage() {
 
                   <div className="grid gap-5 md:grid-cols-2">
 
+                    {/* DESTINATION */}
+
                     <div className="md:col-span-2">
 
                       <label className="mb-2 block text-sm font-medium">
@@ -1168,11 +1481,12 @@ export default function StaffCreateShipmentPage() {
                           updateField(
                             "locationRateId",
                             Number(
-                              event.target.value
+                              event.target
+                                .value
                             )
                           )
                         }
-                        className="w-full rounded-xl border border-gray-200 bg-white p-3 outline-none transition focus:border-accent"
+                        className="w-full rounded-xl border border-gray-200 bg-white p-3 outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/10"
                       >
 
                         <option value={0}>
@@ -1185,15 +1499,19 @@ export default function StaffCreateShipmentPage() {
                               key={rate.id}
                               value={rate.id}
                             >
-                              {rate.location.name}
+                              {
+                                rate.location
+                                  .name
+                              }
                               {" — "}
                               {
-                                rate.deliveryType.name
+                                rate.deliveryType
+                                  .name
                               }
-                              {" — Rs. "}
-                              {Number(
+                              {" — "}
+                              {formatCurrency(
                                 rate.price
-                              ).toLocaleString()}
+                              )}
                               /kg
                             </option>
                           )
@@ -1201,37 +1519,53 @@ export default function StaffCreateShipmentPage() {
 
                       </select>
 
+                      {locationRates.length ===
+                        0 && (
+                        <p className="mt-2 text-xs text-amber-600">
+                          No delivery rates
+                          were found.
+                        </p>
+                      )}
+
                     </div>
+
+                    {/* DESTINATION */}
 
                     <ReadonlyField
                       label="Destination"
                       value={
                         selectedRate
-                          ?.location.name ||
-                        ""
+                          ?.location
+                          .name || ""
                       }
                       placeholder="Select destination"
                     />
+
+                    {/* DELIVERY TYPE */}
 
                     <ReadonlyField
                       label="Delivery Type"
                       value={
                         selectedRate
-                          ?.deliveryType.name ||
-                        ""
+                          ?.deliveryType
+                          .name || ""
                       }
                       placeholder="Select delivery type"
                     />
+
+                    {/* ZONE */}
 
                     <ReadonlyField
                       label="Zone"
                       value={
                         selectedRate
-                          ?.location.zone ||
-                        ""
+                          ?.location
+                          .zone || ""
                       }
                       placeholder="Select destination"
                     />
+
+                    {/* PACKAGE TYPE */}
 
                     <div>
 
@@ -1247,10 +1581,10 @@ export default function StaffCreateShipmentPage() {
                           updateField(
                             "packageType",
                             event.target
-                              .value as ShipmentForm["packageType"]
+                              .value as PackageType
                           )
                         }
-                        className="w-full rounded-xl border border-gray-200 bg-white p-3 outline-none transition focus:border-accent"
+                        className="w-full rounded-xl border border-gray-200 bg-white p-3 outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/10"
                       >
 
                         <option value="DOCUMENT">
@@ -1289,31 +1623,69 @@ export default function StaffCreateShipmentPage() {
 
                     </div>
 
+                    {/* WEIGHT */}
+
                     <InputField
                       label="Weight (kg)"
                       type="number"
-                      value={
-                        String(form.weight)
-                      }
+                      placeholder="Enter weight"
+                      value={String(
+                        form.weight
+                      )}
                       onChange={(value) =>
                         updateField(
                           "weight",
-                          Number(value)
+                          Math.max(
+                            0,
+                            Number(value) ||
+                              0
+                          )
                         )
                       }
+                      min="0.1"
+                      step="0.1"
+                      required
                     />
+
+                    {/* TOTAL BOX */}
+
+                    <InputField
+                      label="Total Box"
+                      type="number"
+                      placeholder="Enter total boxes"
+                      value={String(
+                        form.totalBox
+                      )}
+                      onChange={(value) =>
+                        updateField(
+                          "totalBox",
+                          Math.max(
+                            1,
+                            Number(value) ||
+                              1
+                          )
+                        )
+                      }
+                      min="1"
+                      step="1"
+                      required
+                    />
+
+                    {/* RATE */}
 
                     <ReadonlyField
                       label="Rate / kg"
                       value={
                         selectedRate
-                          ? `Rs. ${Number(
+                          ? formatCurrency(
                               selectedRate.price
-                            ).toLocaleString()}`
+                            )
                           : ""
                       }
                       placeholder="Select destination"
                     />
+
+                    {/* SHIPPING */}
 
                     <div>
 
@@ -1324,8 +1696,9 @@ export default function StaffCreateShipmentPage() {
                       <div className="flex min-h-[50px] items-center rounded-xl bg-gray-50 px-4 ring-1 ring-gray-200">
 
                         <span className="text-lg font-bold">
-                          Rs.{" "}
-                          {shippingCharge.toLocaleString()}
+                          {formatCurrency(
+                            shippingCharge
+                          )}
                         </span>
 
                       </div>
@@ -1368,16 +1741,27 @@ export default function StaffCreateShipmentPage() {
                         value={
                           form.paymentType
                         }
-                        onChange={(event) =>
+                        onChange={(event) => {
+                          const value =
+                            event.target
+                              .value as PaymentType;
+
                           updateField(
                             "paymentType",
-                            event.target
-                              .value as
-                              | "PREPAID"
-                              | "COD"
-                          )
-                        }
-                        className="w-full rounded-xl border border-gray-200 bg-white p-3 outline-none transition focus:border-accent"
+                            value
+                          );
+
+                          if (
+                            value ===
+                            "PREPAID"
+                          ) {
+                            updateField(
+                              "codAmount",
+                              0
+                            );
+                          }
+                        }}
+                        className="w-full rounded-xl border border-gray-200 bg-white p-3 outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/10"
                       >
 
                         <option value="PREPAID">
@@ -1398,17 +1782,23 @@ export default function StaffCreateShipmentPage() {
                         label="COD Amount"
                         type="number"
                         placeholder="Enter COD amount"
-                        value={
-                          String(
-                            form.codAmount
-                          )
-                        }
+                        value={String(
+                          form.codAmount
+                        )}
                         onChange={(value) =>
                           updateField(
                             "codAmount",
-                            Number(value)
+                            Math.max(
+                              0,
+                              Number(
+                                value
+                              ) || 0
+                            )
                           )
                         }
+                        min="0"
+                        step="1"
+                        required
                       />
                     )}
 
@@ -1444,21 +1834,45 @@ export default function StaffCreateShipmentPage() {
 
                 <div className="mt-8 rounded-2xl bg-gray-50 p-5">
 
-                  <div className="mb-5">
+                  <div className="mb-5 flex items-center justify-between gap-4">
 
-                    <p className="text-sm font-bold">
-                      Shipment Summary
-                    </p>
+                    <div>
+
+                      <p className="text-sm font-bold">
+                        Shipment Summary
+                      </p>
+
+                      <p className="mt-1 text-xs text-gray-500">
+                        Review the shipment before
+                        creating it.
+                      </p>
+
+                    </div>
+
+                    <div className="rounded-xl bg-white px-4 py-2 ring-1 ring-gray-200">
+
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                        Total
+                      </p>
+
+                      <p className="text-base font-bold">
+                        {formatCurrency(
+                          totalCharge
+                        )}
+                      </p>
+
+                    </div>
 
                   </div>
 
-                  <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-5">
 
                     <SummaryItem
                       label="Sender"
                       value={
                         mode === "VENDOR"
-                          ? selectedVendor?.companyName ||
+                          ? selectedVendor
+                              ?.companyName ||
                             "Not selected"
                           : form.senderName ||
                             "Not entered"
@@ -1477,14 +1891,24 @@ export default function StaffCreateShipmentPage() {
                       label="Destination"
                       value={
                         selectedRate
-                          ?.location.name ||
+                          ?.location
+                          .name ||
                         "Not selected"
                       }
                     />
 
                     <SummaryItem
+                      label="Total Box"
+                      value={String(
+                        form.totalBox
+                      )}
+                    />
+
+                    <SummaryItem
                       label="Shipping Charge"
-                      value={`Rs. ${shippingCharge.toLocaleString()}`}
+                      value={formatCurrency(
+                        shippingCharge
+                      )}
                       strong
                     />
 
@@ -1550,6 +1974,52 @@ export default function StaffCreateShipmentPage() {
 }
 
 // =====================================================
+// SKELETON
+// =====================================================
+
+function CreateShipmentSkeleton() {
+  return (
+    <div className="mx-auto max-w-6xl text-black">
+
+      <div className="animate-pulse">
+
+        {/* HEADER */}
+
+        <div className="flex items-center gap-3">
+
+          <div className="h-11 w-11 rounded-xl bg-gray-200" />
+
+          <div>
+
+            <div className="h-7 w-64 rounded-lg bg-gray-200" />
+
+            <div className="mt-2 h-4 w-96 max-w-full rounded bg-gray-100" />
+
+          </div>
+
+        </div>
+
+        {/* OPTIONS */}
+
+        <div className="mt-8 grid gap-6 md:grid-cols-2">
+
+          <div className="h-52 rounded-3xl bg-gray-200" />
+
+          <div className="h-52 rounded-3xl bg-gray-200" />
+
+        </div>
+
+        {/* INFO */}
+
+        <div className="mt-6 h-24 rounded-2xl bg-gray-100" />
+
+      </div>
+
+    </div>
+  );
+}
+
+// =====================================================
 // SECTION TITLE
 // =====================================================
 
@@ -1558,7 +2028,7 @@ function SectionTitle({
   title,
   description,
 }: {
-  icon: React.ReactNode;
+  icon: ReactNode;
   title: string;
   description: string;
 }) {
@@ -1606,13 +2076,19 @@ function InputField({
   placeholder,
   type = "text",
   icon,
+  required = false,
+  min,
+  step,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
   type?: string;
-  icon?: React.ReactNode;
+  icon?: ReactNode;
+  required?: boolean;
+  min?: string;
+  step?: string;
 }) {
   return (
     <div>
@@ -1627,24 +2103,35 @@ function InputField({
 
         {label}
 
+        {required && (
+          <span className="text-red-500">
+            *
+          </span>
+        )}
+
       </label>
 
       <input
         type={type}
         value={value}
         placeholder={placeholder}
+        required={required}
         min={
-          type === "number"
-            ? "0.1"
-            : undefined
+          min ??
+          (type === "number"
+            ? "0"
+            : undefined)
         }
         step={
-          type === "number"
+          step ??
+          (type === "number"
             ? "0.1"
-            : undefined
+            : undefined)
         }
         onChange={(event) =>
-          onChange(event.target.value)
+          onChange(
+            event.target.value
+          )
         }
         className="w-full rounded-xl border border-gray-200 bg-white p-3 outline-none transition placeholder:text-gray-400 focus:border-accent focus:ring-2 focus:ring-accent/10"
       />
@@ -1663,12 +2150,14 @@ function TextAreaField({
   onChange,
   placeholder,
   icon,
+  required = false,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
-  icon?: React.ReactNode;
+  icon?: ReactNode;
+  required?: boolean;
 }) {
   return (
     <div>
@@ -1683,14 +2172,23 @@ function TextAreaField({
 
         {label}
 
+        {required && (
+          <span className="text-red-500">
+            *
+          </span>
+        )}
+
       </label>
 
       <textarea
         rows={3}
         value={value}
         placeholder={placeholder}
+        required={required}
         onChange={(event) =>
-          onChange(event.target.value)
+          onChange(
+            event.target.value
+          )
         }
         className="w-full resize-none rounded-xl border border-gray-200 bg-white p-3 outline-none transition placeholder:text-gray-400 focus:border-accent focus:ring-2 focus:ring-accent/10"
       />
@@ -1744,18 +2242,19 @@ function SummaryItem({
   strong?: boolean;
 }) {
   return (
-    <div>
+    <div className="min-w-0">
 
       <p className="text-xs text-gray-500">
         {label}
       </p>
 
       <p
-        className={`mt-1 ${
+        className={`mt-1 truncate ${
           strong
             ? "text-lg font-bold"
             : "text-sm font-semibold"
         }`}
+        title={value}
       >
         {value}
       </p>
