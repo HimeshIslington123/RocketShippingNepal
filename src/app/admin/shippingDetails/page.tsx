@@ -816,6 +816,16 @@ export default function VendorShipmentsPage() {
   const [returnFilter, setReturnFilter] = useState("ALL");
 
   // ==========================================================
+  // DATE FILTER
+  // ==========================================================
+
+  // ALL     = all shipments
+  // DAILY   = today
+  // WEEKLY  = current week (Monday-Sunday)
+  // MONTHLY = current calendar month
+  const [dateFilter, setDateFilter] = useState("ALL");
+
+  // ==========================================================
 
   // RETURNS
 
@@ -2583,6 +2593,72 @@ export default function VendorShipmentsPage() {
 
   // ==========================================================
 
+  // DATE FILTER HELPER
+
+  // ==========================================================
+
+  function matchesDateFilter(
+    createdAt: string | null | undefined,
+    filter: string
+  ) {
+    if (filter === "ALL") {
+      return true;
+    }
+
+    if (!createdAt) {
+      return false;
+    }
+
+    const shipmentDate = new Date(createdAt);
+
+    if (Number.isNaN(shipmentDate.getTime())) {
+      return false;
+    }
+
+    const now = new Date();
+
+    // DAILY = today
+    if (filter === "DAILY") {
+      return (
+        shipmentDate.getFullYear() === now.getFullYear() &&
+        shipmentDate.getMonth() === now.getMonth() &&
+        shipmentDate.getDate() === now.getDate()
+      );
+    }
+
+    // WEEKLY = current week, Monday through Sunday
+    if (filter === "WEEKLY") {
+      const startOfWeek = new Date(now);
+      const day = startOfWeek.getDay(); // Sunday = 0
+      const daysFromMonday = day === 0 ? 6 : day - 1;
+
+      startOfWeek.setHours(0, 0, 0, 0);
+      startOfWeek.setDate(
+        startOfWeek.getDate() - daysFromMonday
+      );
+
+      const endOfWeek = new Date(startOfWeek);
+      endOfWeek.setDate(endOfWeek.getDate() + 7);
+
+      return (
+        shipmentDate >= startOfWeek &&
+        shipmentDate < endOfWeek
+      );
+    }
+
+    // MONTHLY = current calendar month
+    if (filter === "MONTHLY") {
+      return (
+        shipmentDate.getFullYear() === now.getFullYear() &&
+        shipmentDate.getMonth() === now.getMonth()
+      );
+    }
+
+    return true;
+  }
+
+  // ==========================================================
+
   // FILTERED SHIPMENTS — CLIENT SIDE ONLY
 
   // ==========================================================
@@ -2715,6 +2791,11 @@ export default function VendorShipmentsPage() {
 
         (returnFilter === "NO_RETURN" && !hasReturn);
 
+      const matchesDate = matchesDateFilter(
+        shipment.createdAt,
+        dateFilter
+      );
+
       return (
 
         matchesSearch &&
@@ -2729,7 +2810,9 @@ export default function VendorShipmentsPage() {
 
         matchesPayment &&
 
-        matchesReturn
+        matchesReturn &&
+
+        matchesDate
 
       );
 
@@ -2755,6 +2838,8 @@ export default function VendorShipmentsPage() {
 
     returnFilter,
 
+    dateFilter,
+
   ]);
 
   function clearFilters() {
@@ -2772,6 +2857,8 @@ export default function VendorShipmentsPage() {
     setPaymentFilter("ALL");
 
     setReturnFilter("ALL");
+
+    setDateFilter("ALL");
 
   }
 
@@ -3145,7 +3232,9 @@ export default function VendorShipmentsPage() {
 
                     paymentFilter === "ALL" &&
 
-                    returnFilter === "ALL"
+                    returnFilter === "ALL" &&
+
+                    dateFilter === "ALL"
 
                   }
 
@@ -3192,6 +3281,44 @@ export default function VendorShipmentsPage() {
               />
 
             </div>
+
+            <FilterSelect
+
+              value={dateFilter}
+
+              onChange={setDateFilter}
+
+              placeholder="All dates"
+
+              options={[
+
+                {
+
+                  value: "DAILY",
+
+                  label: "Daily — Today",
+
+                },
+
+                {
+
+                  value: "WEEKLY",
+
+                  label: "Weekly — This Week",
+
+                },
+
+                {
+
+                  value: "MONTHLY",
+
+                  label: "Monthly — This Month",
+
+                },
+
+              ]}
+
+            />
 
             <FilterSelect
 

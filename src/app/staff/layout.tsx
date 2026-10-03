@@ -7,7 +7,7 @@ import {
   PackageSearch,
   UserRound,
   LocateIcon,
-  ArrowLeft,
+  ArrowLeft,ScanIcon
 } from "lucide-react";
 
 import DashboardShell, {
@@ -40,6 +40,11 @@ const STAFF_NAV: NavLink[] = [
     href: "/staff/pickupRequest",
     label: "Pickup Request",
     icon: UserRound,
+  },
+   {
+    href: "/staff/scan",
+    label: "Scan",
+    icon: ScanIcon,
   },
 ];
 
