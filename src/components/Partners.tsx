@@ -29,6 +29,16 @@ const partners = [
     href: "https://www.prashnaa.com/",
     alt: "Prashnaa",
   },
+  {
+    src: "/pahadko.png",
+    href: "",
+    alt: "pahadko",
+  },
+  {
+    src: "/aarnapurna.png",
+    href: "",
+    alt: "arnapurn",
+  },
 ];
 
 const duplicated = [

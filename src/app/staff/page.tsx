@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
 
 import {
   Package,
@@ -375,6 +375,26 @@ function DashboardSkeleton() {
 export default function StaffOverviewPage() {
 
   // ====================================================
+  // NAVIGATION
+  // ====================================================
+
+  const navigateTo = (path: string) => {
+    window.location.href = path;
+  };
+
+  const dashboardCardProps = {
+    role: "link" as const,
+    tabIndex: 0,
+    onClick: () => navigateTo("/staff/shippingdetails"),
+    onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        navigateTo("/staff/shippingdetails");
+      }
+    },
+  };
+
+  // ====================================================
   // STATE
   // ====================================================
 
@@ -690,7 +710,8 @@ export default function StaffOverviewPage() {
 
         {/* TOTAL */}
 
-        <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+        <div {...dashboardCardProps}
+          className="cursor-pointer rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5 transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-accent">
 
           <div className="flex items-center justify-between">
 
@@ -718,7 +739,8 @@ export default function StaffOverviewPage() {
 
         {/* CREATED */}
 
-        <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+        <div {...dashboardCardProps}
+          className="cursor-pointer rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5 transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-accent">
 
           <div className="flex items-center justify-between">
 
@@ -746,7 +768,8 @@ export default function StaffOverviewPage() {
 
         {/* OUT FOR DELIVERY */}
 
-        <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+        <div {...dashboardCardProps}
+          className="cursor-pointer rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5 transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-accent">
 
           <div className="flex items-center justify-between">
 
@@ -774,7 +797,8 @@ export default function StaffOverviewPage() {
 
         {/* DELIVERED */}
 
-        <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+        <div {...dashboardCardProps}
+          className="cursor-pointer rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5 transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-accent">
 
           <div className="flex items-center justify-between">
 
@@ -810,7 +834,8 @@ export default function StaffOverviewPage() {
 
         {/* IN WAREHOUSE */}
 
-        <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+        <div {...dashboardCardProps}
+          className="cursor-pointer rounded-xl bg-white p-4 shadow-sm ring-1 ring-black/5 transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-accent">
 
           <div className="flex items-center gap-2">
 
@@ -830,7 +855,8 @@ export default function StaffOverviewPage() {
 
         {/* ASSIGNED */}
 
-        <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+        <div {...dashboardCardProps}
+          className="cursor-pointer rounded-xl bg-white p-4 shadow-sm ring-1 ring-black/5 transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-accent">
 
           <div className="flex items-center gap-2">
 
@@ -850,7 +876,8 @@ export default function StaffOverviewPage() {
 
         {/* RETURNED */}
 
-        <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+        <div {...dashboardCardProps}
+          className="cursor-pointer rounded-xl bg-white p-4 shadow-sm ring-1 ring-black/5 transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-accent">
 
           <div className="flex items-center gap-2">
 
@@ -870,7 +897,8 @@ export default function StaffOverviewPage() {
 
         {/* CANCELLED */}
 
-        <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+        <div {...dashboardCardProps}
+          className="cursor-pointer rounded-xl bg-white p-4 shadow-sm ring-1 ring-black/5 transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-accent">
 
           <div className="flex items-center gap-2">
 
@@ -894,7 +922,18 @@ export default function StaffOverviewPage() {
           PICKUP REQUEST
       ================================================== */}
 
-      <div className="mt-6 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
+      <div
+        role="link"
+        tabIndex={0}
+        onClick={() => navigateTo("/staff/pickupRequest")}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            navigateTo("/staff/pickupRequest");
+          }
+        }}
+        className="mt-6 cursor-pointer rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5 transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-accent"
+      >
 
         <div className="flex items-center justify-between">
 
@@ -1064,8 +1103,7 @@ export default function StaffOverviewPage() {
                     <button
                       type="button"
                       onClick={() => {
-                        window.location.href =
-                          `/staff/shipments/${shipment.id}`;
+                        window.location.href = "/staff/shippingdetails";
                       }}
                       className="mt-5 flex w-full items-center justify-center gap-2 rounded-lg bg-accent py-2.5 font-semibold text-white transition hover:bg-accent-dark"
                     >
@@ -1259,8 +1297,7 @@ export default function StaffOverviewPage() {
                           <button
                             type="button"
                             onClick={() => {
-                              window.location.href =
-                                `/staff/shipments/${shipment.id}`;
+                              window.location.href = "/staff/shippingdetails";
                             }}
                             className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-white transition hover:bg-accent-dark"
                           >

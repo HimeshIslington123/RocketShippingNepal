@@ -8,7 +8,7 @@ import {
   Users,
   Receipt,
   BikeIcon,
-  ArrowLeft,MapIcon,BanknoteIcon,ScanBarcodeIcon
+  ArrowLeft,MapIcon,BanknoteIcon,ScanBarcodeIcon,PieChartIcon
 } from "lucide-react";
 
 import DashboardShell, {
@@ -59,7 +59,11 @@ const ADMIN_NAV: NavLink[] = [
     label: "Scan",
     icon: ScanBarcodeIcon,
   },
-  
+  {
+    href: "/admin/analysis",
+    label: "Analysis",
+    icon: PieChartIcon,
+  }
   
 ];
 
